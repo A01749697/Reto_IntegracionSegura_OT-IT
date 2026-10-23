@@ -1,0 +1,44 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  frontend:
+    name: Frontend (lint y build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend_retoOtIt
+    steps:
+      - name: Descargar el codigo
+        uses: actions/checkout@v7
+
+      - name: Instalar Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend_retoOtIt/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Revisar el codigo (ESLint)
+        run: npm run lint
+
+      - name: Compilar la pagina
+        run: npm run build
+
+      - name: Guardar la pagina compilada
+        uses: actions/upload-artifact@v7
+        with:
+          name: pagina-compilada
+          path: frontend_retoOtIt/dist
+          retention-days: 7
