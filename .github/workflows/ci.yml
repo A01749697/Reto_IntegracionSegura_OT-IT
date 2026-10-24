@@ -58,6 +58,9 @@ jobs:
       group: despliegue
       cancel-in-progress: false
     steps:
+      - name: Descargar el codigo
+        uses: actions/checkout@v7
+
       - name: Descargar la pagina compilada
         uses: actions/download-artifact@v7
         with:
@@ -82,6 +85,31 @@ jobs:
           rsync -rlz --delete --chmod=D755,F644 \
             -e "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes" \
             dist/ "$SERVER_USER@$SERVER_HOST:/var/www/reto/"
+
+      - name: Copiar la configuracion de Docker al servidor
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          rsync -rlz --chmod=D755,F644 \
+            -e "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes" \
+            docker_retoOtIt/docker-compose.yml "$SERVER_USER@$SERVER_HOST:/opt/docker_retoOtIt/"
+
+      - name: Levantar los contenedores
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes "$SERVER_USER@$SERVER_HOST" 'bash -s' <<'REMOTE'
+          set -euo pipefail
+          cd /opt/docker_retoOtIt
+          test -f .env || { echo "Falta el archivo .env en /opt/docker_retoOtIt"; exit 1; }
+          for v in DB_ADMIN_PASSWORD DB_INGEST_PASSWORD DB_READER_PASSWORD; do
+            grep -Eq "^${v}=[A-Za-z0-9_]{12,}$" .env || { echo "Falta o es invalida la variable $v en .env"; exit 1; }
+          done
+          sudo docker compose up -d --wait --wait-timeout 120
+          sudo docker compose ps
+          REMOTE
 
       - name: Comprobar que la pagina responde
         env:
