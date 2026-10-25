@@ -1,1 +1,36 @@
 @import 'tailwindcss';
+
+@theme {
+  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
+
+  /* Escala de azules: de la planta (oscuro) a la nube (claro) */
+  --color-tinta: #0a2a5e;
+  --color-tinta-suave: #25457a;
+  --color-gris-azul: #3d5680;
+  --color-azul-ot: #0b2f6b;
+  --color-azul-idmz: #1f5fd0;
+  --color-azul-it: #6fa5f2;
+  --color-azul-claro: #bcd5fb;
+  --color-azul-marino: #06214d;
+
+  /* Acento: conexion segura */
+  --color-turquesa: #0fa3a3;
+  --color-turquesa-oscuro: #0b7a7a;
+
+  --color-borde: #b7c8e3;
+  --color-campo: #f3f8ff;
+
+  --animate-flujo: flujo 1.2s linear infinite;
+
+  @keyframes flujo {
+    to {
+      stroke-dashoffset: -16;
+    }
+  }
+}
+
+body {
+  margin: 0;
+  background: #dbe8fd;
+}
