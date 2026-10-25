@@ -71,3 +71,7 @@ export default defineConfig([
   },
 ])
 ```
+
+## Créditos
+
+Los íconos son de [Reicon](https://github.com/dqev/reicon), con licencia MIT. Sus íconos base provienen de [Solar Icons](https://solar-icons.vercel.app/), de 480 Design (CC BY 4.0), y de [Zappicon](https://zappicon.com/).
