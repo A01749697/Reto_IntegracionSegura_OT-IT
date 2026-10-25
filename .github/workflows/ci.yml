@@ -42,3 +42,43 @@ jobs:
           name: pagina-compilada
           path: frontend_retoOtIt/dist
           retention-days: 7
+
+  deploy:
+    name: Desplegar al servidor
+    needs: frontend
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    concurrency:
+      group: despliegue
+      cancel-in-progress: false
+    steps:
+      - name: Descargar la pagina compilada
+        uses: actions/download-artifact@v7
+        with:
+          name: pagina-compilada
+          path: dist
+
+      - name: Preparar llave SSH y huella del servidor
+        env:
+          SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}
+          SERVER_KNOWN_HOSTS: ${{ secrets.SERVER_KNOWN_HOSTS }}
+        run: |
+          install -m 700 -d ~/.ssh
+          printf '%s\n' "$SSH_PRIVATE_KEY" | tr -d '\r' > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          printf '%s\n' "$SERVER_KNOWN_HOSTS" | tr -d '\r' > ~/.ssh/known_hosts
+
+      - name: Copiar la pagina al servidor
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          rsync -rlz --delete --chmod=D755,F644 \
+            -e "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes" \
+            dist/ "$SERVER_USER@$SERVER_HOST:/var/www/reto/"
+
+      - name: Comprobar que la pagina responde
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: |
+          curl -ksS --fail --max-time 20 -o /dev/null "https://$SERVER_HOST/"
