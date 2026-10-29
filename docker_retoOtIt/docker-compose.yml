@@ -55,5 +55,39 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  api-panel:
+    build:
+      context: ./backend_panel_retoOtIt
+    container_name: reto-api-panel
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_READER_PASSWORD: ${DB_READER_PASSWORD:?falta DB_READER_PASSWORD}
+      DB_PANEL_PASSWORD: ${DB_PANEL_PASSWORD:?falta DB_PANEL_PASSWORD}
+      URL_PUBLICA: ${URL_PUBLICA:?falta URL_PUBLICA}
+      CORREO_REMITENTE: ${CORREO_REMITENTE:?falta CORREO_REMITENTE}
+      AWS_REGION: ${AWS_REGION:-us-east-2}
+    ports:
+      - "127.0.0.1:3002:3002"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3002/api/panel/salud"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   pgdata:

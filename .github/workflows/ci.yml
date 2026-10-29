@@ -84,9 +84,44 @@ jobs:
       - name: Construir la imagen de Docker
         run: docker build -t api-ingest-prueba .
 
+  api_panel:
+    name: API del panel (lint, pruebas y build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend_panel_retoOtIt
+    steps:
+      - name: Descargar el codigo
+        uses: actions/checkout@v7
+
+      - name: Instalar Node 24
+        uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: backend_panel_retoOtIt/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Revisar el codigo (ESLint)
+        run: npm run lint
+
+      - name: Revisar el formato (Prettier)
+        run: npm run format:check
+
+      - name: Correr las pruebas (Vitest)
+        run: npm test
+
+      - name: Compilar la API
+        run: npm run build
+
+      - name: Construir la imagen de Docker
+        run: docker build -t api-panel-prueba .
+
   deploy:
     name: Desplegar al servidor
-    needs: [frontend, api_ingest]
+    needs: [frontend, api_ingest, api_panel]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     concurrency:
@@ -139,6 +174,15 @@ jobs:
             -e "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes" \
             backend_retoOtIt/ "$SERVER_USER@$SERVER_HOST:/opt/docker_retoOtIt/backend_retoOtIt/"
 
+      - name: Copiar el codigo de la API del panel al servidor
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+        run: |
+          rsync -rlz --delete --chmod=D755,F644 \
+            -e "ssh -i ~/.ssh/deploy_key -o IdentitiesOnly=yes" \
+            backend_panel_retoOtIt/ "$SERVER_USER@$SERVER_HOST:/opt/docker_retoOtIt/backend_panel_retoOtIt/"
+
       - name: Levantar los contenedores
         env:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
@@ -148,10 +192,12 @@ jobs:
           set -euo pipefail
           cd /opt/docker_retoOtIt
           test -f .env || { echo "Falta el archivo .env en /opt/docker_retoOtIt"; exit 1; }
-          for v in DB_ADMIN_PASSWORD DB_INGEST_PASSWORD DB_READER_PASSWORD; do
+          for v in DB_ADMIN_PASSWORD DB_INGEST_PASSWORD DB_READER_PASSWORD DB_PANEL_PASSWORD; do
             grep -Eq "^${v}=[A-Za-z0-9_]{12,}$" .env || { echo "Falta o es invalida la variable $v en .env"; exit 1; }
           done
           grep -Eq '^API_INGEST_TOKEN=[0-9a-f]{64}$' .env || { echo "Falta o es invalida la variable API_INGEST_TOKEN en .env"; exit 1; }
+          grep -Eq '^URL_PUBLICA=https://[^[:space:]]+$' .env || { echo "Falta o es invalida la variable URL_PUBLICA en .env"; exit 1; }
+          grep -Eq '^CORREO_REMITENTE=[^@[:space:]]+@[^@[:space:]]+\.[^@[:space:]]+$' .env || { echo "Falta o es invalida la variable CORREO_REMITENTE en .env"; exit 1; }
           sudo docker compose up -d --build --wait --wait-timeout 120
           sudo docker compose ps
           REMOTE
@@ -167,3 +213,9 @@ jobs:
           SERVER_HOST: ${{ secrets.SERVER_HOST }}
         run: |
           curl -ksS --fail --max-time 20 "https://$SERVER_HOST/api/ingest/salud" | grep -q '"estado":"ok"'
+
+      - name: Comprobar que la API del panel responde
+        env:
+          SERVER_HOST: ${{ secrets.SERVER_HOST }}
+        run: |
+          curl -ksS --fail --max-time 20 "https://$SERVER_HOST/api/panel/salud" | grep -q '"estado":"ok"'
