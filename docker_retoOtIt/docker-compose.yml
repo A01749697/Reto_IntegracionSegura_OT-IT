@@ -24,5 +24,36 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  api-ingest:
+    build:
+      context: ./backend_retoOtIt
+    container_name: reto-api-ingest
+    restart: unless-stopped
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DB_HOST: db
+      DB_INGEST_PASSWORD: ${DB_INGEST_PASSWORD:?falta DB_INGEST_PASSWORD}
+      API_INGEST_TOKEN: ${API_INGEST_TOKEN:?falta API_INGEST_TOKEN}
+    ports:
+      - "127.0.0.1:3001:3001"
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:3001/api/ingest/salud"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
 volumes:
   pgdata:
