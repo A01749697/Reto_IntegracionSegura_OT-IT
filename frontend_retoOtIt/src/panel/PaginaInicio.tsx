@@ -5,10 +5,15 @@ import type { Usuario } from '../login/apiPanel'
 type Props = {
   usuario: Usuario
   cerrarSesion: () => Promise<boolean>
+  irCuentas?: () => void
 }
 
 // Pantalla provisional mientras no esta el dashboard.
-export default function PaginaInicio({ usuario, cerrarSesion }: Props) {
+export default function PaginaInicio({
+  usuario,
+  cerrarSesion,
+  irCuentas,
+}: Props) {
   const [cerrando, setCerrando] = useState(false)
   const [error, setError] = useState(false)
 
@@ -52,6 +57,15 @@ export default function PaginaInicio({ usuario, cerrarSesion }: Props) {
             <p role="alert" className="text-[15px] text-[#8a1c26]">
               No se pudo cerrar la sesión. Inténtalo otra vez.
             </p>
+          )}
+          {irCuentas && usuario.rol === 'administrador' && (
+            <button
+              type="button"
+              onClick={irCuentas}
+              className="flex h-[58px] w-full cursor-pointer items-center justify-center rounded-[10px] bg-[linear-gradient(90deg,#174ea6,#2f6fe0)] text-[17px] font-semibold text-white hover:bg-[linear-gradient(90deg,#123f86,#2560c8)] focus-visible:ring-[3px] focus-visible:ring-turquesa/45 focus-visible:outline-none"
+            >
+              Administrar cuentas
+            </button>
           )}
           <button
             type="button"

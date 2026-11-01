@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import * as api from './login/apiPanel'
+import * as admin from './panel/apiAdministracion'
 
 vi.mock('./login/apiPanel', () => ({
   entrar: vi.fn(),
@@ -10,6 +11,11 @@ vi.mock('./login/apiPanel', () => ({
   restablecer: vi.fn(),
   cerrarSesion: vi.fn(),
   obtenerSesion: vi.fn(),
+}))
+
+vi.mock('./panel/apiAdministracion', () => ({
+  listarCuentas: vi.fn(),
+  decidirCuenta: vi.fn(),
 }))
 
 const usuario: api.Usuario = {
@@ -123,6 +129,47 @@ describe('App', () => {
     await screen.findByLabelText('Correo')
     expect(
       screen.queryByRole('heading', { name: 'Contraseña nueva' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('abre la pantalla de cuentas y vuelve al inicio', async () => {
+    vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
+    vi.mocked(admin.listarCuentas).mockResolvedValue({ ok: true, cuentas: [] })
+    render(<App />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Administrar cuentas' }),
+    )
+    expect(
+      await screen.findByRole('heading', { name: 'Cuentas' }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
+    expect(
+      await screen.findByRole('heading', { name: 'Sesión iniciada' }),
+    ).toBeInTheDocument()
+  })
+
+  it('manda al login si la sesion caduca en la pantalla de cuentas', async () => {
+    vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
+    vi.mocked(admin.listarCuentas).mockResolvedValue({
+      ok: false,
+      motivo: 'sesion',
+    })
+    render(<App />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Administrar cuentas' }),
+    )
+    expect(await screen.findByLabelText('Correo')).toBeInTheDocument()
+  })
+
+  it('no deja entrar a cuentas a quien no es administrador', async () => {
+    vi.mocked(api.obtenerSesion).mockResolvedValue({
+      ...usuario,
+      rol: 'usuario',
+    })
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Sesión iniciada' })
+    expect(
+      screen.queryByRole('button', { name: 'Administrar cuentas' }),
     ).not.toBeInTheDocument()
   })
 })

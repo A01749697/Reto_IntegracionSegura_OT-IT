@@ -25,7 +25,7 @@ export type ResultadoSimple =
 
 type Respuesta = { estado: number; datos: unknown }
 
-async function llamar(
+export async function llamar(
   metodo: 'GET' | 'POST',
   ruta: string,
   cuerpo?: object,
@@ -40,7 +40,7 @@ async function llamar(
   return { estado: respuesta.status, datos }
 }
 
-function leerCampo(datos: unknown, campo: string): unknown {
+export function leerCampo(datos: unknown, campo: string): unknown {
   if (typeof datos !== 'object' || datos === null) return undefined
   return (datos as Record<string, unknown>)[campo]
 }
