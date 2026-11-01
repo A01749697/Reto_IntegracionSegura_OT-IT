@@ -15,23 +15,45 @@ import {
 import CampoTexto from './CampoTexto'
 import DiagramaFlujo from './DiagramaFlujo'
 import FondoOnda from './FondoOnda'
+import type {
+  MotivoEntrar,
+  ResultadoEntrar,
+  ResultadoSimple,
+  Usuario,
+} from './apiPanel'
 
 export type DatosCuenta = { nombre: string; correo: string; clave: string }
 
 export type PaginaLoginProps = {
-  /** Devuelve true si el usuario y la contrasena son correctos. */
-  autenticar: (usuario: string, clave: string) => Promise<boolean>
-  solicitarCuenta: (datos: DatosCuenta) => Promise<void>
-  recuperarClave: (cuenta: string) => Promise<void>
+  autenticar: (correo: string, clave: string) => Promise<ResultadoEntrar>
+  solicitarCuenta: (datos: DatosCuenta) => Promise<ResultadoSimple>
+  recuperarClave: (correo: string) => Promise<ResultadoSimple>
+  restablecerClave: (token: string, clave: string) => Promise<ResultadoSimple>
   /** Se llama cuando el inicio de sesion es correcto. */
-  alIniciarSesion?: () => void
+  alIniciarSesion?: (usuario: Usuario) => void
+  /** Codigo del enlace del correo. Si viene, abre directo la contraseña nueva. */
+  tokenInicial?: string
 }
 
-type Vista = 'login' | 'olvido' | 'crear'
+type Vista = 'login' | 'olvido' | 'crear' | 'restablecer'
 
-// El bloqueo real debe estar en el servidor; este solo avisa al usuario.
-const MAX_INTENTOS = 3
 const LARGO_MINIMO_CLAVE = 12
+
+const MENSAJES_ENTRAR: Record<MotivoEntrar, string> = {
+  credenciales: 'Correo o contraseña incorrectos.',
+  pendiente: 'Tu cuenta todavía está pendiente de aprobación.',
+  rechazada: 'Tu cuenta no fue aprobada.',
+  bloqueada:
+    'Demasiados intentos fallidos. Espera unos minutos e inténtalo de nuevo.',
+  limite: 'Demasiados intentos desde esta red. Espera unos minutos.',
+  invalido: 'Revisa que el correo y la contraseña estén bien escritos.',
+  fallo: 'No se pudo conectar con el servidor. Inténtalo más tarde.',
+}
+
+const MENSAJES_SIMPLES = {
+  limite: 'Demasiadas peticiones desde esta red. Espera unos minutos.',
+  fallo: 'No se pudo completar. Inténtalo más tarde.',
+}
 
 const BOTON_BASE =
   'flex h-[58px] w-full cursor-pointer items-center justify-center gap-2.5 rounded-[10px] text-[17px] font-semibold focus-visible:ring-[3px] focus-visible:ring-turquesa/45 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-75'
@@ -52,6 +74,10 @@ const ENCABEZADOS: Record<Vista, { titulo: string; subtitulo: string }> = {
   crear: {
     titulo: 'Crear cuenta',
     subtitulo: 'Solicita acceso al panel del reto.',
+  },
+  restablecer: {
+    titulo: 'Contraseña nueva',
+    subtitulo: 'Escribe la contraseña nueva de tu cuenta.',
   },
 }
 
@@ -110,45 +136,35 @@ function VistaLogin({
   irOlvido: () => void
   irCrear: () => void
 }) {
-  const [usuario, setUsuario] = useState('')
+  const [correo, setCorreo] = useState('')
   const [clave, setClave] = useState('')
   const [verClave, setVerClave] = useState(false)
-  const [estado, setEstado] = useState<
-    'reposo' | 'cargando' | 'error' | 'vacio'
-  >('reposo')
-  const [intentos, setIntentos] = useState(0)
+  const [cargando, setCargando] = useState(false)
+  const [aviso, setAviso] = useState('')
   const [mayusculas, setMayusculas] = useState(false)
-
-  const bloqueado = intentos >= MAX_INTENTOS
-  const cargando = estado === 'cargando'
 
   async function enviar(e: FormEvent) {
     e.preventDefault()
-    if (bloqueado || cargando) return
-    if (!usuario.trim() || !clave) {
-      setEstado('vacio')
+    if (cargando) return
+    if (!correo.trim() || !clave) {
+      setAviso('Escribe tu correo y tu contraseña.')
       return
     }
-    setEstado('cargando')
-    let correcto: boolean
+    setCargando(true)
+    let resultado: ResultadoEntrar
     try {
-      correcto = await autenticar(usuario.trim(), clave)
+      resultado = await autenticar(correo.trim(), clave)
     } catch {
-      correcto = false
+      resultado = { ok: false, motivo: 'fallo' }
     }
-    if (correcto) {
-      setEstado('reposo')
-      alIniciarSesion?.()
+    setCargando(false)
+    if (resultado.ok) {
+      setAviso('')
+      alIniciarSesion?.(resultado.usuario)
     } else {
-      setIntentos((n) => n + 1)
-      setEstado('error')
+      setAviso(MENSAJES_ENTRAR[resultado.motivo])
     }
   }
-
-  let mensaje = 'Usuario o contraseña incorrectos.'
-  if (bloqueado) mensaje = 'Demasiados intentos, espera unos minutos.'
-  else if (estado === 'vacio') mensaje = 'Escribe tu usuario y tu contraseña.'
-  const hayError = bloqueado || estado === 'error' || estado === 'vacio'
 
   const detectarMayusculas = (e: React.KeyboardEvent<HTMLInputElement>) =>
     setMayusculas(e.getModifierState('CapsLock'))
@@ -161,16 +177,17 @@ function VistaLogin({
         className="flex flex-col gap-[26px]"
         aria-label="Iniciar sesión"
       >
-        {hayError && <Aviso tipo="error">{mensaje}</Aviso>}
+        {aviso && <Aviso tipo="error">{aviso}</Aviso>}
 
         <CampoTexto
-          id="usuario"
-          etiqueta="Usuario"
-          Icono={User}
-          valor={usuario}
-          alCambiar={setUsuario}
+          id="correo"
+          etiqueta="Correo"
+          Icono={Envelope}
+          valor={correo}
+          alCambiar={setCorreo}
+          type="email"
           autoComplete="username"
-          placeholder="tu.usuario"
+          placeholder="correo@ejemplo.com"
         />
 
         <div className="flex flex-col gap-2">
@@ -224,17 +241,8 @@ function VistaLogin({
           </div>
         </div>
 
-        <button
-          type="submit"
-          className={BOTON_PRINCIPAL}
-          disabled={cargando || bloqueado}
-        >
-          {bloqueado ? (
-            <>
-              <Lock size={18} aria-hidden="true" />
-              <span>Acceso bloqueado temporalmente</span>
-            </>
-          ) : cargando ? (
+        <button type="submit" className={BOTON_PRINCIPAL} disabled={cargando}>
+          {cargando ? (
             <>
               <Cargando />
               <span>Verificando...</span>
@@ -263,7 +271,7 @@ function VistaOlvido({
   recuperarClave,
   irLogin,
 }: Pick<PaginaLoginProps, 'recuperarClave'> & { irLogin: () => void }) {
-  const [cuenta, setCuenta] = useState('')
+  const [correo, setCorreo] = useState('')
   const [enviado, setEnviado] = useState(false)
   const [error, setError] = useState('')
   const [cargando, setCargando] = useState(false)
@@ -271,33 +279,43 @@ function VistaOlvido({
   async function enviar(e: FormEvent) {
     e.preventDefault()
     if (cargando) return
-    if (!cuenta.trim()) {
-      setError('Escribe tu usuario o tu correo.')
-      setEnviado(false)
+    setEnviado(false)
+    if (!correo.trim()) {
+      setError('Escribe tu correo.')
       return
     }
     setError('')
     setCargando(true)
+    let resultado: ResultadoSimple
     try {
-      await recuperarClave(cuenta.trim())
-    } finally {
-      setCargando(false)
+      resultado = await recuperarClave(correo.trim())
+    } catch {
+      resultado = { ok: false, motivo: 'fallo' }
     }
-    // Mismo mensaje exista o no la cuenta, para no revelar quien tiene cuenta.
-    setEnviado(true)
+    setCargando(false)
+    if (resultado.ok) {
+      // Mismo mensaje exista o no la cuenta, para no revelar quien tiene cuenta.
+      setEnviado(true)
+    } else {
+      setError(
+        resultado.motivo === 'invalido'
+          ? 'Escribe un correo válido.'
+          : MENSAJES_SIMPLES[resultado.motivo],
+      )
+    }
   }
 
   return (
     <div className="flex flex-col gap-[26px]">
       <p className="text-[17px] leading-normal text-tinta-suave">
-        Escribe tu usuario o tu correo. Si la cuenta existe, te enviaremos las
-        instrucciones para crear una contraseña nueva.
+        Escribe tu correo. Si la cuenta existe, te enviaremos las instrucciones
+        para crear una contraseña nueva.
       </p>
       {error && <Aviso tipo="error">{error}</Aviso>}
       {enviado && (
         <Aviso tipo="exito">
-          Listo. Revisa tu correo en unos minutos. Si no llega, avisa a un
-          integrante del equipo.
+          Listo. Revisa tu correo en unos minutos, también la carpeta de spam.
+          Si no llega, avisa a un integrante del equipo.
         </Aviso>
       )}
       <form
@@ -307,13 +325,14 @@ function VistaOlvido({
         aria-label="Recuperar contraseña"
       >
         <CampoTexto
-          id="olvido-cuenta"
-          etiqueta="Usuario o correo"
+          id="olvido-correo"
+          etiqueta="Correo"
           Icono={Envelope}
-          valor={cuenta}
-          alCambiar={setCuenta}
+          valor={correo}
+          alCambiar={setCorreo}
+          type="email"
           autoComplete="username"
-          placeholder="tu.usuario o correo@ejemplo.com"
+          placeholder="correo@ejemplo.com"
         />
         <button type="submit" className={BOTON_PRINCIPAL} disabled={cargando}>
           Enviar instrucciones
@@ -360,17 +379,31 @@ function VistaCrear({
     }
     setError('')
     setCargando(true)
+    let resultado: ResultadoSimple
     try {
-      await solicitarCuenta({
+      resultado = await solicitarCuenta({
         nombre: nombre.trim(),
         correo: correo.trim(),
         clave,
       })
-      setEnviado(true)
     } catch {
-      setError('No se pudo enviar la solicitud. Inténtalo más tarde.')
-    } finally {
-      setCargando(false)
+      resultado = { ok: false, motivo: 'fallo' }
+    }
+    setCargando(false)
+    if (resultado.ok) {
+      setEnviado(true)
+      setNombre('')
+      setCorreo('')
+      setClave('')
+      setClave2('')
+    } else if (resultado.motivo === 'invalido') {
+      setError(
+        resultado.mensaje
+          ? `No se pudo crear la cuenta: ${resultado.mensaje}.`
+          : 'Revisa los datos que escribiste.',
+      )
+    } else {
+      setError(MENSAJES_SIMPLES[resultado.motivo])
     }
   }
 
@@ -444,13 +477,123 @@ function VistaCrear({
   )
 }
 
+function VistaRestablecer({
+  token,
+  restablecerClave,
+  irLogin,
+}: Pick<PaginaLoginProps, 'restablecerClave'> & {
+  token: string
+  irLogin: () => void
+}) {
+  const [clave, setClave] = useState('')
+  const [clave2, setClave2] = useState('')
+  const [error, setError] = useState('')
+  const [listo, setListo] = useState(false)
+  const [cargando, setCargando] = useState(false)
+
+  async function enviar(e: FormEvent) {
+    e.preventDefault()
+    if (cargando) return
+    if (!clave || !clave2) {
+      setError('Completa los dos campos.')
+      return
+    }
+    if (clave.length < LARGO_MINIMO_CLAVE) {
+      setError(
+        `La contraseña debe tener al menos ${LARGO_MINIMO_CLAVE} caracteres.`,
+      )
+      return
+    }
+    if (clave !== clave2) {
+      setError('Las contraseñas no coinciden.')
+      return
+    }
+    setError('')
+    setCargando(true)
+    let resultado: ResultadoSimple
+    try {
+      resultado = await restablecerClave(token, clave)
+    } catch {
+      resultado = { ok: false, motivo: 'fallo' }
+    }
+    setCargando(false)
+    if (resultado.ok) {
+      setListo(true)
+    } else if (resultado.motivo === 'invalido') {
+      setError(
+        'El enlace no es válido o ya caducó. Pide uno nuevo desde "¿Olvidaste tu contraseña?".',
+      )
+    } else {
+      setError(MENSAJES_SIMPLES[resultado.motivo])
+    }
+  }
+
+  if (listo) {
+    return (
+      <div className="flex flex-col gap-[26px]">
+        <Aviso tipo="exito">
+          Tu contraseña se cambió. Ya puedes iniciar sesión.
+        </Aviso>
+        <button type="button" className={BOTON_PRINCIPAL} onClick={irLogin}>
+          Ir a iniciar sesión
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-[26px]">
+      {error && <Aviso tipo="error">{error}</Aviso>}
+      <form
+        onSubmit={enviar}
+        noValidate
+        className="flex flex-col gap-[22px]"
+        aria-label="Restablecer contraseña"
+      >
+        <CampoTexto
+          id="restablecer-clave"
+          etiqueta="Contraseña nueva"
+          Icono={Lock}
+          valor={clave}
+          alCambiar={setClave}
+          type="password"
+          autoComplete="new-password"
+          placeholder={`Mínimo ${LARGO_MINIMO_CLAVE} caracteres`}
+        />
+        <CampoTexto
+          id="restablecer-clave2"
+          etiqueta="Repite la contraseña nueva"
+          Icono={Lock}
+          valor={clave2}
+          alCambiar={setClave2}
+          type="password"
+          autoComplete="new-password"
+          placeholder="Escríbela otra vez"
+        />
+        <button type="submit" className={BOTON_PRINCIPAL} disabled={cargando}>
+          Cambiar contraseña
+        </button>
+      </form>
+      <div className="flex justify-center">
+        <button type="button" className={ENLACE} onClick={irLogin}>
+          Volver a iniciar sesión
+        </button>
+      </div>
+    </div>
+  )
+}
+
 export default function PaginaLogin({
   autenticar,
   solicitarCuenta,
   recuperarClave,
+  restablecerClave,
   alIniciarSesion,
+  tokenInicial,
 }: PaginaLoginProps) {
-  const [vista, setVista] = useState<Vista>('login')
+  const [vista, setVista] = useState<Vista>(
+    tokenInicial ? 'restablecer' : 'login',
+  )
   const { titulo, subtitulo } = ENCABEZADOS[vista]
 
   return (
@@ -521,6 +664,13 @@ export default function PaginaLogin({
             {vista === 'crear' && (
               <VistaCrear
                 solicitarCuenta={solicitarCuenta}
+                irLogin={() => setVista('login')}
+              />
+            )}
+            {vista === 'restablecer' && tokenInicial && (
+              <VistaRestablecer
+                token={tokenInicial}
+                restablecerClave={restablecerClave}
                 irLogin={() => setVista('login')}
               />
             )}
