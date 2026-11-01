@@ -34,4 +34,28 @@ describe('PaginaInicio', () => {
     )
     expect(screen.getByRole('button', { name: 'Cerrar sesión' })).toBeEnabled()
   })
+
+  it('muestra el boton de cuentas solo a los administradores', () => {
+    const irCuentas = vi.fn()
+    const { rerender } = render(
+      <PaginaInicio
+        usuario={usuario}
+        cerrarSesion={vi.fn()}
+        irCuentas={irCuentas}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Administrar cuentas' }))
+    expect(irCuentas).toHaveBeenCalledTimes(1)
+
+    rerender(
+      <PaginaInicio
+        usuario={{ ...usuario, rol: 'usuario' }}
+        cerrarSesion={vi.fn()}
+        irCuentas={irCuentas}
+      />,
+    )
+    expect(
+      screen.queryByRole('button', { name: 'Administrar cuentas' }),
+    ).not.toBeInTheDocument()
+  })
 })

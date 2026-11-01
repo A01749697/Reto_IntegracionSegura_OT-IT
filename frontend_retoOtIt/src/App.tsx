@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import {
   cerrarSesion,
   crearCuenta,
@@ -9,6 +9,8 @@ import {
   type Usuario,
 } from './login/apiPanel'
 import PaginaLogin from './login/PaginaLogin'
+import { decidirCuenta, listarCuentas } from './panel/apiAdministracion'
+import PaginaAdministracion from './panel/PaginaAdministracion'
 import PaginaInicio from './panel/PaginaInicio'
 
 // el enlace del correo trae #restablecer=CODIGO
@@ -19,6 +21,11 @@ function leerCodigoDelEnlace(): string | undefined {
 function App() {
   const [codigo, setCodigo] = useState(leerCodigoDelEnlace)
   const [sesion, setSesion] = useState<Usuario | null | 'cargando'>('cargando')
+  const [verCuentas, setVerCuentas] = useState(false)
+  const alCaducarSesion = useCallback(() => {
+    setVerCuentas(false)
+    setSesion(null)
+  }, [])
 
   useEffect(() => {
     // lo quito de la barra para que no se quede en el historial
@@ -52,13 +59,25 @@ function App() {
     )
   }
 
+  if (sesion && verCuentas && sesion.rol === 'administrador') {
+    return (
+      <PaginaAdministracion
+        listar={listarCuentas}
+        decidir={decidirCuenta}
+        volver={() => setVerCuentas(false)}
+        sesionCaducada={alCaducarSesion}
+      />
+    )
+  }
+
   if (sesion) {
     return (
       <PaginaInicio
         usuario={sesion}
+        irCuentas={() => setVerCuentas(true)}
         cerrarSesion={async () => {
           const cerrada = await cerrarSesion()
-          if (cerrada) setSesion(null)
+          if (cerrada) alCaducarSesion()
           return cerrada
         }}
       />
