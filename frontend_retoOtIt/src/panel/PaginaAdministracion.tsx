@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { AlertCircle, CheckCircle } from 'reicon-react'
+import MarcoPanel from './MarcoPanel'
 import type {
   Cuenta,
   DecisionCuenta,
@@ -110,134 +111,113 @@ export default function PaginaAdministracion({
   }
 
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[#dbe8fd] bg-[linear-gradient(120deg,#b3cff9_0%,#dbe8fd_45%,#f6f9ff_100%)] px-4 py-12 font-sans text-tinta">
-      <div className="w-full max-w-[720px] overflow-hidden rounded-[18px] border border-borde bg-white shadow-[0_18px_40px_rgba(11,47,107,0.2)]">
-        <div className="flex items-center justify-between gap-4 border-b-4 border-turquesa bg-[linear-gradient(135deg,#0b2f6b_0%,#1f5fd0_100%)] px-6 py-[30px] sm:px-10">
-          <h1 className="text-[26px] leading-tight font-bold text-white">
-            Cuentas
-          </h1>
+    <MarcoPanel titulo="Cuentas" volver={volver}>
+      <div className="flex flex-wrap gap-2" role="group" aria-label="Filtro">
+        {FILTROS.map(({ estado, texto }) => (
           <button
+            key={estado}
             type="button"
-            onClick={volver}
-            className="h-11 cursor-pointer rounded-lg border border-white/50 px-4 text-[15px] font-semibold text-white hover:bg-white/15 focus-visible:ring-[3px] focus-visible:ring-white/60 focus-visible:outline-none"
+            aria-pressed={filtro === estado}
+            onClick={() => cambiarFiltro(estado)}
+            className={`${BOTON} border-2 ${
+              filtro === estado
+                ? 'border-azul-idmz bg-[#174ea6] text-white'
+                : 'border-azul-idmz bg-white text-[#174ea6] hover:bg-[#eef4ff]'
+            }`}
           >
-            Volver
+            {texto}
           </button>
-        </div>
-
-        <div className="flex flex-col gap-6 px-6 pt-8 pb-10 sm:px-10">
-          <div
-            className="flex flex-wrap gap-2"
-            role="group"
-            aria-label="Filtro"
-          >
-            {FILTROS.map(({ estado, texto }) => (
-              <button
-                key={estado}
-                type="button"
-                aria-pressed={filtro === estado}
-                onClick={() => cambiarFiltro(estado)}
-                className={`${BOTON} border-2 ${
-                  filtro === estado
-                    ? 'border-azul-idmz bg-[#174ea6] text-white'
-                    : 'border-azul-idmz bg-white text-[#174ea6] hover:bg-[#eef4ff]'
-                }`}
-              >
-                {texto}
-              </button>
-            ))}
-          </div>
-
-          {aviso && (
-            <div
-              role={aviso.error ? 'alert' : 'status'}
-              className={`flex items-start gap-2.5 rounded-lg border px-3.5 py-3 text-[15px] leading-snug ${
-                aviso.error
-                  ? 'border-[#e5848c] bg-[#fdecee] text-[#8a1c26]'
-                  : 'border-turquesa bg-[#e6f6f6] text-[#064e4e]'
-              }`}
-            >
-              {aviso.error ? (
-                <AlertCircle
-                  size={18}
-                  aria-hidden="true"
-                  className="mt-px shrink-0"
-                />
-              ) : (
-                <CheckCircle
-                  size={18}
-                  aria-hidden="true"
-                  className="mt-px shrink-0"
-                />
-              )}
-              <span>{aviso.texto}</span>
-            </div>
-          )}
-
-          {cargando && <p className="text-tinta-suave">Cargando...</p>}
-
-          {!cargando && !carga.resultado.ok && (
-            <p role="alert" className="text-[15px] text-[#8a1c26]">
-              No se pudo cargar la lista. Inténtalo otra vez.
-            </p>
-          )}
-
-          {!cargando && carga.resultado.ok && (
-            <>
-              {carga.resultado.cuentas.length === 0 && (
-                <p className="text-tinta-suave">{VACIO[filtro]}</p>
-              )}
-              <ul className="flex flex-col gap-4">
-                {carga.resultado.cuentas.map((cuenta) => (
-                  <li
-                    key={cuenta.id}
-                    className="flex flex-col gap-4 rounded-xl border border-borde bg-campo px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
-                  >
-                    <div className="min-w-0">
-                      <p className="text-[17px] font-semibold break-words">
-                        {cuenta.nombre}
-                      </p>
-                      <p className="text-[15px] break-all text-tinta-suave">
-                        {cuenta.correo}
-                      </p>
-                      <p className="text-[14px] text-gris-azul">
-                        Solicitada el {fechaCorta(cuenta.creadoEn)}
-                        {cuenta.rol === 'administrador' && ' · Administrador'}
-                      </p>
-                    </div>
-                    {cuenta.rol === 'usuario' && (
-                      <div className="flex shrink-0 gap-2">
-                        {cuenta.estado !== 'aprobado' && (
-                          <button
-                            type="button"
-                            disabled={ocupada === cuenta.id}
-                            onClick={() => decidirSobre(cuenta, 'aprobado')}
-                            aria-label={`Aprobar a ${cuenta.nombre}`}
-                            className={`${BOTON} bg-[#174ea6] text-white hover:bg-[#123f86]`}
-                          >
-                            Aprobar
-                          </button>
-                        )}
-                        {cuenta.estado !== 'rechazado' && (
-                          <button
-                            type="button"
-                            disabled={ocupada === cuenta.id}
-                            onClick={() => decidirSobre(cuenta, 'rechazado')}
-                            aria-label={`Rechazar a ${cuenta.nombre}`}
-                            className={`${BOTON} border-2 border-[#b3202d] bg-white text-[#8a1c26] hover:bg-[#fdecee]`}
-                          >
-                            Rechazar
-                          </button>
-                        )}
-                      </div>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </>
-          )}
-        </div>
+        ))}
       </div>
-    </main>
+
+      {aviso && (
+        <div
+          role={aviso.error ? 'alert' : 'status'}
+          className={`flex items-start gap-2.5 rounded-lg border px-3.5 py-3 text-[15px] leading-snug ${
+            aviso.error
+              ? 'border-[#e5848c] bg-[#fdecee] text-[#8a1c26]'
+              : 'border-turquesa bg-[#e6f6f6] text-[#064e4e]'
+          }`}
+        >
+          {aviso.error ? (
+            <AlertCircle
+              size={18}
+              aria-hidden="true"
+              className="mt-px shrink-0"
+            />
+          ) : (
+            <CheckCircle
+              size={18}
+              aria-hidden="true"
+              className="mt-px shrink-0"
+            />
+          )}
+          <span>{aviso.texto}</span>
+        </div>
+      )}
+
+      {cargando && <p className="text-tinta-suave">Cargando...</p>}
+
+      {!cargando && !carga.resultado.ok && (
+        <p role="alert" className="text-[15px] text-[#8a1c26]">
+          No se pudo cargar la lista. Inténtalo otra vez.
+        </p>
+      )}
+
+      {!cargando && carga.resultado.ok && (
+        <>
+          {carga.resultado.cuentas.length === 0 && (
+            <p className="text-tinta-suave">{VACIO[filtro]}</p>
+          )}
+          <ul className="flex flex-col gap-4">
+            {carga.resultado.cuentas.map((cuenta) => (
+              <li
+                key={cuenta.id}
+                className="flex flex-col gap-4 rounded-xl border border-borde bg-campo px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
+              >
+                <div className="min-w-0">
+                  <p className="text-[17px] font-semibold break-words">
+                    {cuenta.nombre}
+                  </p>
+                  <p className="text-[15px] break-all text-tinta-suave">
+                    {cuenta.correo}
+                  </p>
+                  <p className="text-[14px] text-gris-azul">
+                    Solicitada el {fechaCorta(cuenta.creadoEn)}
+                    {cuenta.rol === 'administrador' && ' · Administrador'}
+                  </p>
+                </div>
+                {cuenta.rol === 'usuario' && (
+                  <div className="flex shrink-0 gap-2">
+                    {cuenta.estado !== 'aprobado' && (
+                      <button
+                        type="button"
+                        disabled={ocupada === cuenta.id}
+                        onClick={() => decidirSobre(cuenta, 'aprobado')}
+                        aria-label={`Aprobar a ${cuenta.nombre}`}
+                        className={`${BOTON} bg-[#174ea6] text-white hover:bg-[#123f86]`}
+                      >
+                        Aprobar
+                      </button>
+                    )}
+                    {cuenta.estado !== 'rechazado' && (
+                      <button
+                        type="button"
+                        disabled={ocupada === cuenta.id}
+                        onClick={() => decidirSobre(cuenta, 'rechazado')}
+                        aria-label={`Rechazar a ${cuenta.nombre}`}
+                        className={`${BOTON} border-2 border-[#b3202d] bg-white text-[#8a1c26] hover:bg-[#fdecee]`}
+                      >
+                        Rechazar
+                      </button>
+                    )}
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+    </MarcoPanel>
   )
 }

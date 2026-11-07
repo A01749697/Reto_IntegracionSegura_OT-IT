@@ -6,6 +6,8 @@ type Props = {
   usuario: Usuario
   cerrarSesion: () => Promise<boolean>
   irCuentas?: () => void
+  irBitacora?: () => void
+  irEstado?: () => void
 }
 
 // Pantalla provisional mientras no esta el dashboard.
@@ -13,6 +15,8 @@ export default function PaginaInicio({
   usuario,
   cerrarSesion,
   irCuentas,
+  irBitacora,
+  irEstado,
 }: Props) {
   const [cerrando, setCerrando] = useState(false)
   const [error, setError] = useState(false)
@@ -65,6 +69,24 @@ export default function PaginaInicio({
               className="flex h-[58px] w-full cursor-pointer items-center justify-center rounded-[10px] bg-[linear-gradient(90deg,#174ea6,#2f6fe0)] text-[17px] font-semibold text-white hover:bg-[linear-gradient(90deg,#123f86,#2560c8)] focus-visible:ring-[3px] focus-visible:ring-turquesa/45 focus-visible:outline-none"
             >
               Administrar cuentas
+            </button>
+          )}
+          {irBitacora && usuario.rol === 'administrador' && (
+            <button
+              type="button"
+              onClick={irBitacora}
+              className="flex h-[58px] w-full cursor-pointer items-center justify-center rounded-[10px] border-2 border-azul-idmz bg-white text-[17px] font-semibold text-[#174ea6] hover:bg-[#eef4ff] focus-visible:ring-[3px] focus-visible:ring-turquesa/45 focus-visible:outline-none"
+            >
+              Bitácora de seguridad
+            </button>
+          )}
+          {irEstado && (
+            <button
+              type="button"
+              onClick={irEstado}
+              className="flex h-[58px] w-full cursor-pointer items-center justify-center rounded-[10px] border-2 border-azul-idmz bg-white text-[17px] font-semibold text-[#174ea6] hover:bg-[#eef4ff] focus-visible:ring-[3px] focus-visible:ring-turquesa/45 focus-visible:outline-none"
+            >
+              Estado del sistema
             </button>
           )}
           <button

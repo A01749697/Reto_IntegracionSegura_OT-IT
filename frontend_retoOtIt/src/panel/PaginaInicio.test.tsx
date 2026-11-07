@@ -58,4 +58,38 @@ describe('PaginaInicio', () => {
       screen.queryByRole('button', { name: 'Administrar cuentas' }),
     ).not.toBeInTheDocument()
   })
+
+  it('muestra bitácora solo a administradores y estado a todos', () => {
+    const irBitacora = vi.fn()
+    const irEstado = vi.fn()
+    const { rerender } = render(
+      <PaginaInicio
+        usuario={usuario}
+        cerrarSesion={vi.fn()}
+        irBitacora={irBitacora}
+        irEstado={irEstado}
+      />,
+    )
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Bitácora de seguridad' }),
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Estado del sistema' }))
+    expect(irBitacora).toHaveBeenCalledTimes(1)
+    expect(irEstado).toHaveBeenCalledTimes(1)
+
+    rerender(
+      <PaginaInicio
+        usuario={{ ...usuario, rol: 'usuario' }}
+        cerrarSesion={vi.fn()}
+        irBitacora={irBitacora}
+        irEstado={irEstado}
+      />,
+    )
+    expect(
+      screen.queryByRole('button', { name: 'Bitácora de seguridad' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Estado del sistema' }),
+    ).toBeInTheDocument()
+  })
 })
