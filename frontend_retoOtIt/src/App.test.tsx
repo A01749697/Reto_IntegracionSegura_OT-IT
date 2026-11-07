@@ -3,6 +3,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import * as api from './login/apiPanel'
 import * as admin from './panel/apiAdministracion'
+import * as bitacora from './panel/apiBitacora'
+import * as sistema from './panel/apiSistema'
 
 vi.mock('./login/apiPanel', () => ({
   entrar: vi.fn(),
@@ -16,6 +18,14 @@ vi.mock('./login/apiPanel', () => ({
 vi.mock('./panel/apiAdministracion', () => ({
   listarCuentas: vi.fn(),
   decidirCuenta: vi.fn(),
+}))
+
+vi.mock('./panel/apiBitacora', () => ({
+  listarBitacora: vi.fn(),
+}))
+
+vi.mock('./panel/apiSistema', () => ({
+  obtenerEstado: vi.fn(),
 }))
 
 const usuario: api.Usuario = {
@@ -171,5 +181,65 @@ describe('App', () => {
     expect(
       screen.queryByRole('button', { name: 'Administrar cuentas' }),
     ).not.toBeInTheDocument()
+  })
+
+  it('abre la bitácora y vuelve al inicio', async () => {
+    vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
+    vi.mocked(bitacora.listarBitacora).mockResolvedValue({
+      ok: true,
+      eventos: [],
+      hayMas: false,
+    })
+    render(<App />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Bitácora de seguridad' }),
+    )
+    expect(
+      await screen.findByRole('heading', { name: 'Bitácora de seguridad' }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
+    expect(
+      await screen.findByRole('heading', { name: 'Sesión iniciada' }),
+    ).toBeInTheDocument()
+  })
+
+  it('abre el estado del sistema aunque no sea administrador', async () => {
+    vi.mocked(api.obtenerSesion).mockResolvedValue({
+      ...usuario,
+      rol: 'usuario',
+    })
+    vi.mocked(sistema.obtenerEstado).mockResolvedValue({
+      ok: true,
+      estado: {
+        api: 'ok',
+        baseDatosPanel: 'ok',
+        baseDatosLecturas: 'ok',
+        datos: 'sin_datos',
+        variables: [],
+      },
+    })
+    render(<App />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Estado del sistema' }),
+    )
+    expect(
+      await screen.findByRole('heading', { name: 'Estado del sistema' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Bitácora de seguridad' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('manda al login si la sesión caduca en la bitácora o en el estado', async () => {
+    vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
+    vi.mocked(sistema.obtenerEstado).mockResolvedValue({
+      ok: false,
+      motivo: 'sesion',
+    })
+    render(<App />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Estado del sistema' }),
+    )
+    expect(await screen.findByLabelText('Correo')).toBeInTheDocument()
   })
 })

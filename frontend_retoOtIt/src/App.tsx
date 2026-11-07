@@ -10,7 +10,11 @@ import {
 } from './login/apiPanel'
 import PaginaLogin from './login/PaginaLogin'
 import { decidirCuenta, listarCuentas } from './panel/apiAdministracion'
+import { listarBitacora } from './panel/apiBitacora'
+import { obtenerEstado } from './panel/apiSistema'
 import PaginaAdministracion from './panel/PaginaAdministracion'
+import PaginaBitacora from './panel/PaginaBitacora'
+import PaginaEstado from './panel/PaginaEstado'
 import PaginaInicio from './panel/PaginaInicio'
 
 // el enlace del correo trae #restablecer=CODIGO
@@ -18,12 +22,14 @@ function leerCodigoDelEnlace(): string | undefined {
   return /^#restablecer=([0-9a-f]{64})$/.exec(window.location.hash)?.[1]
 }
 
+type Pantalla = 'inicio' | 'cuentas' | 'bitacora' | 'estado'
+
 function App() {
   const [codigo, setCodigo] = useState(leerCodigoDelEnlace)
   const [sesion, setSesion] = useState<Usuario | null | 'cargando'>('cargando')
-  const [verCuentas, setVerCuentas] = useState(false)
+  const [pantalla, setPantalla] = useState<Pantalla>('inicio')
   const alCaducarSesion = useCallback(() => {
-    setVerCuentas(false)
+    setPantalla('inicio')
     setSesion(null)
   }, [])
 
@@ -59,12 +65,32 @@ function App() {
     )
   }
 
-  if (sesion && verCuentas && sesion.rol === 'administrador') {
+  if (sesion && pantalla === 'cuentas' && sesion.rol === 'administrador') {
     return (
       <PaginaAdministracion
         listar={listarCuentas}
         decidir={decidirCuenta}
-        volver={() => setVerCuentas(false)}
+        volver={() => setPantalla('inicio')}
+        sesionCaducada={alCaducarSesion}
+      />
+    )
+  }
+
+  if (sesion && pantalla === 'bitacora' && sesion.rol === 'administrador') {
+    return (
+      <PaginaBitacora
+        listar={listarBitacora}
+        volver={() => setPantalla('inicio')}
+        sesionCaducada={alCaducarSesion}
+      />
+    )
+  }
+
+  if (sesion && pantalla === 'estado') {
+    return (
+      <PaginaEstado
+        obtener={obtenerEstado}
+        volver={() => setPantalla('inicio')}
         sesionCaducada={alCaducarSesion}
       />
     )
@@ -74,7 +100,9 @@ function App() {
     return (
       <PaginaInicio
         usuario={sesion}
-        irCuentas={() => setVerCuentas(true)}
+        irCuentas={() => setPantalla('cuentas')}
+        irBitacora={() => setPantalla('bitacora')}
+        irEstado={() => setPantalla('estado')}
         cerrarSesion={async () => {
           const cerrada = await cerrarSesion()
           if (cerrada) alCaducarSesion()
