@@ -4,6 +4,8 @@ import type { SesionActiva } from '../repositorios/sesiones.repositorio'
 import { calcularHuellaToken, generarToken } from '../utilidades/tokens'
 import { crearServicioSesion } from './sesion.servicio'
 
+const IP = '203.0.113.7'
+
 const sesionFalsa: SesionActiva = {
   sesionId: 7,
   usuarioId: 3,
@@ -18,6 +20,7 @@ function crearDependenciasFalsas() {
     buscarSesionActiva: vi.fn().mockResolvedValue(null),
     revocarSesion: vi.fn().mockResolvedValue(undefined),
     revocarSesionesDeUsuario: vi.fn().mockResolvedValue(undefined),
+    registrarEvento: vi.fn().mockResolvedValue(undefined),
   }
 }
 
@@ -71,7 +74,7 @@ describe('servicio de sesión', () => {
     const servicio = crearServicioSesion(dependencias)
     const token = generarToken()
 
-    await servicio.cerrar(token)
+    await servicio.cerrar(token, IP)
 
     expect(dependencias.revocarSesion).toHaveBeenCalledWith(
       calcularHuellaToken(token),
@@ -82,8 +85,8 @@ describe('servicio de sesión', () => {
     const dependencias = crearDependenciasFalsas()
     const servicio = crearServicioSesion(dependencias)
 
-    await servicio.cerrar(undefined)
-    await servicio.cerrar('basura')
+    await servicio.cerrar(undefined, IP)
+    await servicio.cerrar('basura', IP)
 
     expect(dependencias.revocarSesion).not.toHaveBeenCalled()
   })
@@ -95,5 +98,30 @@ describe('servicio de sesión', () => {
     await servicio.cerrarTodasDe(3)
 
     expect(dependencias.revocarSesionesDeUsuario).toHaveBeenCalledWith(3)
+  })
+
+  it('cerrar anota el cierre de la sesión', async () => {
+    const dependencias = crearDependenciasFalsas()
+    dependencias.buscarSesionActiva.mockResolvedValue(sesionFalsa)
+    const servicio = crearServicioSesion(dependencias)
+
+    await servicio.cerrar(generarToken(), IP)
+
+    expect(dependencias.registrarEvento).toHaveBeenCalledWith({
+      tipo: 'sesion_cerrada',
+      usuarioId: 3,
+      correo: 'ana@ejemplo.com',
+      ip: IP,
+    })
+  })
+
+  it('cerrar una sesión que ya había caducado no anota nada', async () => {
+    const dependencias = crearDependenciasFalsas()
+    const servicio = crearServicioSesion(dependencias)
+
+    await servicio.cerrar(generarToken(), IP)
+
+    expect(dependencias.revocarSesion).toHaveBeenCalledTimes(1)
+    expect(dependencias.registrarEvento).not.toHaveBeenCalled()
   })
 })

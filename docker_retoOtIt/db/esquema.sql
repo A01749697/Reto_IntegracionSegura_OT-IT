@@ -125,3 +125,27 @@ $$;
 
 GRANT SELECT, INSERT, UPDATE ON usuarios, enlaces_reinicio, sesiones TO reto_panel;
 GRANT USAGE ON SEQUENCE usuarios_id_seq, enlaces_reinicio_id_seq, sesiones_id_seq TO reto_panel;
+
+-- Bitacora de seguridad ------------------------------------------------------
+-- El rol del panel solo puede agregar y leer filas. No puede cambiarlas ni borrarlas.
+
+CREATE TABLE IF NOT EXISTS bitacora (
+  id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  ocurrio_en  timestamptz NOT NULL DEFAULT now(),
+  tipo        text NOT NULL,
+  usuario_id  bigint REFERENCES usuarios (id) ON DELETE SET NULL,
+  actor_id    bigint REFERENCES usuarios (id) ON DELETE SET NULL,
+  correo      text,
+  ip          text,
+  CONSTRAINT bitacora_tipo_valido CHECK (tipo IN (
+    'entrada_correcta', 'entrada_fallida', 'entrada_bloqueada', 'cuenta_bloqueada',
+    'entrada_pendiente', 'entrada_rechazada', 'cuenta_solicitada', 'solicitud_repetida',
+    'reinicio_solicitado', 'reinicio_fallido', 'contrasena_restablecida',
+    'sesion_cerrada', 'cuenta_aprobada', 'cuenta_rechazada'
+  )),
+  CONSTRAINT bitacora_correo_largo CHECK (char_length(correo) <= 254),
+  CONSTRAINT bitacora_ip_largo CHECK (char_length(ip) <= 45)
+);
+
+GRANT SELECT, INSERT ON bitacora TO reto_panel;
+GRANT USAGE ON SEQUENCE bitacora_id_seq TO reto_panel;

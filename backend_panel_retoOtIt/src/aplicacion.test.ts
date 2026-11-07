@@ -75,6 +75,14 @@ function prepararApp() {
       .fn()
       .mockResolvedValue({ puntos: [], truncado: false }),
   }
+  const bitacora = {
+    insertarEvento: vi.fn().mockResolvedValue(undefined),
+    listarEventos: vi.fn().mockResolvedValue([]),
+  }
+  const sistema = {
+    comprobarBasePanel: vi.fn().mockResolvedValue(undefined),
+    obtenerEstadoLecturas: vi.fn().mockResolvedValue([]),
+  }
   const correo = {
     remitente: 'panel@ejemplo.com',
     enviar: vi.fn().mockResolvedValue(undefined),
@@ -86,6 +94,8 @@ function prepararApp() {
     reinicio,
     administracion,
     lecturas,
+    bitacora,
+    sistema,
     correo,
     ahora: () => AHORA,
   })
@@ -96,6 +106,8 @@ function prepararApp() {
     reinicio,
     administracion,
     lecturas,
+    bitacora,
+    sistema,
     correo,
   }
 }
@@ -731,6 +743,179 @@ describe('API del panel', { timeout: 20000 }, () => {
 
       expect(respuesta.status).toBe(400)
       expect(lecturas.obtenerHistorial).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('bitácora', () => {
+    const evento = {
+      id: 9,
+      ocurrioEn: new Date('2026-11-06T18:00:00Z'),
+      tipo: 'entrada_fallida',
+      usuarioId: null,
+      correo: 'ana@ejemplo.com',
+      ip: '203.0.113.7',
+      actorCorreo: null,
+    }
+
+    it('sin sesión responde 401', async () => {
+      const { app } = prepararApp()
+      const respuesta = await consultar(app, '/administracion/bitacora')
+      expect(respuesta.status).toBe(401)
+    })
+
+    it('un usuario normal recibe 403 y no se consulta la base', async () => {
+      const { app, sesion, bitacora } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionUsuario)
+
+      const respuesta = await consultar(app, '/administracion/bitacora').set(
+        'Cookie',
+        COOKIE,
+      )
+
+      expect(respuesta.status).toBe(403)
+      expect(bitacora.listarEventos).not.toHaveBeenCalled()
+    })
+
+    it('un administrador recibe los eventos y si hay más', async () => {
+      const { app, sesion, bitacora } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionAdministrador)
+      bitacora.listarEventos.mockResolvedValue([evento])
+
+      const respuesta = await consultar(
+        app,
+        '/administracion/bitacora?grupo=alertas&limite=5',
+      ).set('Cookie', COOKIE)
+
+      expect(respuesta.status).toBe(200)
+      expect(respuesta.body).toEqual({
+        eventos: [{ ...evento, ocurrioEn: '2026-11-06T18:00:00.000Z' }],
+        hayMas: false,
+      })
+      expect(bitacora.listarEventos).toHaveBeenCalledWith(
+        expect.objectContaining({ antes: null, limite: 6 }),
+      )
+    })
+
+    it('responde 400 con un filtro inválido', async () => {
+      const { app, sesion, bitacora } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionAdministrador)
+
+      const respuesta = await consultar(
+        app,
+        '/administracion/bitacora?grupo=otro',
+      ).set('Cookie', COOKIE)
+
+      expect(respuesta.status).toBe(400)
+      expect(bitacora.listarEventos).not.toHaveBeenCalled()
+    })
+
+    it('un intento de entrada fallido queda anotado con la IP', async () => {
+      const { app, bitacora } = prepararApp()
+
+      await publicar(app, '/autenticacion/entrar').send({
+        correo: 'ana@ejemplo.com',
+        contrasena: CONTRASENA,
+      })
+
+      expect(bitacora.insertarEvento).toHaveBeenCalledTimes(1)
+      const anotado = bitacora.insertarEvento.mock.calls[0]?.[0]
+      expect(anotado).toMatchObject({
+        tipo: 'entrada_fallida',
+        correo: 'ana@ejemplo.com',
+      })
+      expect(anotado.ip).toEqual(expect.any(String))
+    })
+
+    it('si la bitácora falla, el inicio de sesión sigue funcionando', async () => {
+      const { app, autenticacion, bitacora } = prepararApp()
+      autenticacion.buscarPorCorreo.mockResolvedValue(crearUsuarioFalso())
+      bitacora.insertarEvento.mockRejectedValue(new Error('caida'))
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const respuesta = await publicar(app, '/autenticacion/entrar').send({
+        correo: 'ana@ejemplo.com',
+        contrasena: CONTRASENA,
+      })
+
+      expect(respuesta.status).toBe(200)
+    })
+
+    it('aprobar una cuenta anota quién la aprobó', async () => {
+      const { app, sesion, administracion, bitacora } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionAdministrador)
+      administracion.buscarPorId.mockResolvedValue(
+        crearUsuarioFalso({ id: 5, estado: 'pendiente' }),
+      )
+
+      await publicar(app, '/administracion/usuarios/5/decision')
+        .set('Cookie', COOKIE)
+        .send({ decision: 'aprobado' })
+
+      expect(bitacora.insertarEvento).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tipo: 'cuenta_aprobada',
+          usuarioId: 5,
+          actorId: sesionAdministrador.usuarioId,
+        }),
+      )
+    })
+  })
+
+  describe('sistema', () => {
+    it('sin sesión responde 401', async () => {
+      const { app } = prepararApp()
+      const respuesta = await consultar(app, '/sistema/estado')
+      expect(respuesta.status).toBe(401)
+    })
+
+    it('cualquier usuario con sesión recibe el estado', async () => {
+      const { app, sesion, sistema } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionUsuario)
+      sistema.obtenerEstadoLecturas.mockResolvedValue([
+        {
+          plc: 'S7-1500',
+          variable: 'contador_piezas',
+          ts: new Date('2026-11-06T18:00:00Z'),
+          segundosDesdeRecibida: 12,
+        },
+      ])
+
+      const respuesta = await consultar(app, '/sistema/estado').set(
+        'Cookie',
+        COOKIE,
+      )
+
+      expect(respuesta.status).toBe(200)
+      expect(respuesta.headers['cache-control']).toBe('no-store')
+      expect(respuesta.body).toEqual({
+        api: 'ok',
+        baseDatosPanel: 'ok',
+        baseDatosLecturas: 'ok',
+        datos: 'al_dia',
+        variables: [
+          {
+            plc: 'S7-1500',
+            variable: 'contador_piezas',
+            ts: '2026-11-06T18:00:00.000Z',
+            segundosDesdeRecibida: 12,
+          },
+        ],
+      })
+    })
+
+    it('si una base falla responde 200 diciendo cuál', async () => {
+      const { app, sesion, sistema } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionUsuario)
+      sistema.comprobarBasePanel.mockRejectedValue(new Error('caida'))
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+
+      const respuesta = await consultar(app, '/sistema/estado').set(
+        'Cookie',
+        COOKIE,
+      )
+
+      expect(respuesta.status).toBe(200)
+      expect(respuesta.body.baseDatosPanel).toBe('falla')
     })
   })
 

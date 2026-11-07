@@ -6,6 +6,7 @@ import { crearServicioAutenticacion } from './autenticacion.servicio'
 
 const AHORA = Date.parse('2026-10-28T20:00:00Z')
 const CONTRASENA = 'una-clave-larga-1'
+const IP = '203.0.113.7'
 let huella = ''
 
 function crearUsuarioFalso(cambios: Partial<Usuario> = {}): Usuario {
@@ -29,6 +30,7 @@ function crearDependenciasFalsas(usuario: Usuario | null) {
     registrarIntentoFallido: vi.fn().mockResolvedValue(undefined),
     limpiarIntentos: vi.fn().mockResolvedValue(undefined),
     iniciarSesion: vi.fn().mockResolvedValue('token-de-prueba'),
+    registrarEvento: vi.fn().mockResolvedValue(undefined),
     ahora: () => AHORA,
   }
 }
@@ -50,11 +52,14 @@ describe('servicio de autenticación', { timeout: 20000 }, () => {
       const dependencias = crearDependenciasFalsas(null)
       const servicio = crearServicioAutenticacion(dependencias)
 
-      await servicio.crearCuenta({
-        nombre: 'Ana',
-        correo: 'ana@ejemplo.com',
-        contrasena: CONTRASENA,
-      })
+      await servicio.crearCuenta(
+        {
+          nombre: 'Ana',
+          correo: 'ana@ejemplo.com',
+          contrasena: CONTRASENA,
+        },
+        IP,
+      )
 
       const datos = dependencias.crearUsuario.mock.calls[0]?.[0]
       expect(datos.nombre).toBe('Ana')
@@ -72,11 +77,14 @@ describe('servicio de autenticación', { timeout: 20000 }, () => {
       const servicio = crearServicioAutenticacion(dependencias)
 
       await expect(
-        servicio.crearCuenta({
-          nombre: 'Ana',
-          correo: 'ana@ejemplo.com',
-          contrasena: CONTRASENA,
-        }),
+        servicio.crearCuenta(
+          {
+            nombre: 'Ana',
+            correo: 'ana@ejemplo.com',
+            contrasena: CONTRASENA,
+          },
+          IP,
+        ),
       ).resolves.toBeUndefined()
     })
   })
@@ -86,7 +94,7 @@ describe('servicio de autenticación', { timeout: 20000 }, () => {
       const dependencias = crearDependenciasFalsas(null)
       const servicio = crearServicioAutenticacion(dependencias)
 
-      expect(await servicio.entrar(datosEntrar)).toEqual({
+      expect(await servicio.entrar(datosEntrar, IP)).toEqual({
         ok: false,
         motivo: 'credenciales_invalidas',
       })
@@ -98,7 +106,7 @@ describe('servicio de autenticación', { timeout: 20000 }, () => {
       const dependencias = crearDependenciasFalsas(crearUsuarioFalso())
       const servicio = crearServicioAutenticacion(dependencias)
 
-      expect(await servicio.entrar(datosIncorrectos)).toEqual({
+      expect(await servicio.entrar(datosIncorrectos, IP)).toEqual({
         ok: false,
         motivo: 'credenciales_invalidas',
       })
@@ -114,7 +122,7 @@ describe('servicio de autenticación', { timeout: 20000 }, () => {
       const dependencias = crearDependenciasFalsas(crearUsuarioFalso())
       const servicio = crearServicioAutenticacion(dependencias)
 
-      const resultado = await servicio.entrar(datosEntrar)
+      const resultado = await servicio.entrar(datosEntrar, IP)
 
       expect(resultado).toEqual({
         ok: true,
@@ -136,7 +144,7 @@ describe('servicio de autenticación', { timeout: 20000 }, () => {
       )
       const servicio = crearServicioAutenticacion(dependencias)
 
-      expect((await servicio.entrar(datosEntrar)).ok).toBe(true)
+      expect((await servicio.entrar(datosEntrar, IP)).ok).toBe(true)
       expect(dependencias.limpiarIntentos).toHaveBeenCalledWith(5)
     })
 
@@ -147,7 +155,7 @@ describe('servicio de autenticación', { timeout: 20000 }, () => {
       )
       const servicio = crearServicioAutenticacion(dependencias)
 
-      expect(await servicio.entrar(datosEntrar)).toEqual({
+      expect(await servicio.entrar(datosEntrar, IP)).toEqual({
         ok: false,
         motivo: 'bloqueada',
       })
@@ -162,7 +170,7 @@ describe('servicio de autenticación', { timeout: 20000 }, () => {
       )
       const servicio = crearServicioAutenticacion(dependencias)
 
-      expect((await servicio.entrar(datosEntrar)).ok).toBe(true)
+      expect((await servicio.entrar(datosEntrar, IP)).ok).toBe(true)
       expect(dependencias.limpiarIntentos).toHaveBeenCalledWith(5)
     })
 
@@ -172,11 +180,11 @@ describe('servicio de autenticación', { timeout: 20000 }, () => {
       )
       const servicio = crearServicioAutenticacion(dependencias)
 
-      expect(await servicio.entrar(datosEntrar)).toEqual({
+      expect(await servicio.entrar(datosEntrar, IP)).toEqual({
         ok: false,
         motivo: 'pendiente',
       })
-      expect(await servicio.entrar(datosIncorrectos)).toEqual({
+      expect(await servicio.entrar(datosIncorrectos, IP)).toEqual({
         ok: false,
         motivo: 'credenciales_invalidas',
       })
@@ -189,15 +197,120 @@ describe('servicio de autenticación', { timeout: 20000 }, () => {
       )
       const servicio = crearServicioAutenticacion(dependencias)
 
-      expect(await servicio.entrar(datosEntrar)).toEqual({
+      expect(await servicio.entrar(datosEntrar, IP)).toEqual({
         ok: false,
         motivo: 'rechazada',
       })
-      expect(await servicio.entrar(datosIncorrectos)).toEqual({
+      expect(await servicio.entrar(datosIncorrectos, IP)).toEqual({
         ok: false,
         motivo: 'credenciales_invalidas',
       })
       expect(dependencias.iniciarSesion).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('bitácora', () => {
+    const eventoDe = (d: ReturnType<typeof crearDependenciasFalsas>) =>
+      d.registrarEvento.mock.calls.map((c) => c[0])
+
+    it('entrada correcta: anota quién y desde dónde', async () => {
+      const dependencias = crearDependenciasFalsas(crearUsuarioFalso())
+      await crearServicioAutenticacion(dependencias).entrar(datosEntrar, IP)
+      expect(eventoDe(dependencias)).toEqual([
+        {
+          tipo: 'entrada_correcta',
+          usuarioId: 5,
+          correo: 'ana@ejemplo.com',
+          ip: IP,
+        },
+      ])
+    })
+
+    it('correo que no existe: anota el intento sin usuario', async () => {
+      const dependencias = crearDependenciasFalsas(null)
+      await crearServicioAutenticacion(dependencias).entrar(datosEntrar, IP)
+      expect(eventoDe(dependencias)).toEqual([
+        { tipo: 'entrada_fallida', correo: 'ana@ejemplo.com', ip: IP },
+      ])
+    })
+
+    it('contraseña incorrecta: anota el fallo y no el bloqueo si faltan intentos', async () => {
+      const dependencias = crearDependenciasFalsas(crearUsuarioFalso())
+      await crearServicioAutenticacion(dependencias).entrar(
+        datosIncorrectos,
+        IP,
+      )
+      expect(eventoDe(dependencias).map((e) => e.tipo)).toEqual([
+        'entrada_fallida',
+      ])
+    })
+
+    it('el intento que llena el contador anota también el bloqueo', async () => {
+      const dependencias = crearDependenciasFalsas(
+        crearUsuarioFalso({
+          intentosFallidos: seguridad.bloqueo.intentosMaximos - 1,
+        }),
+      )
+      await crearServicioAutenticacion(dependencias).entrar(
+        datosIncorrectos,
+        IP,
+      )
+      expect(eventoDe(dependencias).map((e) => e.tipo)).toEqual([
+        'entrada_fallida',
+        'cuenta_bloqueada',
+      ])
+    })
+
+    it('cuenta bloqueada: anota el intento mientras dura el bloqueo', async () => {
+      const dependencias = crearDependenciasFalsas(
+        crearUsuarioFalso({ bloqueadoHasta: new Date(AHORA + 60_000) }),
+      )
+      await crearServicioAutenticacion(dependencias).entrar(datosEntrar, IP)
+      expect(eventoDe(dependencias).map((e) => e.tipo)).toEqual([
+        'entrada_bloqueada',
+      ])
+    })
+
+    it.each([
+      ['pendiente', 'entrada_pendiente'],
+      ['rechazado', 'entrada_rechazada'],
+    ] as const)('cuenta %s: anota %s', async (estado, tipo) => {
+      const dependencias = crearDependenciasFalsas(
+        crearUsuarioFalso({ estado }),
+      )
+      await crearServicioAutenticacion(dependencias).entrar(datosEntrar, IP)
+      expect(eventoDe(dependencias).map((e) => e.tipo)).toEqual([tipo])
+    })
+
+    it('cuenta nueva: anota la solicitud', async () => {
+      const dependencias = crearDependenciasFalsas(null)
+      await crearServicioAutenticacion(dependencias).crearCuenta(
+        { nombre: 'Ana', correo: 'ana@ejemplo.com', contrasena: CONTRASENA },
+        IP,
+      )
+      expect(eventoDe(dependencias)).toEqual([
+        {
+          tipo: 'cuenta_solicitada',
+          usuarioId: 5,
+          correo: 'ana@ejemplo.com',
+          ip: IP,
+        },
+      ])
+    })
+
+    it('correo repetido: anota la solicitud repetida', async () => {
+      const dependencias = crearDependenciasFalsas(null)
+      dependencias.crearUsuario.mockResolvedValue({
+        creado: false,
+        motivo: 'correo_repetido',
+      })
+      await crearServicioAutenticacion(dependencias).crearCuenta(
+        { nombre: 'Ana', correo: 'ana@ejemplo.com', contrasena: CONTRASENA },
+        IP,
+      )
+      expect(eventoDe(dependencias)).toEqual([
+        { tipo: 'solicitud_repetida', correo: 'ana@ejemplo.com', ip: IP },
+      ])
     })
   })
 })

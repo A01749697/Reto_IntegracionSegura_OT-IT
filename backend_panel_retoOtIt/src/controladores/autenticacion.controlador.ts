@@ -51,7 +51,7 @@ export function crearControladorAutenticacion({
         res.status(400).json({ error: validacion.error })
         return
       }
-      await autenticacion.crearCuenta(validacion.datos)
+      await autenticacion.crearCuenta(validacion.datos, req.ip ?? null)
       // La misma respuesta exista o no el correo, para no revelar qué correos están registrados.
       res.status(202).json({
         mensaje: 'Recibimos tu solicitud. Un administrador la revisará.',
@@ -64,7 +64,10 @@ export function crearControladorAutenticacion({
         res.status(400).json({ error: validacion.error })
         return
       }
-      const resultado = await autenticacion.entrar(validacion.datos)
+      const resultado = await autenticacion.entrar(
+        validacion.datos,
+        req.ip ?? null,
+      )
       if (!resultado.ok) {
         const { status, error } = RESPUESTAS_ENTRAR[resultado.motivo]
         res.status(status).json({ error, codigo: resultado.motivo })
@@ -87,7 +90,7 @@ export function crearControladorAutenticacion({
         res.status(400).json({ error: validacion.error })
         return
       }
-      await reinicio.pedir(validacion.datos.correo)
+      await reinicio.pedir(validacion.datos.correo, req.ip ?? null)
       res.status(202).json({
         mensaje:
           'Si el correo está registrado, te enviamos un enlace para restablecer tu contraseña.',
@@ -100,7 +103,10 @@ export function crearControladorAutenticacion({
         res.status(400).json({ error: validacion.error })
         return
       }
-      const cambiada = await reinicio.restablecer(validacion.datos)
+      const cambiada = await reinicio.restablecer(
+        validacion.datos,
+        req.ip ?? null,
+      )
       if (!cambiada) {
         res.status(400).json({ error: 'El enlace no es válido o ya caducó' })
         return
@@ -114,6 +120,7 @@ export function crearControladorAutenticacion({
     async salir(req: Request, res: Response) {
       await sesion.cerrar(
         leerCookie(req.get('Cookie'), seguridad.sesion.nombreCookie),
+        req.ip ?? null,
       )
       res.setHeader(
         'Set-Cookie',

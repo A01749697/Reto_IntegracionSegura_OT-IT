@@ -4,6 +4,8 @@ import type { Usuario } from '../repositorios/usuarios.repositorio'
 import { calcularHuellaToken, generarToken } from '../utilidades/tokens'
 import { crearServicioReinicio } from './reinicio.servicio'
 
+const IP = '203.0.113.7'
+
 const usuarioAprobado: Usuario = {
   id: 5,
   nombre: 'Ana',
@@ -24,6 +26,7 @@ function crearDependenciasFalsas(usuario: Usuario | null) {
     consumirEnlace: vi.fn().mockResolvedValue(5),
     cambiarContrasena: vi.fn().mockResolvedValue(undefined),
     cerrarSesionesDe: vi.fn().mockResolvedValue(undefined),
+    registrarEvento: vi.fn().mockResolvedValue(undefined),
   }
 }
 
@@ -38,7 +41,9 @@ describe('servicio de reinicio', { timeout: 20000 }, () => {
       const dependencias = crearDependenciasFalsas(null)
       const servicio = crearServicioReinicio(dependencias)
 
-      await expect(servicio.pedir('nadie@ejemplo.com')).resolves.toBeUndefined()
+      await expect(
+        servicio.pedir('nadie@ejemplo.com', IP),
+      ).resolves.toBeUndefined()
 
       expect(dependencias.crearEnlace).not.toHaveBeenCalled()
       expect(dependencias.enviarEnlaceReinicio).not.toHaveBeenCalled()
@@ -51,7 +56,7 @@ describe('servicio de reinicio', { timeout: 20000 }, () => {
       })
       const servicio = crearServicioReinicio(dependencias)
 
-      await servicio.pedir('ana@ejemplo.com')
+      await servicio.pedir('ana@ejemplo.com', IP)
 
       expect(dependencias.crearEnlace).not.toHaveBeenCalled()
       expect(dependencias.enviarEnlaceReinicio).not.toHaveBeenCalled()
@@ -66,7 +71,7 @@ describe('servicio de reinicio', { timeout: 20000 }, () => {
         })
         const servicio = crearServicioReinicio(dependencias)
 
-        await servicio.pedir('ana@ejemplo.com')
+        await servicio.pedir('ana@ejemplo.com', IP)
         await vi.waitFor(() =>
           expect(dependencias.enviarEnlaceReinicio).toHaveBeenCalled(),
         )
@@ -89,7 +94,9 @@ describe('servicio de reinicio', { timeout: 20000 }, () => {
       dependencias.enviarEnlaceReinicio.mockReturnValue(new Promise(() => {}))
       const servicio = crearServicioReinicio(dependencias)
 
-      await expect(servicio.pedir('ana@ejemplo.com')).resolves.toBeUndefined()
+      await expect(
+        servicio.pedir('ana@ejemplo.com', IP),
+      ).resolves.toBeUndefined()
     })
 
     it('si el envío falla, no falla la petición y el registro no incluye el código', async () => {
@@ -100,7 +107,9 @@ describe('servicio de reinicio', { timeout: 20000 }, () => {
       )
       const servicio = crearServicioReinicio(dependencias)
 
-      await expect(servicio.pedir('ana@ejemplo.com')).resolves.toBeUndefined()
+      await expect(
+        servicio.pedir('ana@ejemplo.com', IP),
+      ).resolves.toBeUndefined()
       await vi.waitFor(() => expect(error).toHaveBeenCalled())
 
       const token = dependencias.enviarEnlaceReinicio.mock.calls[0]?.[1]
@@ -117,7 +126,7 @@ describe('servicio de reinicio', { timeout: 20000 }, () => {
       const dependencias = crearDependenciasFalsas(null)
       const servicio = crearServicioReinicio(dependencias)
 
-      expect(await servicio.restablecer({ token, contrasena })).toBe(true)
+      expect(await servicio.restablecer({ token, contrasena }, IP)).toBe(true)
 
       expect(dependencias.consumirEnlace).toHaveBeenCalledWith(
         calcularHuellaToken(token),
@@ -134,10 +143,60 @@ describe('servicio de reinicio', { timeout: 20000 }, () => {
       dependencias.consumirEnlace.mockResolvedValue(null)
       const servicio = crearServicioReinicio(dependencias)
 
-      expect(await servicio.restablecer({ token, contrasena })).toBe(false)
+      expect(await servicio.restablecer({ token, contrasena }, IP)).toBe(false)
 
       expect(dependencias.cambiarContrasena).not.toHaveBeenCalled()
       expect(dependencias.cerrarSesionesDe).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('bitácora', () => {
+    it('pedir: anota el pedido de una cuenta que existe', async () => {
+      const dependencias = crearDependenciasFalsas(usuarioAprobado)
+      await crearServicioReinicio(dependencias).pedir('ana@ejemplo.com', IP)
+      expect(dependencias.registrarEvento).toHaveBeenCalledWith({
+        tipo: 'reinicio_solicitado',
+        usuarioId: 5,
+        correo: 'ana@ejemplo.com',
+        ip: IP,
+      })
+    })
+
+    it('pedir: anota también el pedido de un correo que no existe', async () => {
+      const dependencias = crearDependenciasFalsas(null)
+      await crearServicioReinicio(dependencias).pedir('nadie@ejemplo.com', IP)
+      expect(dependencias.registrarEvento).toHaveBeenCalledWith({
+        tipo: 'reinicio_solicitado',
+        usuarioId: null,
+        correo: 'nadie@ejemplo.com',
+        ip: IP,
+      })
+    })
+
+    it('restablecer: anota el cambio de contraseña', async () => {
+      const dependencias = crearDependenciasFalsas(usuarioAprobado)
+      await crearServicioReinicio(dependencias).restablecer(
+        { token: generarToken(), contrasena: 'una-clave-larga-2' },
+        IP,
+      )
+      expect(dependencias.registrarEvento).toHaveBeenCalledWith({
+        tipo: 'contrasena_restablecida',
+        usuarioId: 5,
+        ip: IP,
+      })
+    })
+
+    it('restablecer con un enlace que no sirve: anota el fallo', async () => {
+      const dependencias = crearDependenciasFalsas(usuarioAprobado)
+      dependencias.consumirEnlace.mockResolvedValue(null)
+      await crearServicioReinicio(dependencias).restablecer(
+        { token: generarToken(), contrasena: 'una-clave-larga-2' },
+        IP,
+      )
+      expect(dependencias.registrarEvento).toHaveBeenCalledWith({
+        tipo: 'reinicio_fallido',
+        ip: IP,
+      })
     })
   })
 })

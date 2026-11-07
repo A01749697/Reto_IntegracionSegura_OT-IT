@@ -4,7 +4,9 @@ import express, { Router } from 'express'
 import { seguridad } from './configuracion/seguridad'
 import { crearControladorAdministracion } from './controladores/administracion.controlador'
 import { crearControladorAutenticacion } from './controladores/autenticacion.controlador'
+import { crearControladorBitacora } from './controladores/bitacora.controlador'
 import { crearControladorLecturas } from './controladores/lecturas.controlador'
+import { crearControladorSistema } from './controladores/sistema.controlador'
 import {
   manejarErrores,
   rutaNoEncontrada,
@@ -15,12 +17,15 @@ import { exigirSesion } from './intermediarios/sesion.intermediario'
 import { crearRutasAdministracion } from './rutas/administracion.rutas'
 import { crearRutasAutenticacion } from './rutas/autenticacion.rutas'
 import { crearRutasLecturas } from './rutas/lecturas.rutas'
+import { crearRutasSistema } from './rutas/sistema.rutas'
 import { crearServicioAdministracion } from './servicios/administracion.servicio'
 import { crearServicioAutenticacion } from './servicios/autenticacion.servicio'
+import { crearServicioBitacora } from './servicios/bitacora.servicio'
 import { crearServicioCorreo } from './servicios/correo.servicio'
 import { crearServicioLecturas } from './servicios/lecturas.servicio'
 import { crearServicioReinicio } from './servicios/reinicio.servicio'
 import { crearServicioSesion } from './servicios/sesion.servicio'
+import { crearServicioSistema } from './servicios/sistema.servicio'
 
 type De<F extends (...args: never[]) => unknown> = Parameters<F>[0]
 
@@ -28,20 +33,22 @@ type De<F extends (...args: never[]) => unknown> = Parameters<F>[0]
 // servicio (por ejemplo iniciarSesion) se conecta aquí adentro y no se pide.
 export type Dependencias = {
   urlPublica: string
-  sesion: De<typeof crearServicioSesion>
+  sesion: Omit<De<typeof crearServicioSesion>, 'registrarEvento'>
   autenticacion: Omit<
     De<typeof crearServicioAutenticacion>,
-    'iniciarSesion' | 'ahora'
+    'iniciarSesion' | 'registrarEvento' | 'ahora'
   >
   reinicio: Omit<
     De<typeof crearServicioReinicio>,
-    'enviarEnlaceReinicio' | 'cerrarSesionesDe'
+    'enviarEnlaceReinicio' | 'cerrarSesionesDe' | 'registrarEvento'
   >
   administracion: Omit<
     De<typeof crearServicioAdministracion>,
-    'cerrarSesionesDe'
+    'cerrarSesionesDe' | 'registrarEvento'
   >
   lecturas: De<typeof crearServicioLecturas>
+  bitacora: De<typeof crearServicioBitacora>
+  sistema: De<typeof crearServicioSistema>
   correo: Omit<De<typeof crearServicioCorreo>, 'urlPublica'>
   ahora?: () => number
 }
@@ -53,26 +60,36 @@ export function crearAplicacion({
   reinicio,
   administracion,
   lecturas,
+  bitacora,
+  sistema,
   correo,
   ahora = Date.now,
 }: Dependencias) {
-  const servicioSesion = crearServicioSesion(sesion)
+  const servicioBitacora = crearServicioBitacora(bitacora)
+  const servicioSesion = crearServicioSesion({
+    ...sesion,
+    registrarEvento: servicioBitacora.registrar,
+  })
   const servicioCorreo = crearServicioCorreo({ ...correo, urlPublica })
   const servicioAutenticacion = crearServicioAutenticacion({
     ...autenticacion,
     iniciarSesion: servicioSesion.iniciar,
+    registrarEvento: servicioBitacora.registrar,
     ahora,
   })
   const servicioReinicio = crearServicioReinicio({
     ...reinicio,
     enviarEnlaceReinicio: servicioCorreo.enviarEnlaceReinicio,
     cerrarSesionesDe: servicioSesion.cerrarTodasDe,
+    registrarEvento: servicioBitacora.registrar,
   })
   const servicioAdministracion = crearServicioAdministracion({
     ...administracion,
     cerrarSesionesDe: servicioSesion.cerrarTodasDe,
+    registrarEvento: servicioBitacora.registrar,
   })
   const servicioLecturas = crearServicioLecturas(lecturas)
+  const servicioSistema = crearServicioSistema(sistema)
 
   const sesionExigida = exigirSesion({
     nombreCookie: seguridad.sesion.nombreCookie,
@@ -115,6 +132,7 @@ export function crearAplicacion({
     '/administracion',
     crearRutasAdministracion({
       controlador: crearControladorAdministracion(servicioAdministracion),
+      controladorBitacora: crearControladorBitacora(servicioBitacora),
       exigirSesion: sesionExigida,
     }),
   )
@@ -122,6 +140,13 @@ export function crearAplicacion({
     '/lecturas',
     crearRutasLecturas({
       controlador: crearControladorLecturas(servicioLecturas),
+      exigirSesion: sesionExigida,
+    }),
+  )
+  panel.use(
+    '/sistema',
+    crearRutasSistema({
+      controlador: crearControladorSistema(servicioSistema),
       exigirSesion: sesionExigida,
     }),
   )

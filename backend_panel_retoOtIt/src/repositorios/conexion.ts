@@ -21,3 +21,8 @@ export function crearPool(baseDatos: ConexionBaseDatos): Pool {
   })
   return pool
 }
+
+// Lanza error si la base no responde.
+export async function comprobarConexion(pool: Pool): Promise<void> {
+  await pool.query('SELECT 1')
+}
