@@ -1,6 +1,7 @@
 // Lógica de las sesiones: crear el código, validarlo y cerrarlo.
 // El código completo solo viaja en la cookie; en la base solo se guarda su huella.
 import { seguridad } from '../configuracion/seguridad'
+import type { EventoNuevo } from '../repositorios/bitacora.repositorio'
 import type { SesionActiva } from '../repositorios/sesiones.repositorio'
 import {
   calcularHuellaToken,
@@ -20,6 +21,7 @@ type Dependencias = {
   ) => Promise<SesionActiva | null>
   revocarSesion: (tokenHash: string) => Promise<void>
   revocarSesionesDeUsuario: (usuarioId: number) => Promise<void>
+  registrarEvento: (evento: EventoNuevo) => Promise<void>
 }
 
 export function crearServicioSesion({
@@ -27,6 +29,7 @@ export function crearServicioSesion({
   buscarSesionActiva,
   revocarSesion,
   revocarSesionesDeUsuario,
+  registrarEvento,
 }: Dependencias) {
   return {
     // Devuelve el código que se pondrá en la cookie.
@@ -50,9 +53,22 @@ export function crearServicioSesion({
       )
     },
 
-    async cerrar(token: string | undefined): Promise<void> {
+    async cerrar(token: string | undefined, ip: string | null): Promise<void> {
       if (token === undefined || !tieneFormatoDeToken(token)) return
-      await revocarSesion(calcularHuellaToken(token))
+      const huella = calcularHuellaToken(token)
+      const sesion = await buscarSesionActiva(
+        huella,
+        seguridad.sesion.inactividadMaximaMs,
+      )
+      await revocarSesion(huella)
+      // si ya habia caducado, no hay a quien anotarle el cierre
+      if (sesion === null) return
+      await registrarEvento({
+        tipo: 'sesion_cerrada',
+        usuarioId: sesion.usuarioId,
+        correo: sesion.correo,
+        ip,
+      })
     },
 
     async cerrarTodasDe(usuarioId: number): Promise<void> {

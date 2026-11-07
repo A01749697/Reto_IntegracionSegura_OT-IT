@@ -51,6 +51,7 @@ export function crearControladorAdministracion(
         id.datos,
         decision.datos,
         sesionDe(res).usuarioId,
+        req.ip ?? null,
       )
       if (!resultado.ok) {
         const { status, error } = RESPUESTAS_DECISION[resultado.motivo]

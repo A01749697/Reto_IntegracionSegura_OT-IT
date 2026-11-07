@@ -27,6 +27,14 @@ export const seguridad = {
   lecturas: {
     maximoPuntosHistorial: 1000,
   },
+  sistema: {
+    // pasado este tiempo sin lecturas nuevas, el estado dice "retrasado"
+    lecturaRetrasadaSegundos: 5 * 60,
+  },
+  bitacora: {
+    porDefecto: 50,
+    maximo: 100,
+  },
   peticion: {
     limiteCuerpo: '10kb',
   },

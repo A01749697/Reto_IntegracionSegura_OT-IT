@@ -2,7 +2,8 @@
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2'
 import { crearAplicacion } from './aplicacion'
 import { leerEntorno } from './configuracion/entorno'
-import { crearPool } from './repositorios/conexion'
+import * as bitacora from './repositorios/bitacora.repositorio'
+import { comprobarConexion, crearPool } from './repositorios/conexion'
 import * as enlaces from './repositorios/enlaces.repositorio'
 import * as lecturas from './repositorios/lecturas.repositorio'
 import * as sesiones from './repositorios/sesiones.repositorio'
@@ -63,6 +64,14 @@ function iniciar() {
         lecturas.obtenerUltimasLecturas(poolLectura),
       obtenerHistorial: (filtros) =>
         lecturas.obtenerHistorial(poolLectura, filtros),
+    },
+    bitacora: {
+      insertarEvento: (evento) => bitacora.insertarEvento(poolPanel, evento),
+      listarEventos: (filtros) => bitacora.listarEventos(poolPanel, filtros),
+    },
+    sistema: {
+      comprobarBasePanel: () => comprobarConexion(poolPanel),
+      obtenerEstadoLecturas: () => lecturas.obtenerEstadoLecturas(poolLectura),
     },
     correo: {
       remitente: entorno.correoRemitente,

@@ -64,3 +64,36 @@ export async function obtenerHistorial(
   const puntos = resultado.rows.slice(0, filtros.limite).reverse()
   return { puntos, truncado }
 }
+
+export type EstadoVariable = {
+  plc: string
+  variable: string
+  ts: Date
+  segundosDesdeRecibida: number
+}
+
+type FilaEstado = {
+  plc: string
+  variable: string
+  ts: Date
+  segundos: string
+}
+
+// Por cada variable, su lectura mas reciente y hace cuanto llego a la nube (con el reloj de la base).
+export async function obtenerEstadoLecturas(
+  pool: Pool,
+): Promise<EstadoVariable[]> {
+  const resultado = await pool.query<FilaEstado>(
+    `SELECT DISTINCT ON (plc, variable)
+            plc, variable, ts,
+            EXTRACT(EPOCH FROM (now() - recibido_en)) AS segundos
+     FROM lecturas
+     ORDER BY plc, variable, ts DESC`,
+  )
+  return resultado.rows.map((fila) => ({
+    plc: fila.plc,
+    variable: fila.variable,
+    ts: fila.ts,
+    segundosDesdeRecibida: Math.max(0, Math.round(Number(fila.segundos))),
+  }))
+}

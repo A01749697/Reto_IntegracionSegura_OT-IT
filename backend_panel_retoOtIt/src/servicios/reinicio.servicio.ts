@@ -1,6 +1,7 @@
 // Lógica de "olvidé mi contraseña": pedir el enlace y usarlo para escribir una contraseña nueva.
 import { seguridad } from '../configuracion/seguridad'
 import type { DatosUsarEnlace } from '../esquemas/autenticacion.esquema'
+import type { EventoNuevo } from '../repositorios/bitacora.repositorio'
 import type { Usuario } from '../repositorios/usuarios.repositorio'
 import { crearHuella } from '../utilidades/contrasenas'
 import { calcularHuellaToken, generarToken } from '../utilidades/tokens'
@@ -20,6 +21,7 @@ type Dependencias = {
     contrasenaHash: string,
   ) => Promise<void>
   cerrarSesionesDe: (usuarioId: number) => Promise<void>
+  registrarEvento: (evento: EventoNuevo) => Promise<void>
 }
 
 export function crearServicioReinicio({
@@ -30,6 +32,7 @@ export function crearServicioReinicio({
   consumirEnlace,
   cambiarContrasena,
   cerrarSesionesDe,
+  registrarEvento,
 }: Dependencias) {
   // Crea el enlace y manda el correo. Corre en segundo plano.
   async function enviarEnlace(usuario: Usuario): Promise<void> {
@@ -46,8 +49,14 @@ export function crearServicioReinicio({
   return {
     // Termina igual exista o no la cuenta, y sin esperar al correo,
     // para que ni la respuesta ni su demora revelen qué correos están registrados.
-    async pedir(correo: string): Promise<void> {
+    async pedir(correo: string, ip: string | null): Promise<void> {
       const usuario = await buscarPorCorreo(correo)
+      await registrarEvento({
+        tipo: 'reinicio_solicitado',
+        usuarioId: usuario?.id ?? null,
+        correo,
+        ip,
+      })
       if (usuario === null || usuario.estado === 'rechazado') return
 
       enviarEnlace(usuario).catch((error: unknown) => {
@@ -59,13 +68,20 @@ export function crearServicioReinicio({
     },
 
     // Devuelve false si el enlace no existe, ya se usó o caducó (no distingue cuál).
-    async restablecer(datos: DatosUsarEnlace): Promise<boolean> {
+    async restablecer(
+      datos: DatosUsarEnlace,
+      ip: string | null,
+    ): Promise<boolean> {
       const usuarioId = await consumirEnlace(calcularHuellaToken(datos.token))
-      if (usuarioId === null) return false
+      if (usuarioId === null) {
+        await registrarEvento({ tipo: 'reinicio_fallido', ip })
+        return false
+      }
 
       await cambiarContrasena(usuarioId, await crearHuella(datos.contrasena))
       // Si alguien tenía una sesión robada, el cambio de contraseña la deja inservible.
       await cerrarSesionesDe(usuarioId)
+      await registrarEvento({ tipo: 'contrasena_restablecida', usuarioId, ip })
       return true
     },
   }

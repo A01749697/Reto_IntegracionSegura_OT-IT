@@ -1,4 +1,5 @@
 // Reglas para que un administrador revise y decida sobre las cuentas.
+import type { EventoNuevo } from '../repositorios/bitacora.repositorio'
 import type {
   Estado,
   Usuario,
@@ -23,6 +24,7 @@ type Dependencias = {
     decididoPor: number,
   ) => Promise<boolean>
   cerrarSesionesDe: (usuarioId: number) => Promise<void>
+  registrarEvento: (evento: EventoNuevo) => Promise<void>
 }
 
 export function crearServicioAdministracion({
@@ -30,6 +32,7 @@ export function crearServicioAdministracion({
   buscarPorId,
   cambiarEstado,
   cerrarSesionesDe,
+  registrarEvento,
 }: Dependencias) {
   return {
     async listar(estado: Estado): Promise<UsuarioResumen[]> {
@@ -41,6 +44,7 @@ export function crearServicioAdministracion({
       usuarioId: number,
       decision: Decision,
       administradorId: number,
+      ip: string | null,
     ): Promise<ResultadoDecision> {
       // Nadie decide sobre su propia cuenta.
       if (usuarioId === administradorId) {
@@ -64,6 +68,14 @@ export function crearServicioAdministracion({
 
       // Quien pierde el acceso pierde también sus sesiones abiertas.
       if (decision === 'rechazado') await cerrarSesionesDe(usuarioId)
+
+      await registrarEvento({
+        tipo: decision === 'aprobado' ? 'cuenta_aprobada' : 'cuenta_rechazada',
+        usuarioId,
+        actorId: administradorId,
+        correo: usuario.correo,
+        ip,
+      })
 
       return { ok: true }
     },

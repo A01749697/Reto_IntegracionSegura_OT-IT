@@ -6,6 +6,7 @@ import type {
 import { crearServicioAdministracion } from './administracion.servicio'
 
 const ADMINISTRADOR_ID = 1
+const IP = '203.0.113.7'
 
 function crearUsuarioFalso(cambios: Partial<Usuario> = {}): Usuario {
   return {
@@ -27,6 +28,7 @@ function crearDependenciasFalsas(usuario: Usuario | null) {
     buscarPorId: vi.fn().mockResolvedValue(usuario),
     cambiarEstado: vi.fn().mockResolvedValue(true),
     cerrarSesionesDe: vi.fn().mockResolvedValue(undefined),
+    registrarEvento: vi.fn().mockResolvedValue(undefined),
   }
 }
 
@@ -54,9 +56,11 @@ describe('servicio de administración', () => {
     const dependencias = crearDependenciasFalsas(crearUsuarioFalso())
     const servicio = crearServicioAdministracion(dependencias)
 
-    expect(await servicio.decidir(3, 'aprobado', ADMINISTRADOR_ID)).toEqual({
-      ok: true,
-    })
+    expect(await servicio.decidir(3, 'aprobado', ADMINISTRADOR_ID, IP)).toEqual(
+      {
+        ok: true,
+      },
+    )
     expect(dependencias.cambiarEstado).toHaveBeenCalledWith(
       3,
       'aprobado',
@@ -71,7 +75,9 @@ describe('servicio de administración', () => {
     )
     const servicio = crearServicioAdministracion(dependencias)
 
-    expect(await servicio.decidir(3, 'rechazado', ADMINISTRADOR_ID)).toEqual({
+    expect(
+      await servicio.decidir(3, 'rechazado', ADMINISTRADOR_ID, IP),
+    ).toEqual({
       ok: true,
     })
     expect(dependencias.cambiarEstado).toHaveBeenCalledWith(
@@ -88,16 +94,16 @@ describe('servicio de administración', () => {
     )
     const servicio = crearServicioAdministracion(dependencias)
 
-    expect((await servicio.decidir(3, 'aprobado', ADMINISTRADOR_ID)).ok).toBe(
-      true,
-    )
+    expect(
+      (await servicio.decidir(3, 'aprobado', ADMINISTRADOR_ID, IP)).ok,
+    ).toBe(true)
   })
 
   it('nadie decide sobre su propia cuenta', async () => {
     const dependencias = crearDependenciasFalsas(crearUsuarioFalso())
     const servicio = crearServicioAdministracion(dependencias)
 
-    expect(await servicio.decidir(1, 'rechazado', 1)).toEqual({
+    expect(await servicio.decidir(1, 'rechazado', 1, IP)).toEqual({
       ok: false,
       motivo: 'es_propia',
     })
@@ -110,7 +116,9 @@ describe('servicio de administración', () => {
     )
     const servicio = crearServicioAdministracion(dependencias)
 
-    expect(await servicio.decidir(2, 'rechazado', ADMINISTRADOR_ID)).toEqual({
+    expect(
+      await servicio.decidir(2, 'rechazado', ADMINISTRADOR_ID, IP),
+    ).toEqual({
       ok: false,
       motivo: 'es_administrador',
     })
@@ -122,7 +130,9 @@ describe('servicio de administración', () => {
     const dependencias = crearDependenciasFalsas(null)
     const servicio = crearServicioAdministracion(dependencias)
 
-    expect(await servicio.decidir(99, 'aprobado', ADMINISTRADOR_ID)).toEqual({
+    expect(
+      await servicio.decidir(99, 'aprobado', ADMINISTRADOR_ID, IP),
+    ).toEqual({
       ok: false,
       motivo: 'no_existe',
     })
@@ -134,7 +144,9 @@ describe('servicio de administración', () => {
     dependencias.cambiarEstado.mockResolvedValue(false)
     const servicio = crearServicioAdministracion(dependencias)
 
-    expect(await servicio.decidir(3, 'rechazado', ADMINISTRADOR_ID)).toEqual({
+    expect(
+      await servicio.decidir(3, 'rechazado', ADMINISTRADOR_ID, IP),
+    ).toEqual({
       ok: false,
       motivo: 'no_existe',
     })
@@ -147,10 +159,45 @@ describe('servicio de administración', () => {
     )
     const servicio = crearServicioAdministracion(dependencias)
 
-    expect(await servicio.decidir(3, 'aprobado', ADMINISTRADOR_ID)).toEqual({
-      ok: false,
-      motivo: 'sin_cambio',
-    })
+    expect(await servicio.decidir(3, 'aprobado', ADMINISTRADOR_ID, IP)).toEqual(
+      {
+        ok: false,
+        motivo: 'sin_cambio',
+      },
+    )
     expect(dependencias.cambiarEstado).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ['aprobado', 'cuenta_aprobada'],
+    ['rechazado', 'cuenta_rechazada'],
+  ] as const)(
+    'al decidir %s anota %s con quién la decidió',
+    async (decision, tipo) => {
+      const estado = decision === 'aprobado' ? 'pendiente' : 'aprobado'
+      const dependencias = crearDependenciasFalsas(
+        crearUsuarioFalso({ estado }),
+      )
+      const servicio = crearServicioAdministracion(dependencias)
+
+      await servicio.decidir(3, decision, ADMINISTRADOR_ID, IP)
+
+      expect(dependencias.registrarEvento).toHaveBeenCalledWith({
+        tipo,
+        usuarioId: 3,
+        actorId: ADMINISTRADOR_ID,
+        correo: 'ana@ejemplo.com',
+        ip: IP,
+      })
+    },
+  )
+
+  it('no anota nada si la decisión no se pudo aplicar', async () => {
+    const dependencias = crearDependenciasFalsas(null)
+    const servicio = crearServicioAdministracion(dependencias)
+
+    await servicio.decidir(3, 'aprobado', ADMINISTRADOR_ID, IP)
+
+    expect(dependencias.registrarEvento).not.toHaveBeenCalled()
   })
 })
