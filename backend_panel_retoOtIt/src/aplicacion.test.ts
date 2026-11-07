@@ -50,6 +50,7 @@ function prepararApp() {
     buscarSesionActiva: vi.fn().mockResolvedValue(null),
     revocarSesion: vi.fn().mockResolvedValue(undefined),
     revocarSesionesDeUsuario: vi.fn().mockResolvedValue(undefined),
+    revocarOtrasSesiones: vi.fn().mockResolvedValue(undefined),
   }
   const autenticacion = {
     crearUsuario: vi.fn().mockResolvedValue({ creado: true, id: 5 }),
@@ -68,6 +69,13 @@ function prepararApp() {
     listarPorEstado: vi.fn().mockResolvedValue([]),
     buscarPorId: vi.fn().mockResolvedValue(null),
     cambiarEstado: vi.fn().mockResolvedValue(true),
+    cambiarRol: vi.fn().mockResolvedValue(true),
+    limpiarIntentos: vi.fn().mockResolvedValue(undefined),
+  }
+  const cuenta = {
+    buscarPorId: vi.fn().mockResolvedValue(null),
+    registrarIntentoFallido: vi.fn().mockResolvedValue(undefined),
+    cambiarContrasena: vi.fn().mockResolvedValue(undefined),
   }
   const lecturas = {
     obtenerUltimasLecturas: vi.fn().mockResolvedValue([]),
@@ -93,6 +101,7 @@ function prepararApp() {
     autenticacion,
     reinicio,
     administracion,
+    cuenta,
     lecturas,
     bitacora,
     sistema,
@@ -105,6 +114,7 @@ function prepararApp() {
     autenticacion,
     reinicio,
     administracion,
+    cuenta,
     lecturas,
     bitacora,
     sistema,
@@ -858,6 +868,305 @@ describe('API del panel', { timeout: 20000 }, () => {
           actorId: sesionAdministrador.usuarioId,
         }),
       )
+    })
+  })
+
+  describe('gestión de cuentas', () => {
+    it('listar con estado=todas lo pasa a la base y devuelve si está bloqueada', async () => {
+      const { app, sesion, administracion } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionAdministrador)
+      administracion.listarPorEstado.mockResolvedValue([
+        {
+          id: 5,
+          nombre: 'Ana',
+          correo: 'ana@ejemplo.com',
+          rol: 'usuario',
+          estado: 'aprobado',
+          bloqueada: true,
+          creadoEn: new Date('2026-10-28T16:00:00Z'),
+        },
+      ])
+
+      const respuesta = await consultar(
+        app,
+        '/administracion/usuarios?estado=todas',
+      ).set('Cookie', COOKIE)
+
+      expect(respuesta.status).toBe(200)
+      expect(respuesta.body.usuarios[0].bloqueada).toBe(true)
+      expect(administracion.listarPorEstado).toHaveBeenCalledWith('todas')
+    })
+
+    it('desbloquear quita el bloqueo y lo anota con quién lo hizo', async () => {
+      const { app, sesion, administracion, bitacora } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionAdministrador)
+      administracion.buscarPorId.mockResolvedValue(
+        crearUsuarioFalso({ bloqueadoHasta: new Date(AHORA + 60_000) }),
+      )
+
+      const respuesta = await publicar(
+        app,
+        '/administracion/usuarios/5/desbloqueo',
+      )
+        .set('Cookie', COOKIE)
+        .send()
+
+      expect(respuesta.status).toBe(200)
+      expect(administracion.limpiarIntentos).toHaveBeenCalledWith(5)
+      expect(bitacora.insertarEvento).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tipo: 'cuenta_desbloqueada',
+          usuarioId: 5,
+          actorId: sesionAdministrador.usuarioId,
+        }),
+      )
+    })
+
+    it('desbloquear una cuenta que no está bloqueada responde 409', async () => {
+      const { app, sesion, administracion } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionAdministrador)
+      administracion.buscarPorId.mockResolvedValue(crearUsuarioFalso())
+
+      const respuesta = await publicar(
+        app,
+        '/administracion/usuarios/5/desbloqueo',
+      )
+        .set('Cookie', COOKIE)
+        .send()
+
+      expect(respuesta.status).toBe(409)
+      expect(administracion.limpiarIntentos).not.toHaveBeenCalled()
+    })
+
+    it('hacer administrador cambia el rol y lo anota', async () => {
+      const { app, sesion, administracion, bitacora } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionAdministrador)
+      administracion.buscarPorId.mockResolvedValue(crearUsuarioFalso())
+
+      const respuesta = await publicar(
+        app,
+        '/administracion/usuarios/5/administrador',
+      )
+        .set('Cookie', COOKIE)
+        .send()
+
+      expect(respuesta.status).toBe(200)
+      expect(administracion.cambiarRol).toHaveBeenCalledWith(5, 'administrador')
+      expect(bitacora.insertarEvento).toHaveBeenCalledWith(
+        expect.objectContaining({ tipo: 'rol_cambiado', usuarioId: 5 }),
+      )
+    })
+
+    it.each([
+      ['pendiente', 409],
+      ['rechazado', 409],
+    ] as const)('no promueve una cuenta %s', async (estado, codigo) => {
+      const { app, sesion, administracion } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionAdministrador)
+      administracion.buscarPorId.mockResolvedValue(
+        crearUsuarioFalso({ estado }),
+      )
+
+      const respuesta = await publicar(
+        app,
+        '/administracion/usuarios/5/administrador',
+      )
+        .set('Cookie', COOKIE)
+        .send()
+
+      expect(respuesta.status).toBe(codigo)
+      expect(administracion.cambiarRol).not.toHaveBeenCalled()
+    })
+
+    it.each(['/desbloqueo', '/administrador'])(
+      'un usuario normal recibe 403 en %s',
+      async (ruta) => {
+        const { app, sesion, administracion } = prepararApp()
+        sesion.buscarSesionActiva.mockResolvedValue(sesionUsuario)
+
+        const respuesta = await publicar(
+          app,
+          `/administracion/usuarios/5${ruta}`,
+        )
+          .set('Cookie', COOKIE)
+          .send()
+
+        expect(respuesta.status).toBe(403)
+        expect(administracion.buscarPorId).not.toHaveBeenCalled()
+      },
+    )
+
+    it('rechaza un número de cuenta inválido con 400', async () => {
+      const { app, sesion } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionAdministrador)
+      const respuesta = await publicar(
+        app,
+        '/administracion/usuarios/abc/desbloqueo',
+      )
+        .set('Cookie', COOKIE)
+        .send()
+      expect(respuesta.status).toBe(400)
+    })
+  })
+
+  describe('mi cuenta', () => {
+    const cuerpo = {
+      contrasenaActual: CONTRASENA,
+      contrasenaNueva: 'una-clave-nueva-9',
+    }
+
+    it('sin sesión responde 401', async () => {
+      const { app } = prepararApp()
+      const respuesta = await publicar(app, '/cuenta/contrasena').send(cuerpo)
+      expect(respuesta.status).toBe(401)
+    })
+
+    it('cambia la contraseña, cierra las otras sesiones y deja abierta la actual', async () => {
+      const { app, sesion, cuenta, bitacora } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionUsuario)
+      cuenta.buscarPorId.mockResolvedValue(crearUsuarioFalso({ id: 3 }))
+
+      const respuesta = await publicar(app, '/cuenta/contrasena')
+        .set('Cookie', COOKIE)
+        .send(cuerpo)
+
+      expect(respuesta.status).toBe(200)
+      expect(cuenta.cambiarContrasena).toHaveBeenCalledTimes(1)
+      expect(cuenta.cambiarContrasena.mock.calls[0]?.[1]).not.toContain(
+        'una-clave-nueva-9',
+      )
+      expect(sesion.revocarOtrasSesiones).toHaveBeenCalledWith(
+        sesionUsuario.usuarioId,
+        sesionUsuario.sesionId,
+      )
+      expect(sesion.revocarSesionesDeUsuario).not.toHaveBeenCalled()
+      expect(bitacora.insertarEvento).toHaveBeenCalledWith(
+        expect.objectContaining({ tipo: 'contrasena_cambiada' }),
+      )
+    })
+
+    it('con la actual incorrecta responde 403 con código y no cambia nada', async () => {
+      const { app, sesion, cuenta } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionUsuario)
+      cuenta.buscarPorId.mockResolvedValue(crearUsuarioFalso({ id: 3 }))
+
+      const respuesta = await publicar(app, '/cuenta/contrasena')
+        .set('Cookie', COOKIE)
+        .send({ ...cuerpo, contrasenaActual: 'incorrecta-incorrecta' })
+
+      expect(respuesta.status).toBe(403)
+      expect(respuesta.body.codigo).toBe('actual_incorrecta')
+      expect(cuenta.registrarIntentoFallido).toHaveBeenCalledTimes(1)
+      expect(cuenta.cambiarContrasena).not.toHaveBeenCalled()
+      expect(sesion.revocarOtrasSesiones).not.toHaveBeenCalled()
+    })
+
+    it('con la cuenta bloqueada responde 429', async () => {
+      const { app, sesion, cuenta } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionUsuario)
+      cuenta.buscarPorId.mockResolvedValue(
+        crearUsuarioFalso({ id: 3, bloqueadoHasta: new Date(AHORA + 60_000) }),
+      )
+
+      const respuesta = await publicar(app, '/cuenta/contrasena')
+        .set('Cookie', COOKIE)
+        .send(cuerpo)
+
+      expect(respuesta.status).toBe(429)
+      expect(cuenta.cambiarContrasena).not.toHaveBeenCalled()
+    })
+
+    it.each([
+      [{ contrasenaNueva: 'corta' }],
+      [{ contrasenaNueva: CONTRASENA }],
+      [{ extra: 'x' }],
+    ])('responde 400 con %j y no consulta la base', async (cambio) => {
+      const { app, sesion, cuenta } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionUsuario)
+
+      const respuesta = await publicar(app, '/cuenta/contrasena')
+        .set('Cookie', COOKIE)
+        .send({ ...cuerpo, ...cambio })
+
+      expect(respuesta.status).toBe(400)
+      expect(cuenta.buscarPorId).not.toHaveBeenCalled()
+    })
+
+    it('rechaza un POST sin Origin propio', async () => {
+      const { app, sesion, cuenta } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionUsuario)
+      const respuesta = await request(app)
+        .post('/api/panel/cuenta/contrasena')
+        .set('Cookie', COOKIE)
+        .send(cuerpo)
+      expect(respuesta.status).toBe(403)
+      expect(cuenta.buscarPorId).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('exportar la bitácora', () => {
+    const evento = {
+      id: 9,
+      ocurrioEn: new Date('2026-11-06T18:00:00Z'),
+      tipo: 'entrada_fallida',
+      usuarioId: null,
+      correo: '=cmd@ejemplo.com',
+      ip: '203.0.113.7',
+      actorCorreo: null,
+    }
+
+    it('sin sesión responde 401 y un usuario normal 403', async () => {
+      const { app, sesion, bitacora } = prepararApp()
+      expect(
+        (await consultar(app, '/administracion/bitacora/exportar')).status,
+      ).toBe(401)
+
+      sesion.buscarSesionActiva.mockResolvedValue(sesionUsuario)
+      const respuesta = await consultar(
+        app,
+        '/administracion/bitacora/exportar',
+      ).set('Cookie', COOKIE)
+      expect(respuesta.status).toBe(403)
+      expect(bitacora.listarEventos).not.toHaveBeenCalled()
+    })
+
+    it('un administrador descarga un CSV, sin fórmulas peligrosas, y queda anotado', async () => {
+      const { app, sesion, bitacora } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionAdministrador)
+      bitacora.listarEventos.mockResolvedValue([evento])
+
+      const respuesta = await consultar(
+        app,
+        '/administracion/bitacora/exportar?grupo=alertas',
+      ).set('Cookie', COOKIE)
+
+      expect(respuesta.status).toBe(200)
+      expect(respuesta.headers['content-type']).toContain('text/csv')
+      expect(respuesta.headers['content-disposition']).toMatch(
+        /^attachment; filename="bitacora-\d{4}-\d{2}-\d{2}\.csv"$/,
+      )
+      expect(respuesta.headers['x-truncado']).toBe('no')
+      expect(respuesta.headers['cache-control']).toBe('no-store')
+      expect(respuesta.text).toContain(
+        "9,2026-11-06T18:00:00.000Z,entrada_fallida,'=cmd@ejemplo.com,203.0.113.7,",
+      )
+      expect(bitacora.insertarEvento).toHaveBeenCalledWith(
+        expect.objectContaining({
+          tipo: 'bitacora_exportada',
+          usuarioId: sesionAdministrador.usuarioId,
+        }),
+      )
+    })
+
+    it('responde 400 con un filtro inválido', async () => {
+      const { app, sesion, bitacora } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionAdministrador)
+      const respuesta = await consultar(
+        app,
+        '/administracion/bitacora/exportar?grupo=otro',
+      ).set('Cookie', COOKIE)
+      expect(respuesta.status).toBe(400)
+      expect(bitacora.listarEventos).not.toHaveBeenCalled()
     })
   })
 

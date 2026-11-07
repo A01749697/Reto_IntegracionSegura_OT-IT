@@ -2,7 +2,7 @@
 // Todo lo que no cumpla se rechaza.
 import type { Resultado } from './autenticacion.esquema'
 
-const ESTADOS = ['pendiente', 'aprobado', 'rechazado'] as const
+const ESTADOS = ['pendiente', 'aprobado', 'rechazado', 'todas'] as const
 const DECISIONES = ['aprobado', 'rechazado'] as const
 
 export type EstadoLista = (typeof ESTADOS)[number]

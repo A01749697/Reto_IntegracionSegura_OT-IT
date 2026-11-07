@@ -28,6 +28,8 @@ function iniciar() {
         sesiones.revocarSesion(poolPanel, tokenHash),
       revocarSesionesDeUsuario: (usuarioId) =>
         sesiones.revocarSesionesDeUsuario(poolPanel, usuarioId),
+      revocarOtrasSesiones: (usuarioId, sesionId) =>
+        sesiones.revocarOtrasSesiones(poolPanel, usuarioId, sesionId),
     },
     autenticacion: {
       crearUsuario: (datos) => usuarios.crearUsuario(poolPanel, datos),
@@ -58,6 +60,21 @@ function iniciar() {
       buscarPorId: (id) => usuarios.buscarPorId(poolPanel, id),
       cambiarEstado: (id, estado, decididoPor) =>
         usuarios.cambiarEstado(poolPanel, id, estado, decididoPor),
+      cambiarRol: (id, rol) => usuarios.cambiarRol(poolPanel, id, rol),
+      limpiarIntentos: (usuarioId) =>
+        usuarios.limpiarIntentos(poolPanel, usuarioId),
+    },
+    cuenta: {
+      buscarPorId: (id) => usuarios.buscarPorId(poolPanel, id),
+      registrarIntentoFallido: (usuarioId, intentosMaximos, bloqueoMs) =>
+        usuarios.registrarIntentoFallido(
+          poolPanel,
+          usuarioId,
+          intentosMaximos,
+          bloqueoMs,
+        ),
+      cambiarContrasena: (usuarioId, contrasenaHash) =>
+        usuarios.cambiarContrasena(poolPanel, usuarioId, contrasenaHash),
     },
     lecturas: {
       obtenerUltimasLecturas: () =>

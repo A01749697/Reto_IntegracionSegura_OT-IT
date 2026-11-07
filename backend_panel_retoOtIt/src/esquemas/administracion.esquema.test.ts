@@ -10,9 +10,15 @@ describe('validarEstadoLista', () => {
     expect(validarEstadoLista({})).toEqual({ ok: true, datos: 'pendiente' })
   })
 
-  it.each(['pendiente', 'aprobado', 'rechazado'])('acepta %s', (estado) => {
-    expect(validarEstadoLista({ estado })).toEqual({ ok: true, datos: estado })
-  })
+  it.each(['pendiente', 'aprobado', 'rechazado', 'todas'])(
+    'acepta %s',
+    (estado) => {
+      expect(validarEstadoLista({ estado })).toEqual({
+        ok: true,
+        datos: estado,
+      })
+    },
+  )
 
   it.each([
     { estado: 'otro' },

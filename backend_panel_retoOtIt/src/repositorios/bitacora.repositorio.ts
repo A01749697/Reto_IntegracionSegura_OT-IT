@@ -15,6 +15,11 @@ export const TIPOS_EVENTO = [
   'sesion_cerrada',
   'cuenta_aprobada',
   'cuenta_rechazada',
+  'cuenta_desbloqueada',
+  'rol_cambiado',
+  'contrasena_cambiada',
+  'cambio_contrasena_fallido',
+  'bitacora_exportada',
 ] as const
 
 export type TipoEvento = (typeof TIPOS_EVENTO)[number]
@@ -28,6 +33,7 @@ export const TIPOS_ALERTA: readonly TipoEvento[] = [
   'entrada_rechazada',
   'solicitud_repetida',
   'reinicio_fallido',
+  'cambio_contrasena_fallido',
 ]
 
 export type EventoNuevo = {

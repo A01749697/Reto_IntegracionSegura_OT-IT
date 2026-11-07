@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import { seguridad } from '../configuracion/seguridad'
-import { validarConsultaBitacora } from './bitacora.esquema'
+import {
+  validarConsultaBitacora,
+  validarConsultaExportar,
+} from './bitacora.esquema'
 
 describe('validarConsultaBitacora', () => {
   it('sin nada usa los valores por defecto', () => {
@@ -39,5 +42,30 @@ describe('validarConsultaBitacora', () => {
   it('rechaza lo que no es un objeto', () => {
     expect(validarConsultaBitacora(null).ok).toBe(false)
     expect(validarConsultaBitacora('grupo=todos').ok).toBe(false)
+  })
+})
+
+describe('validarConsultaExportar', () => {
+  it('sin grupo exporta todo', () => {
+    expect(validarConsultaExportar({})).toEqual({ ok: true, datos: 'todos' })
+  })
+
+  it.each(['todos', 'alertas'])('acepta %s', (grupo) => {
+    expect(validarConsultaExportar({ grupo })).toEqual({
+      ok: true,
+      datos: grupo,
+    })
+  })
+
+  it.each([
+    [{ grupo: 'otro' }],
+    [{ grupo: ['todos'] }],
+    [{ antes: '5' }],
+    [{ limite: '5' }],
+    [{ grupo: 'todos', extra: 1 }],
+    [null],
+    ['grupo=todos'],
+  ])('rechaza %j', (consulta) => {
+    expect(validarConsultaExportar(consulta).ok).toBe(false)
   })
 })

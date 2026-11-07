@@ -24,11 +24,14 @@ export function crearRutasAdministracion({
 
   rutas.get('/usuarios', controlador.listar)
   rutas.get('/bitacora', controladorBitacora.listar)
+  rutas.get('/bitacora/exportar', controladorBitacora.exportar)
   rutas.post(
     '/usuarios/:id/decision',
     express.json({ limit: seguridad.peticion.limiteCuerpo }),
     controlador.decidir,
   )
+  rutas.post('/usuarios/:id/desbloqueo', controlador.desbloquear)
+  rutas.post('/usuarios/:id/administrador', controlador.hacerAdministrador)
 
   return rutas
 }
