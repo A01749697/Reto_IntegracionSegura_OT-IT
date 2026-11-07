@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  validarCambiarContrasena,
   validarCrearCuenta,
   validarEntrar,
   validarPedirReinicio,
@@ -192,5 +193,51 @@ describe('validarUsarEnlace', () => {
     expect(
       validarUsarEnlace({ token: TOKEN_VALIDO, contrasena: 'corta' }).ok,
     ).toBe(false)
+  })
+})
+
+describe('validarCambiarContrasena', () => {
+  const cuerpoValido = {
+    contrasenaActual: 'la-clave-actual-1',
+    contrasenaNueva: CONTRASENA_VALIDA,
+  }
+
+  it('acepta la actual y una nueva distinta', () => {
+    expect(validarCambiarContrasena(cuerpoValido)).toEqual({
+      ok: true,
+      datos: { actual: 'la-clave-actual-1', nueva: CONTRASENA_VALIDA },
+    })
+  })
+
+  it('no exige largo mínimo a la actual (pudo crearse con otras reglas)', () => {
+    expect(
+      validarCambiarContrasena({ ...cuerpoValido, contrasenaActual: 'a' }).ok,
+    ).toBe(true)
+  })
+
+  it.each([
+    [{ contrasenaActual: '' }],
+    [{ contrasenaActual: 5 }],
+    [{ contrasenaNueva: 'corta' }],
+    [{ contrasenaNueva: 'x'.repeat(129) }],
+    [{ contrasenaNueva: 'la-clave-actual-1' }],
+    [{ extra: 'x' }],
+  ])('rechaza el cambio %j', (cambio) => {
+    expect(validarCambiarContrasena({ ...cuerpoValido, ...cambio }).ok).toBe(
+      false,
+    )
+  })
+
+  it('el error de la nueva nombra el campo correcto', () => {
+    const resultado = validarCambiarContrasena({
+      ...cuerpoValido,
+      contrasenaNueva: 'corta',
+    })
+    expect(!resultado.ok && resultado.error).toContain('contrasenaNueva')
+  })
+
+  it('rechaza si faltan campos o no es un objeto', () => {
+    expect(validarCambiarContrasena({ contrasenaActual: 'x' }).ok).toBe(false)
+    expect(validarCambiarContrasena(null).ok).toBe(false)
   })
 })

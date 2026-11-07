@@ -34,6 +34,8 @@ export const seguridad = {
   bitacora: {
     porDefecto: 50,
     maximo: 100,
+    // tope de filas del archivo CSV
+    maximoExportacion: 5000,
   },
   peticion: {
     limiteCuerpo: '10kb',

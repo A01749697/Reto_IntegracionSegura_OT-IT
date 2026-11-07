@@ -21,6 +21,20 @@ const RESPUESTAS_DECISION = {
   sin_cambio: { status: 409, error: 'La cuenta ya tiene ese estado' },
 } as const
 
+const RESPUESTAS_DESBLOQUEO = {
+  no_existe: { status: 404, error: 'La cuenta no existe' },
+  sin_cambio: { status: 409, error: 'La cuenta no está bloqueada' },
+} as const
+
+const RESPUESTAS_PROMOCION = {
+  no_existe: { status: 404, error: 'La cuenta no existe' },
+  sin_cambio: { status: 409, error: 'La cuenta ya es administradora' },
+  no_aprobada: {
+    status: 409,
+    error: 'Solo se puede promover una cuenta aprobada',
+  },
+} as const
+
 export function crearControladorAdministracion(
   servicio: ServicioAdministracion,
 ) {
@@ -64,6 +78,44 @@ export function crearControladorAdministracion(
             ? 'Cuenta aprobada'
             : 'Cuenta rechazada',
       })
+    },
+
+    async desbloquear(req: Request, res: Response) {
+      const id = validarIdUsuario(req.params.id)
+      if (!id.ok) {
+        res.status(400).json({ error: id.error })
+        return
+      }
+      const resultado = await servicio.desbloquear(
+        id.datos,
+        sesionDe(res).usuarioId,
+        req.ip ?? null,
+      )
+      if (!resultado.ok) {
+        const { status, error } = RESPUESTAS_DESBLOQUEO[resultado.motivo]
+        res.status(status).json({ error })
+        return
+      }
+      res.json({ mensaje: 'Cuenta desbloqueada' })
+    },
+
+    async hacerAdministrador(req: Request, res: Response) {
+      const id = validarIdUsuario(req.params.id)
+      if (!id.ok) {
+        res.status(400).json({ error: id.error })
+        return
+      }
+      const resultado = await servicio.hacerAdministrador(
+        id.datos,
+        sesionDe(res).usuarioId,
+        req.ip ?? null,
+      )
+      if (!resultado.ok) {
+        const { status, error } = RESPUESTAS_PROMOCION[resultado.motivo]
+        res.status(status).json({ error })
+        return
+      }
+      res.json({ mensaje: 'La cuenta ahora es administradora' })
     },
   }
 }

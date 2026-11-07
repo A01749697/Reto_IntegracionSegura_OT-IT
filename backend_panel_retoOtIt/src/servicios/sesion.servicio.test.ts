@@ -20,6 +20,7 @@ function crearDependenciasFalsas() {
     buscarSesionActiva: vi.fn().mockResolvedValue(null),
     revocarSesion: vi.fn().mockResolvedValue(undefined),
     revocarSesionesDeUsuario: vi.fn().mockResolvedValue(undefined),
+    revocarOtrasSesiones: vi.fn().mockResolvedValue(undefined),
     registrarEvento: vi.fn().mockResolvedValue(undefined),
   }
 }
@@ -123,5 +124,15 @@ describe('servicio de sesión', () => {
 
     expect(dependencias.revocarSesion).toHaveBeenCalledTimes(1)
     expect(dependencias.registrarEvento).not.toHaveBeenCalled()
+  })
+
+  it('cerrarOtrasDe deja abierta la sesión indicada', async () => {
+    const dependencias = crearDependenciasFalsas()
+    const servicio = crearServicioSesion(dependencias)
+
+    await servicio.cerrarOtrasDe(3, 7)
+
+    expect(dependencias.revocarOtrasSesiones).toHaveBeenCalledWith(3, 7)
+    expect(dependencias.revocarSesionesDeUsuario).not.toHaveBeenCalled()
   })
 })

@@ -5,6 +5,7 @@ import { seguridad } from './configuracion/seguridad'
 import { crearControladorAdministracion } from './controladores/administracion.controlador'
 import { crearControladorAutenticacion } from './controladores/autenticacion.controlador'
 import { crearControladorBitacora } from './controladores/bitacora.controlador'
+import { crearControladorCuenta } from './controladores/cuenta.controlador'
 import { crearControladorLecturas } from './controladores/lecturas.controlador'
 import { crearControladorSistema } from './controladores/sistema.controlador'
 import {
@@ -16,12 +17,14 @@ import { exigirOrigenPropio } from './intermediarios/origen.intermediario'
 import { exigirSesion } from './intermediarios/sesion.intermediario'
 import { crearRutasAdministracion } from './rutas/administracion.rutas'
 import { crearRutasAutenticacion } from './rutas/autenticacion.rutas'
+import { crearRutasCuenta } from './rutas/cuenta.rutas'
 import { crearRutasLecturas } from './rutas/lecturas.rutas'
 import { crearRutasSistema } from './rutas/sistema.rutas'
 import { crearServicioAdministracion } from './servicios/administracion.servicio'
 import { crearServicioAutenticacion } from './servicios/autenticacion.servicio'
 import { crearServicioBitacora } from './servicios/bitacora.servicio'
 import { crearServicioCorreo } from './servicios/correo.servicio'
+import { crearServicioCuenta } from './servicios/cuenta.servicio'
 import { crearServicioLecturas } from './servicios/lecturas.servicio'
 import { crearServicioReinicio } from './servicios/reinicio.servicio'
 import { crearServicioSesion } from './servicios/sesion.servicio'
@@ -44,7 +47,11 @@ export type Dependencias = {
   >
   administracion: Omit<
     De<typeof crearServicioAdministracion>,
-    'cerrarSesionesDe' | 'registrarEvento'
+    'cerrarSesionesDe' | 'registrarEvento' | 'ahora'
+  >
+  cuenta: Omit<
+    De<typeof crearServicioCuenta>,
+    'cerrarOtrasSesiones' | 'registrarEvento' | 'ahora'
   >
   lecturas: De<typeof crearServicioLecturas>
   bitacora: De<typeof crearServicioBitacora>
@@ -59,6 +66,7 @@ export function crearAplicacion({
   autenticacion,
   reinicio,
   administracion,
+  cuenta,
   lecturas,
   bitacora,
   sistema,
@@ -87,6 +95,13 @@ export function crearAplicacion({
     ...administracion,
     cerrarSesionesDe: servicioSesion.cerrarTodasDe,
     registrarEvento: servicioBitacora.registrar,
+    ahora,
+  })
+  const servicioCuenta = crearServicioCuenta({
+    ...cuenta,
+    cerrarOtrasSesiones: servicioSesion.cerrarOtrasDe,
+    registrarEvento: servicioBitacora.registrar,
+    ahora,
   })
   const servicioLecturas = crearServicioLecturas(lecturas)
   const servicioSistema = crearServicioSistema(sistema)
@@ -124,6 +139,14 @@ export function crearAplicacion({
         reinicio: servicioReinicio,
         sesion: servicioSesion,
       }),
+      exigirSesion: sesionExigida,
+      limitador,
+    }),
+  )
+  panel.use(
+    '/cuenta',
+    crearRutasCuenta({
+      controlador: crearControladorCuenta(servicioCuenta),
       exigirSesion: sesionExigida,
       limitador,
     }),

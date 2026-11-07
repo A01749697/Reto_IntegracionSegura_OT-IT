@@ -13,6 +13,7 @@ export type DatosCrearCuenta = {
 export type DatosEntrar = { correo: string; contrasena: string }
 export type DatosPedirReinicio = { correo: string }
 export type DatosUsarEnlace = { token: string; contrasena: string }
+export type DatosCambiarContrasena = { actual: string; nueva: string }
 
 type Parcial<T> = { valor: T } | { error: string }
 
@@ -168,4 +169,31 @@ export function validarUsarEnlace(cuerpo: unknown): Resultado<DatosUsarEnlace> {
     ok: true,
     datos: { token: token.valor, contrasena: contrasena.valor },
   }
+}
+
+export function validarCambiarContrasena(
+  cuerpo: unknown,
+): Resultado<DatosCambiarContrasena> {
+  const campos = revisarCampos(cuerpo, ['contrasenaActual', 'contrasenaNueva'])
+  if (typeof campos === 'string') return { ok: false, error: campos }
+
+  const actual = validarContrasenaDeEntrada(campos.contrasenaActual)
+  if ('error' in actual) {
+    return { ok: false, error: 'contrasenaActual no es válida' }
+  }
+  const nueva = validarContrasenaNueva(campos.contrasenaNueva)
+  if ('error' in nueva) {
+    return {
+      ok: false,
+      error: nueva.error.replace('contrasena', 'contrasenaNueva'),
+    }
+  }
+  if (nueva.valor === actual.valor) {
+    return {
+      ok: false,
+      error: 'contrasenaNueva debe ser distinta de la actual',
+    }
+  }
+
+  return { ok: true, datos: { actual: actual.valor, nueva: nueva.valor } }
 }

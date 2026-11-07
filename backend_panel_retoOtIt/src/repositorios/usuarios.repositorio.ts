@@ -3,6 +3,7 @@ import type { Pool } from 'pg'
 
 export type Rol = 'usuario' | 'administrador'
 export type Estado = 'pendiente' | 'aprobado' | 'rechazado'
+export type FiltroEstado = Estado | 'todas'
 
 export type Usuario = {
   id: number
@@ -22,6 +23,7 @@ export type UsuarioResumen = {
   correo: string
   rol: Rol
   estado: Estado
+  bloqueada: boolean
   creadoEn: Date
 }
 
@@ -46,6 +48,7 @@ type FilaResumen = {
   correo: string
   rol: string
   estado: string
+  bloqueada: boolean
   creado_en: Date
 }
 
@@ -125,12 +128,13 @@ export async function buscarPorId(
 
 export async function listarPorEstado(
   pool: Pool,
-  estado: Estado,
+  estado: FiltroEstado,
 ): Promise<UsuarioResumen[]> {
   const resultado = await pool.query<FilaResumen>(
-    `SELECT id, nombre, correo, rol, estado, creado_en
+    `SELECT id, nombre, correo, rol, estado, creado_en,
+            (bloqueado_hasta IS NOT NULL AND bloqueado_hasta > now()) AS bloqueada
      FROM usuarios
-     WHERE estado = $1
+     WHERE $1::text = 'todas' OR estado = $1::text
      ORDER BY creado_en`,
     [estado],
   )
@@ -140,6 +144,7 @@ export async function listarPorEstado(
     correo: fila.correo,
     rol: fila.rol as Rol,
     estado: fila.estado as Estado,
+    bloqueada: fila.bloqueada,
     creadoEn: fila.creado_en,
   }))
 }
@@ -157,6 +162,19 @@ export async function cambiarEstado(
      SET estado = $2, aprobado_en = now(), aprobado_por = $3
      WHERE id = $1`,
     [id, estado, decididoPor],
+  )
+  return resultado.rowCount === 1
+}
+
+// Devuelve false si la cuenta no existe.
+export async function cambiarRol(
+  pool: Pool,
+  id: number,
+  rol: Rol,
+): Promise<boolean> {
+  const resultado = await pool.query(
+    `UPDATE usuarios SET rol = $2 WHERE id = $1`,
+    [id, rol],
   )
   return resultado.rowCount === 1
 }

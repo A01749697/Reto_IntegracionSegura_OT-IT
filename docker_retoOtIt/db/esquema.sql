@@ -137,15 +137,20 @@ CREATE TABLE IF NOT EXISTS bitacora (
   actor_id    bigint REFERENCES usuarios (id) ON DELETE SET NULL,
   correo      text,
   ip          text,
-  CONSTRAINT bitacora_tipo_valido CHECK (tipo IN (
-    'entrada_correcta', 'entrada_fallida', 'entrada_bloqueada', 'cuenta_bloqueada',
-    'entrada_pendiente', 'entrada_rechazada', 'cuenta_solicitada', 'solicitud_repetida',
-    'reinicio_solicitado', 'reinicio_fallido', 'contrasena_restablecida',
-    'sesion_cerrada', 'cuenta_aprobada', 'cuenta_rechazada'
-  )),
   CONSTRAINT bitacora_correo_largo CHECK (char_length(correo) <= 254),
   CONSTRAINT bitacora_ip_largo CHECK (char_length(ip) <= 45)
 );
+
+-- La lista de tipos vive aparte para poder ampliarla: se borra la regla y se vuelve a crear.
+ALTER TABLE bitacora DROP CONSTRAINT IF EXISTS bitacora_tipo_valido;
+ALTER TABLE bitacora ADD CONSTRAINT bitacora_tipo_valido CHECK (tipo IN (
+  'entrada_correcta', 'entrada_fallida', 'entrada_bloqueada', 'cuenta_bloqueada',
+  'entrada_pendiente', 'entrada_rechazada', 'cuenta_solicitada', 'solicitud_repetida',
+  'reinicio_solicitado', 'reinicio_fallido', 'contrasena_restablecida',
+  'sesion_cerrada', 'cuenta_aprobada', 'cuenta_rechazada',
+  'cuenta_desbloqueada', 'rol_cambiado', 'contrasena_cambiada',
+  'cambio_contrasena_fallido', 'bitacora_exportada'
+));
 
 GRANT SELECT, INSERT ON bitacora TO reto_panel;
 GRANT USAGE ON SEQUENCE bitacora_id_seq TO reto_panel;

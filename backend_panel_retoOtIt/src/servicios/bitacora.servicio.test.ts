@@ -3,6 +3,7 @@ import {
   TIPOS_ALERTA,
   type EventoBitacora,
 } from '../repositorios/bitacora.repositorio'
+import { seguridad } from '../configuracion/seguridad'
 import { crearServicioBitacora } from './bitacora.servicio'
 
 function crearEvento(id: number): EventoBitacora {
@@ -125,6 +126,69 @@ describe('servicio de bitácora', () => {
 
       expect(resultado.ok).toBe(false)
       expect(dependencias.listarEventos).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('exportar', () => {
+    it('arma el CSV con los eventos, anota la descarga y no recorta', async () => {
+      const dependencias = crearDependenciasFalsas()
+      dependencias.listarEventos.mockResolvedValue([crearEvento(2)])
+      const servicio = crearServicioBitacora(dependencias)
+
+      const resultado = await servicio.exportar(
+        { grupo: 'alertas' },
+        1,
+        'admin@ejemplo.com',
+        '198.51.100.9',
+      )
+
+      expect(resultado.ok).toBe(true)
+      if (!resultado.ok) return
+      expect(resultado.truncado).toBe(false)
+      expect(resultado.csv).toContain(
+        'id,fecha_utc,tipo,correo,ip,actor\r\n' +
+          '2,2026-11-06T18:00:00.000Z,entrada_fallida,ana@ejemplo.com,203.0.113.7,\r\n',
+      )
+      expect(dependencias.listarEventos).toHaveBeenCalledWith({
+        tipos: TIPOS_ALERTA,
+        antes: null,
+        limite: seguridad.bitacora.maximoExportacion + 1,
+      })
+      expect(dependencias.insertarEvento).toHaveBeenCalledWith({
+        tipo: 'bitacora_exportada',
+        usuarioId: 1,
+        correo: 'admin@ejemplo.com',
+        ip: '198.51.100.9',
+      })
+    })
+
+    it('si hay más que el tope, recorta y avisa', async () => {
+      const dependencias = crearDependenciasFalsas()
+      const total = seguridad.bitacora.maximoExportacion + 1
+      dependencias.listarEventos.mockResolvedValue(
+        Array.from({ length: total }, (_, i) => crearEvento(total - i)),
+      )
+      const servicio = crearServicioBitacora(dependencias)
+
+      const resultado = await servicio.exportar({}, 1, 'a@b.co', null)
+
+      expect(resultado.ok && resultado.truncado).toBe(true)
+      if (!resultado.ok) return
+      // encabezado + el tope de filas + línea vacía del final
+      expect(resultado.csv.split('\r\n')).toHaveLength(
+        seguridad.bitacora.maximoExportacion + 2,
+      )
+    })
+
+    it('con una consulta inválida no consulta ni anota nada', async () => {
+      const dependencias = crearDependenciasFalsas()
+      const servicio = crearServicioBitacora(dependencias)
+
+      const resultado = await servicio.exportar({ grupo: 'otro' }, 1, 'a', null)
+
+      expect(resultado.ok).toBe(false)
+      expect(dependencias.listarEventos).not.toHaveBeenCalled()
+      expect(dependencias.insertarEvento).not.toHaveBeenCalled()
     })
   })
 })

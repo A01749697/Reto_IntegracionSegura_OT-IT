@@ -78,6 +78,20 @@ export async function revocarSesion(
   )
 }
 
+// Cierra las demás sesiones de la cuenta y deja abierta la que se está usando.
+export async function revocarOtrasSesiones(
+  pool: Pool,
+  usuarioId: number,
+  sesionId: number,
+): Promise<void> {
+  await pool.query(
+    `UPDATE sesiones
+     SET revocada_en = now()
+     WHERE usuario_id = $1 AND id <> $2 AND revocada_en IS NULL`,
+    [usuarioId, sesionId],
+  )
+}
+
 // Cierra todas las sesiones abiertas de una cuenta (por ejemplo, al cambiar su contraseña).
 export async function revocarSesionesDeUsuario(
   pool: Pool,

@@ -21,6 +21,7 @@ type Dependencias = {
   ) => Promise<SesionActiva | null>
   revocarSesion: (tokenHash: string) => Promise<void>
   revocarSesionesDeUsuario: (usuarioId: number) => Promise<void>
+  revocarOtrasSesiones: (usuarioId: number, sesionId: number) => Promise<void>
   registrarEvento: (evento: EventoNuevo) => Promise<void>
 }
 
@@ -29,6 +30,7 @@ export function crearServicioSesion({
   buscarSesionActiva,
   revocarSesion,
   revocarSesionesDeUsuario,
+  revocarOtrasSesiones,
   registrarEvento,
 }: Dependencias) {
   return {
@@ -73,6 +75,10 @@ export function crearServicioSesion({
 
     async cerrarTodasDe(usuarioId: number): Promise<void> {
       await revocarSesionesDeUsuario(usuarioId)
+    },
+
+    async cerrarOtrasDe(usuarioId: number, sesionId: number): Promise<void> {
+      await revocarOtrasSesiones(usuarioId, sesionId)
     },
   }
 }

@@ -55,3 +55,18 @@ export function validarConsultaBitacora(
 
   return { ok: true, datos: { grupo, antes: idAntes, limite: cuantos } }
 }
+
+// La exportación solo acepta el grupo: lo demás (antes, limite) no tiene sentido en un archivo.
+export function validarConsultaExportar(consulta: unknown): Resultado<Grupo> {
+  if (!esObjeto(consulta)) {
+    return { ok: false, error: 'La consulta no es válida' }
+  }
+  if (Object.keys(consulta).some((clave) => clave !== 'grupo')) {
+    return { ok: false, error: 'Solo se permite: grupo' }
+  }
+  const { grupo = 'todos' } = consulta
+  if (grupo !== 'todos' && grupo !== 'alertas') {
+    return { ok: false, error: 'grupo debe ser: todos, alertas' }
+  }
+  return { ok: true, datos: grupo }
+}
