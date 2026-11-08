@@ -4,17 +4,20 @@ import express, { Router, type RequestHandler } from 'express'
 import { seguridad } from '../configuracion/seguridad'
 import type { ControladorAdministracion } from '../controladores/administracion.controlador'
 import type { ControladorBitacora } from '../controladores/bitacora.controlador'
+import type { ControladorDatos } from '../controladores/datos.controlador'
 import { exigirAdministrador } from '../intermediarios/administrador.intermediario'
 
 type Dependencias = {
   controlador: ControladorAdministracion
   controladorBitacora: ControladorBitacora
+  controladorDatos: ControladorDatos
   exigirSesion: RequestHandler
 }
 
 export function crearRutasAdministracion({
   controlador,
   controladorBitacora,
+  controladorDatos,
   exigirSesion,
 }: Dependencias) {
   const rutas = Router()
@@ -25,6 +28,8 @@ export function crearRutasAdministracion({
   rutas.get('/usuarios', controlador.listar)
   rutas.get('/bitacora', controladorBitacora.listar)
   rutas.get('/bitacora/exportar', controladorBitacora.exportar)
+  rutas.get('/datos', controladorDatos.tablas)
+  rutas.get('/datos/:tabla', controladorDatos.consultar)
   rutas.post(
     '/usuarios/:id/decision',
     express.json({ limit: seguridad.peticion.limiteCuerpo }),

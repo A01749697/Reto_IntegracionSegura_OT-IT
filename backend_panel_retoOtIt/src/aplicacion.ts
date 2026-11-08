@@ -6,6 +6,7 @@ import { crearControladorAdministracion } from './controladores/administracion.c
 import { crearControladorAutenticacion } from './controladores/autenticacion.controlador'
 import { crearControladorBitacora } from './controladores/bitacora.controlador'
 import { crearControladorCuenta } from './controladores/cuenta.controlador'
+import { crearControladorDatos } from './controladores/datos.controlador'
 import { crearControladorLecturas } from './controladores/lecturas.controlador'
 import { crearControladorSistema } from './controladores/sistema.controlador'
 import {
@@ -25,6 +26,7 @@ import { crearServicioAutenticacion } from './servicios/autenticacion.servicio'
 import { crearServicioBitacora } from './servicios/bitacora.servicio'
 import { crearServicioCorreo } from './servicios/correo.servicio'
 import { crearServicioCuenta } from './servicios/cuenta.servicio'
+import { crearServicioDatos } from './servicios/datos.servicio'
 import { crearServicioLecturas } from './servicios/lecturas.servicio'
 import { crearServicioReinicio } from './servicios/reinicio.servicio'
 import { crearServicioSesion } from './servicios/sesion.servicio'
@@ -55,6 +57,7 @@ export type Dependencias = {
   >
   lecturas: De<typeof crearServicioLecturas>
   bitacora: De<typeof crearServicioBitacora>
+  datos: Omit<De<typeof crearServicioDatos>, 'registrarEvento'>
   sistema: De<typeof crearServicioSistema>
   correo: Omit<De<typeof crearServicioCorreo>, 'urlPublica'>
   ahora?: () => number
@@ -69,6 +72,7 @@ export function crearAplicacion({
   cuenta,
   lecturas,
   bitacora,
+  datos,
   sistema,
   correo,
   ahora = Date.now,
@@ -104,6 +108,10 @@ export function crearAplicacion({
     ahora,
   })
   const servicioLecturas = crearServicioLecturas(lecturas)
+  const servicioDatos = crearServicioDatos({
+    ...datos,
+    registrarEvento: servicioBitacora.registrar,
+  })
   const servicioSistema = crearServicioSistema(sistema)
 
   const sesionExigida = exigirSesion({
@@ -156,6 +164,7 @@ export function crearAplicacion({
     crearRutasAdministracion({
       controlador: crearControladorAdministracion(servicioAdministracion),
       controladorBitacora: crearControladorBitacora(servicioBitacora),
+      controladorDatos: crearControladorDatos(servicioDatos),
       exigirSesion: sesionExigida,
     }),
   )

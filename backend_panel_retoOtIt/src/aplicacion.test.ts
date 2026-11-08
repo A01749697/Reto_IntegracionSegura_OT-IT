@@ -87,6 +87,9 @@ function prepararApp() {
     insertarEvento: vi.fn().mockResolvedValue(undefined),
     listarEventos: vi.fn().mockResolvedValue([]),
   }
+  const datos = {
+    leerTabla: vi.fn().mockResolvedValue([]),
+  }
   const sistema = {
     comprobarBasePanel: vi.fn().mockResolvedValue(undefined),
     obtenerEstadoLecturas: vi.fn().mockResolvedValue([]),
@@ -104,6 +107,7 @@ function prepararApp() {
     cuenta,
     lecturas,
     bitacora,
+    datos,
     sistema,
     correo,
     ahora: () => AHORA,
@@ -117,6 +121,7 @@ function prepararApp() {
     cuenta,
     lecturas,
     bitacora,
+    datos,
     sistema,
     correo,
   }
@@ -817,6 +822,139 @@ describe('API del panel', { timeout: 20000 }, () => {
 
       expect(respuesta.status).toBe(400)
       expect(bitacora.listarEventos).not.toHaveBeenCalled()
+    })
+
+    // ---- Datos (solo lectura) ----
+    describe('GET /administracion/datos', () => {
+      const filaCuenta = {
+        id: 4,
+        nombre: 'Ana',
+        correo: 'ana@ejemplo.com',
+        rol: 'usuario',
+        estado: 'aprobado',
+        intentosFallidos: 0,
+        bloqueadoHasta: null,
+        creadoEn: new Date('2026-11-01T10:00:00Z'),
+        aprobadoEn: null,
+        aprobadoPor: null,
+      }
+
+      it('sin sesión responde 401 y con usuario normal 403, sin leer la base', async () => {
+        const { app, sesion, datos } = prepararApp()
+        expect((await consultar(app, '/administracion/datos')).status).toBe(401)
+        expect(
+          (await consultar(app, '/administracion/datos/cuentas')).status,
+        ).toBe(401)
+
+        sesion.buscarSesionActiva.mockResolvedValue(sesionUsuario)
+        const sinPermiso = await consultar(
+          app,
+          '/administracion/datos/cuentas',
+        ).set('Cookie', COOKIE)
+        expect(sinPermiso.status).toBe(403)
+        expect(datos.leerTabla).not.toHaveBeenCalled()
+      })
+
+      it('un administrador ve la lista de tablas', async () => {
+        const { app, sesion } = prepararApp()
+        sesion.buscarSesionActiva.mockResolvedValue(sesionAdministrador)
+
+        const respuesta = await consultar(app, '/administracion/datos').set(
+          'Cookie',
+          COOKIE,
+        )
+
+        expect(respuesta.status).toBe(200)
+        expect(respuesta.body.tablas.map((t: { id: string }) => t.id)).toEqual([
+          'cuentas',
+          'bitacora',
+        ])
+      })
+
+      it('un administrador lee cuentas y queda anotado', async () => {
+        const { app, sesion, datos, bitacora } = prepararApp()
+        sesion.buscarSesionActiva.mockResolvedValue(sesionAdministrador)
+        datos.leerTabla.mockResolvedValue([filaCuenta])
+
+        const respuesta = await consultar(
+          app,
+          '/administracion/datos/cuentas?buscar=ana&limite=5',
+        ).set('Cookie', COOKIE)
+
+        expect(respuesta.status).toBe(200)
+        expect(respuesta.body.hayMas).toBe(false)
+        expect(respuesta.body.filas).toEqual([
+          {
+            ...filaCuenta,
+            creadoEn: '2026-11-01T10:00:00.000Z',
+          },
+        ])
+        expect(JSON.stringify(respuesta.body)).not.toMatch(/hash|contrasena/i)
+        expect(datos.leerTabla).toHaveBeenCalledWith('cuentas', {
+          buscar: 'ana',
+          antes: null,
+          limite: 6,
+        })
+        expect(bitacora.insertarEvento).toHaveBeenCalledWith(
+          expect.objectContaining({
+            tipo: 'datos_cuentas_consultadas',
+            usuarioId: 1,
+          }),
+        )
+      })
+
+      it.each(['usuarios', 'sesiones', 'enlaces_reinicio', 'lecturas'])(
+        'la tabla %s no se puede pedir (404) y no toca la base',
+        async (tabla) => {
+          const { app, sesion, datos } = prepararApp()
+          sesion.buscarSesionActiva.mockResolvedValue(sesionAdministrador)
+
+          const respuesta = await consultar(
+            app,
+            `/administracion/datos/${tabla}`,
+          ).set('Cookie', COOKIE)
+
+          expect(respuesta.status).toBe(404)
+          expect(datos.leerTabla).not.toHaveBeenCalled()
+        },
+      )
+
+      it('una consulta con campos raros responde 400', async () => {
+        const { app, sesion, datos } = prepararApp()
+        sesion.buscarSesionActiva.mockResolvedValue(sesionAdministrador)
+
+        for (const consulta of [
+          'columnas=contrasena_hash',
+          'antes=abc',
+          'limite=5000',
+          'buscar=a&buscar=b',
+        ]) {
+          const respuesta = await consultar(
+            app,
+            `/administracion/datos/cuentas?${consulta}`,
+          ).set('Cookie', COOKIE)
+          expect(respuesta.status).toBe(400)
+        }
+        expect(datos.leerTabla).not.toHaveBeenCalled()
+      })
+
+      it('no hay forma de escribir: POST y DELETE no existen', async () => {
+        const { app, sesion, datos } = prepararApp()
+        sesion.buscarSesionActiva.mockResolvedValue(sesionAdministrador)
+
+        const post = await publicar(app, '/administracion/datos/cuentas').set(
+          'Cookie',
+          COOKIE,
+        )
+        const borrar = await request(app)
+          .delete('/api/panel/administracion/datos/cuentas')
+          .set('Origin', ORIGEN)
+          .set('Cookie', COOKIE)
+
+        expect(post.status).toBe(404)
+        expect(borrar.status).toBe(404)
+        expect(datos.leerTabla).not.toHaveBeenCalled()
+      })
     })
 
     it('un intento de entrada fallido queda anotado con la IP', async () => {

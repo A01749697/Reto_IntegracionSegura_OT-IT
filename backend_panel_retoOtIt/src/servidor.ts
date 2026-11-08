@@ -4,6 +4,7 @@ import { crearAplicacion } from './aplicacion'
 import { leerEntorno } from './configuracion/entorno'
 import * as bitacora from './repositorios/bitacora.repositorio'
 import { comprobarConexion, crearPool } from './repositorios/conexion'
+import * as datos from './repositorios/datos.repositorio'
 import * as enlaces from './repositorios/enlaces.repositorio'
 import * as lecturas from './repositorios/lecturas.repositorio'
 import * as sesiones from './repositorios/sesiones.repositorio'
@@ -85,6 +86,9 @@ function iniciar() {
     bitacora: {
       insertarEvento: (evento) => bitacora.insertarEvento(poolPanel, evento),
       listarEventos: (filtros) => bitacora.listarEventos(poolPanel, filtros),
+    },
+    datos: {
+      leerTabla: (tabla, filtros) => datos.leerTabla(poolPanel, tabla, filtros),
     },
     sistema: {
       comprobarBasePanel: () => comprobarConexion(poolPanel),

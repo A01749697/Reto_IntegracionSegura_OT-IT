@@ -20,6 +20,8 @@ export const TIPOS_EVENTO = [
   'contrasena_cambiada',
   'cambio_contrasena_fallido',
   'bitacora_exportada',
+  'datos_cuentas_consultadas',
+  'datos_bitacora_consultada',
 ] as const
 
 export type TipoEvento = (typeof TIPOS_EVENTO)[number]
