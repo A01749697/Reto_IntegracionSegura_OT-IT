@@ -149,7 +149,8 @@ ALTER TABLE bitacora ADD CONSTRAINT bitacora_tipo_valido CHECK (tipo IN (
   'reinicio_solicitado', 'reinicio_fallido', 'contrasena_restablecida',
   'sesion_cerrada', 'cuenta_aprobada', 'cuenta_rechazada',
   'cuenta_desbloqueada', 'rol_cambiado', 'contrasena_cambiada',
-  'cambio_contrasena_fallido', 'bitacora_exportada'
+  'cambio_contrasena_fallido', 'bitacora_exportada',
+  'datos_cuentas_consultadas', 'datos_bitacora_consultada'
 ));
 
 GRANT SELECT, INSERT ON bitacora TO reto_panel;

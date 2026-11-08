@@ -37,6 +37,11 @@ export const seguridad = {
     // tope de filas del archivo CSV
     maximoExportacion: 5000,
   },
+  datos: {
+    porDefecto: 50,
+    maximo: 100,
+    largoMaximoBusqueda: 60,
+  },
   peticion: {
     limiteCuerpo: '10kb',
   },
