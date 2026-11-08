@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { listarBitacora } from './apiBitacora'
+import { exportarBitacora, listarBitacora } from './apiBitacora'
 
 function responder(estado: number, cuerpo?: unknown) {
   vi.stubGlobal(
@@ -77,6 +77,59 @@ describe('listarBitacora', () => {
     expect((await listarBitacora('todos')).ok).toBe(false)
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('red')))
     expect(await listarBitacora('todos')).toEqual({
+      ok: false,
+      motivo: 'fallo',
+    })
+  })
+})
+
+describe('exportarBitacora', () => {
+  function responderArchivo(estado: number, truncado = 'no') {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        status: estado,
+        blob: async () => new Blob(['id,tipo\r\n']),
+        headers: new Headers({ 'X-Truncado': truncado }),
+      }),
+    )
+  }
+
+  it('pide el grupo y entrega el archivo tal cual', async () => {
+    responderArchivo(200)
+    const resultado = await exportarBitacora('alertas')
+    expect(resultado.ok).toBe(true)
+    if (!resultado.ok) return
+    expect(resultado.truncado).toBe(false)
+    expect(await resultado.archivo.text()).toBe('id,tipo\r\n')
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/panel/administracion/bitacora/exportar?grupo=alertas',
+      expect.objectContaining({ method: 'GET' }),
+    )
+  })
+
+  it('avisa cuando el servidor recortó el archivo', async () => {
+    responderArchivo(200, 'si')
+    const resultado = await exportarBitacora('todos')
+    expect(resultado.ok && resultado.truncado).toBe(true)
+  })
+
+  it.each([401, 403])('el %s se toma como sesión caducada', async (codigo) => {
+    responderArchivo(codigo)
+    expect(await exportarBitacora('todos')).toEqual({
+      ok: false,
+      motivo: 'sesion',
+    })
+  })
+
+  it('falla si el servidor da error o no hay red', async () => {
+    responderArchivo(500)
+    expect(await exportarBitacora('todos')).toEqual({
+      ok: false,
+      motivo: 'fallo',
+    })
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('red')))
+    expect(await exportarBitacora('todos')).toEqual({
       ok: false,
       motivo: 'fallo',
     })

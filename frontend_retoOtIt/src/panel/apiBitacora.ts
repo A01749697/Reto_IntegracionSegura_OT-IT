@@ -59,3 +59,30 @@ export async function listarBitacora(
     return { ok: false, motivo: 'fallo' }
   }
 }
+
+export type ResultadoExportar =
+  | { ok: true; archivo: Blob; truncado: boolean }
+  | { ok: false; motivo: 'sesion' | 'fallo' }
+
+// Se queda con los bytes tal cual (blob) para no perder la marca UTF-8 que necesita Excel.
+export async function exportarBitacora(
+  grupo: GrupoBitacora,
+): Promise<ResultadoExportar> {
+  try {
+    const respuesta = await fetch(
+      `/api/panel/administracion/bitacora/exportar?grupo=${grupo}`,
+      { method: 'GET' },
+    )
+    if (respuesta.status === 401 || respuesta.status === 403) {
+      return { ok: false, motivo: 'sesion' }
+    }
+    if (respuesta.status !== 200) return { ok: false, motivo: 'fallo' }
+    return {
+      ok: true,
+      archivo: await respuesta.blob(),
+      truncado: respuesta.headers.get('X-Truncado') === 'si',
+    }
+  } catch {
+    return { ok: false, motivo: 'fallo' }
+  }
+}
