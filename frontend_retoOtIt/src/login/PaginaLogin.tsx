@@ -7,14 +7,14 @@ import {
   Eye,
   EyeClosed,
   Lock,
-  ShieldCheck,
   User,
   UserAdd,
-  WindowChartLine,
 } from 'reicon-react'
+import CaminoZonas from '../comun/CaminoZonas'
+import { avisoClases, boton } from '../comun/estilos'
+import FranjaZonas from '../comun/FranjaZonas'
+import BotonTema from '../tema/BotonTema'
 import CampoTexto from './CampoTexto'
-import DiagramaFlujo from './DiagramaFlujo'
-import FondoOnda from './FondoOnda'
 import type {
   MotivoEntrar,
   ResultadoEntrar,
@@ -33,6 +33,10 @@ export type PaginaLoginProps = {
   alIniciarSesion?: (usuario: Usuario) => void
   /** Codigo del enlace del correo. Si viene, abre directo la contraseña nueva. */
   tokenInicial?: string
+  /** Con que formulario abre cuando viene de la pagina de inicio. */
+  vistaInicial?: 'login' | 'crear'
+  /** Si viene, el nombre del panel lleva de vuelta a la pagina de inicio. */
+  alVolver?: () => void
 }
 
 type Vista = 'login' | 'olvido' | 'crear' | 'restablecer'
@@ -55,17 +59,15 @@ const MENSAJES_SIMPLES = {
   fallo: 'No se pudo completar. Inténtalo más tarde.',
 }
 
-const BOTON_BASE =
-  'flex h-[58px] w-full cursor-pointer items-center justify-center gap-2.5 rounded-[10px] text-[17px] font-semibold focus-visible:ring-[3px] focus-visible:ring-turquesa/45 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-75'
-const BOTON_PRINCIPAL = `${BOTON_BASE} bg-[linear-gradient(90deg,#174ea6,#2f6fe0)] text-white hover:bg-[linear-gradient(90deg,#123f86,#2560c8)]`
-const BOTON_SECUNDARIO = `${BOTON_BASE} border-2 border-azul-idmz bg-white text-[#174ea6] hover:bg-[#eef4ff]`
+const BOTON_PRINCIPAL = `${boton('principal', 'grande')} w-full`
+const BOTON_SECUNDARIO = `${boton('contorno', 'grande')} w-full`
 const ENLACE =
-  'cursor-pointer rounded px-1 py-3 text-[15px] font-medium text-[#174ea6] underline underline-offset-[3px] hover:text-tinta focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-turquesa'
+  'cursor-pointer rounded px-1 py-3 text-[13px] font-medium text-acento underline underline-offset-[3px] hover:brightness-125 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento'
 
 const ENCABEZADOS: Record<Vista, { titulo: string; subtitulo: string }> = {
   login: {
-    titulo: 'Panel Reto OT-IT',
-    subtitulo: 'Inicia sesión para ver las lecturas de los PLC.',
+    titulo: 'Entrar al panel',
+    subtitulo: 'Supervisa la comunicación segura entre la planta y la nube.',
   },
   olvido: {
     titulo: 'Recuperar contraseña',
@@ -91,19 +93,8 @@ function Aviso({
   const esError = tipo === 'error'
   const Icono = esError ? AlertCircle : CheckCircle
   return (
-    <div
-      role={esError ? 'alert' : 'status'}
-      className={`flex items-start gap-2.5 rounded-lg border px-3.5 py-3 text-[15px] leading-snug ${
-        esError
-          ? 'border-[#e5848c] bg-[#fdecee] text-[#8a1c26]'
-          : 'border-turquesa bg-[#e6f6f6] text-[#064e4e]'
-      }`}
-    >
-      <Icono
-        size={18}
-        aria-hidden="true"
-        className={`mt-px shrink-0 ${esError ? 'text-[#b3202d]' : 'text-turquesa-oscuro'}`}
-      />
+    <div role={esError ? 'alert' : 'status'} className={avisoClases(esError)}>
+      <Icono size={18} aria-hidden="true" className="mt-px shrink-0" />
       <span>{children}</span>
     </div>
   )
@@ -211,12 +202,12 @@ function VistaLogin({
                 }
                 aria-pressed={verClave}
                 onClick={() => setVerClave((v) => !v)}
-                className="absolute top-1.5 right-1.5 flex h-[46px] w-[46px] cursor-pointer items-center justify-center rounded-lg text-gris-azul hover:bg-[#e3eeff] hover:text-tinta focus-visible:ring-[3px] focus-visible:ring-turquesa/45 focus-visible:outline-none"
+                className="absolute top-1 right-1 flex h-9 w-9 cursor-pointer items-center justify-center rounded-md text-suave hover:bg-acento/10 hover:text-texto focus-visible:ring-[3px] focus-visible:ring-acento/45 focus-visible:outline-none"
               >
                 {verClave ? (
-                  <EyeClosed size={22} aria-hidden="true" />
+                  <EyeClosed size={20} aria-hidden="true" />
                 ) : (
-                  <Eye size={22} aria-hidden="true" />
+                  <Eye size={20} aria-hidden="true" />
                 )}
               </button>
             }
@@ -224,13 +215,9 @@ function VistaLogin({
           {mayusculas && (
             <p
               role="status"
-              className="flex items-center gap-2 text-sm font-medium text-[#0b5c5c]"
+              className="flex items-center gap-2 text-[13px] font-medium text-ok"
             >
-              <ArrowUp
-                size={16}
-                aria-hidden="true"
-                className="text-turquesa-oscuro"
-              />
+              <ArrowUp size={16} aria-hidden="true" />
               Bloq Mayús está activado
             </p>
           )}
@@ -254,9 +241,9 @@ function VistaLogin({
       </form>
 
       <div className="flex items-center gap-3">
-        <div className="h-px grow bg-[#cfdef5]" />
-        <span className="text-sm text-gris-azul">¿Aún no tienes cuenta?</span>
-        <div className="h-px grow bg-[#cfdef5]" />
+        <div className="h-px grow bg-linea" />
+        <span className="text-[13px] text-suave">¿Aún no tienes cuenta?</span>
+        <div className="h-px grow bg-linea" />
       </div>
 
       <button type="button" className={BOTON_SECUNDARIO} onClick={irCrear}>
@@ -307,7 +294,7 @@ function VistaOlvido({
 
   return (
     <div className="flex flex-col gap-[26px]">
-      <p className="text-[17px] leading-normal text-tinta-suave">
+      <p className="text-[14px] leading-normal text-suave">
         Escribe tu correo. Si la cuenta existe, te enviaremos las instrucciones
         para crear una contraseña nueva.
       </p>
@@ -409,7 +396,7 @@ function VistaCrear({
 
   return (
     <div className="flex flex-col gap-[26px]">
-      <p className="text-[17px] leading-normal text-tinta-suave">
+      <p className="text-[14px] leading-normal text-suave">
         Llena tus datos. Un administrador del equipo revisará tu solicitud antes
         de activar la cuenta.
       </p>
@@ -590,93 +577,74 @@ export default function PaginaLogin({
   restablecerClave,
   alIniciarSesion,
   tokenInicial,
+  vistaInicial,
+  alVolver,
 }: PaginaLoginProps) {
   const [vista, setVista] = useState<Vista>(
-    tokenInicial ? 'restablecer' : 'login',
+    tokenInicial ? 'restablecer' : (vistaInicial ?? 'login'),
   )
   const { titulo, subtitulo } = ENCABEZADOS[vista]
+  const marca = 'text-base font-bold tracking-tight'
 
   return (
-    <div className="relative flex min-h-screen flex-wrap overflow-hidden bg-[#dbe8fd] bg-[linear-gradient(120deg,#b3cff9_0%,#dbe8fd_45%,#f6f9ff_100%)] font-sans text-tinta">
-      <FondoOnda />
+    <div className="flex min-h-screen flex-col font-sans text-texto">
+      <FranjaZonas />
+      <header className="mx-auto flex h-[60px] w-full max-w-[1040px] items-center justify-between px-4 sm:px-7">
+        {alVolver ? (
+          <button
+            type="button"
+            onClick={alVolver}
+            aria-label="Panel Reto OT-IT, ir al inicio"
+            className={`${marca} cursor-pointer rounded focus-visible:ring-[3px] focus-visible:ring-acento/45 focus-visible:outline-none`}
+          >
+            Panel Reto OT-IT
+          </button>
+        ) : (
+          <span className={marca}>Panel Reto OT-IT</span>
+        )}
+        <BotonTema />
+      </header>
 
-      <section className="relative z-10 flex min-w-0 flex-[1_1_520px] flex-col justify-between gap-9 px-6 py-12 sm:px-16">
-        <div className="flex items-center gap-3">
-          <ShieldCheck
-            size={28}
-            aria-hidden="true"
-            className="text-[#174ea6]"
-          />
-          <span className="font-mono text-sm font-medium tracking-[0.08em] text-tinta">
-            INTEGRACIÓN SEGURA OT-IT
-          </span>
-        </div>
-
-        <div className="flex max-w-[480px] flex-col gap-[22px]">
-          <h1 className="text-3xl leading-[1.15] font-bold tracking-tight text-tinta sm:text-[38px]">
-            Del PLC a la nube, sin abrir la puerta equivocada.
+      <main className="mx-auto flex w-full max-w-[460px] flex-1 flex-col gap-8 px-4 pt-6 pb-12 sm:px-0">
+        <div>
+          <h1 className="text-[28px] leading-tight font-bold tracking-tight">
+            {titulo}
           </h1>
-          <p className="text-base leading-relaxed text-[#1d3a6b]">
-            Panel de monitoreo de las variables de los PLC Siemens, enviadas de
-            forma cifrada desde la red industrial.
-          </p>
-          <DiagramaFlujo />
+          <p className="mt-2 text-[13.5px] text-suave">{subtitulo}</p>
         </div>
 
-        <span className="font-mono text-xs font-medium text-tinta-suave">
-          Reto de Concentración · Tec de Monterrey · Siemens
-        </span>
-      </section>
+        {vista === 'login' && (
+          <VistaLogin
+            autenticar={autenticar}
+            alIniciarSesion={alIniciarSesion}
+            irOlvido={() => setVista('olvido')}
+            irCrear={() => setVista('crear')}
+          />
+        )}
+        {vista === 'olvido' && (
+          <VistaOlvido
+            recuperarClave={recuperarClave}
+            irLogin={() => setVista('login')}
+          />
+        )}
+        {vista === 'crear' && (
+          <VistaCrear
+            solicitarCuenta={solicitarCuenta}
+            irLogin={() => setVista('login')}
+          />
+        )}
+        {vista === 'restablecer' && tokenInicial && (
+          <VistaRestablecer
+            token={tokenInicial}
+            restablecerClave={restablecerClave}
+            irLogin={() => setVista('login')}
+          />
+        )}
 
-      <section className="relative z-10 flex min-w-0 flex-[1_1_600px] items-center justify-center px-4 py-12 sm:px-8">
-        <div className="w-full max-w-[540px] overflow-hidden rounded-[18px] border border-borde bg-white shadow-[0_18px_40px_rgba(11,47,107,0.2)]">
-          <div className="flex items-center gap-4 border-b-4 border-turquesa bg-[linear-gradient(135deg,#0b2f6b_0%,#1f5fd0_100%)] px-6 py-[34px] sm:px-11">
-            <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-[14px] border border-white/40 bg-white/15">
-              <WindowChartLine
-                size={34}
-                aria-hidden="true"
-                className="text-white"
-              />
-            </div>
-            <div className="flex flex-col gap-1">
-              <h2 className="text-[26px] leading-tight font-bold text-white sm:text-[30px]">
-                {titulo}
-              </h2>
-              <p className="text-base text-[#e3eeff]">{subtitulo}</p>
-            </div>
-          </div>
-
-          <div className="px-6 pt-10 pb-11 sm:px-11">
-            {vista === 'login' && (
-              <VistaLogin
-                autenticar={autenticar}
-                alIniciarSesion={alIniciarSesion}
-                irOlvido={() => setVista('olvido')}
-                irCrear={() => setVista('crear')}
-              />
-            )}
-            {vista === 'olvido' && (
-              <VistaOlvido
-                recuperarClave={recuperarClave}
-                irLogin={() => setVista('login')}
-              />
-            )}
-            {vista === 'crear' && (
-              <VistaCrear
-                solicitarCuenta={solicitarCuenta}
-                irLogin={() => setVista('login')}
-              />
-            )}
-            {vista === 'restablecer' && tokenInicial && (
-              <VistaRestablecer
-                token={tokenInicial}
-                restablecerClave={restablecerClave}
-                irLogin={() => setVista('login')}
-              />
-            )}
-          </div>
+        <div className="mt-4">
+          <CaminoZonas tamano="compacto" />
         </div>
-      </section>
+      </main>
     </div>
   )
 }

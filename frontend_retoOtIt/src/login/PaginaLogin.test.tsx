@@ -37,7 +37,7 @@ describe('PaginaLogin', () => {
   it('muestra el formulario de inicio de sesion', () => {
     preparar()
     expect(
-      screen.getByRole('heading', { name: 'Panel Reto OT-IT' }),
+      screen.getByRole('heading', { name: 'Entrar al panel' }),
     ).toBeInTheDocument()
     expect(screen.getByLabelText('Correo')).toBeInTheDocument()
     expect(screen.getByLabelText('Contraseña')).toBeInTheDocument()
@@ -46,11 +46,34 @@ describe('PaginaLogin', () => {
     ).toBeInTheDocument()
   })
 
-  it('muestra las cuatro zonas del flujo', () => {
+  it('muestra el camino de las cuatro zonas', () => {
     preparar()
-    for (const zona of ['OT', 'IDMZ', 'IT', 'NUBE']) {
+    for (const zona of ['OT', 'IDMZ', 'IT', 'Nube']) {
       expect(screen.getByText(zona)).toBeInTheDocument()
     }
+  })
+
+  it('abre directo en Crear cuenta si viene de la landing', () => {
+    preparar({ vistaInicial: 'crear' })
+    expect(
+      screen.getByRole('heading', { name: 'Crear cuenta' }),
+    ).toBeInTheDocument()
+  })
+
+  it('el nombre del panel lleva de vuelta al inicio si hay a donde volver', () => {
+    const alVolver = vi.fn()
+    preparar({ alVolver })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Panel Reto OT-IT, ir al inicio' }),
+    )
+    expect(alVolver).toHaveBeenCalledTimes(1)
+  })
+
+  it('sin a donde volver, el nombre del panel no es un botón', () => {
+    preparar()
+    expect(
+      screen.queryByRole('button', { name: /ir al inicio/ }),
+    ).not.toBeInTheDocument()
   })
 
   it('avisa si faltan el correo o la contrasena', () => {
@@ -189,7 +212,7 @@ describe('PaginaLogin', () => {
         screen.getByRole('button', { name: 'Volver a iniciar sesión' }),
       )
       expect(
-        screen.getByRole('heading', { name: 'Panel Reto OT-IT' }),
+        screen.getByRole('heading', { name: 'Entrar al panel' }),
       ).toBeInTheDocument()
     })
 

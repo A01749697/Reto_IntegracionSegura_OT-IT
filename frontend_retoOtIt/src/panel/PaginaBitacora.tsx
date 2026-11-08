@@ -5,6 +5,8 @@ import type {
   ResultadoBitacora,
   ResultadoExportar,
 } from './apiBitacora'
+import { boton, TARJETA } from '../comun/estilos'
+import Segmentos from '../comun/Segmentos'
 import MarcoPanel from './MarcoPanel'
 import { fechaHora } from './tiempo'
 
@@ -12,13 +14,12 @@ type Props = {
   listar: (grupo: GrupoBitacora, antes?: number) => Promise<ResultadoBitacora>
   exportar: (grupo: GrupoBitacora) => Promise<ResultadoExportar>
   descargar: (nombre: string, archivo: Blob) => void
-  volver: () => void
   sesionCaducada: () => void
 }
 
-const FILTROS: { grupo: GrupoBitacora; texto: string }[] = [
-  { grupo: 'todos', texto: 'Todo' },
-  { grupo: 'alertas', texto: 'Alertas' },
+const FILTROS: { valor: GrupoBitacora; texto: string }[] = [
+  { valor: 'todos', texto: 'Todo' },
+  { valor: 'alertas', texto: 'Alertas' },
 ]
 
 const DESCRIPCIONES: Record<string, string> = {
@@ -55,9 +56,6 @@ const ALERTAS = new Set([
   'cambio_contrasena_fallido',
 ])
 
-const BOTON =
-  'h-11 cursor-pointer rounded-lg border-2 border-azul-idmz px-5 text-[15px] font-semibold focus-visible:ring-[3px] focus-visible:ring-turquesa/45 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60'
-
 function describir(evento: EventoBitacora) {
   const texto = DESCRIPCIONES[evento.tipo] ?? evento.tipo
   return evento.actorCorreo ? `${texto} por ${evento.actorCorreo}` : texto
@@ -70,7 +68,6 @@ export default function PaginaBitacora({
   listar,
   exportar,
   descargar,
-  volver,
   sesionCaducada,
 }: Props) {
   const [grupo, setGrupo] = useState<GrupoBitacora>('todos')
@@ -168,31 +165,15 @@ export default function PaginaBitacora({
   }
 
   return (
-    <MarcoPanel titulo="Bitácora de seguridad" volver={volver}>
+    <MarcoPanel titulo="Bitácora de seguridad">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex gap-2" role="group" aria-label="Filtro">
-          {FILTROS.map(({ grupo: g, texto }) => (
-            <button
-              key={g}
-              type="button"
-              aria-pressed={grupo === g}
-              onClick={() => cambiarGrupo(g)}
-              className={`${BOTON} ${
-                grupo === g
-                  ? 'bg-[#174ea6] text-white'
-                  : 'bg-white text-[#174ea6] hover:bg-[#eef4ff]'
-              }`}
-            >
-              {texto}
-            </button>
-          ))}
-        </div>
+        <Segmentos opciones={FILTROS} valor={grupo} alCambiar={cambiarGrupo} />
         <div className="flex gap-2">
           <button
             type="button"
             disabled={exportando}
             onClick={descargarCsv}
-            className={`${BOTON} bg-white text-[#174ea6] hover:bg-[#eef4ff]`}
+            className={boton('neutro')}
           >
             {exportando ? 'Descargando...' : 'Descargar CSV'}
           </button>
@@ -200,7 +181,7 @@ export default function PaginaBitacora({
             type="button"
             disabled={cargando}
             onClick={() => setVersion((v) => v + 1)}
-            className={`${BOTON} bg-white text-[#174ea6] hover:bg-[#eef4ff]`}
+            className={boton('neutro')}
           >
             Actualizar
           </button>
@@ -210,16 +191,16 @@ export default function PaginaBitacora({
       {aviso && (
         <p
           role={aviso.error ? 'alert' : 'status'}
-          className={`text-[15px] ${aviso.error ? 'text-[#8a1c26]' : 'text-[#064e4e]'}`}
+          className={`text-[14px] ${aviso.error ? 'text-alerta' : 'text-ok'}`}
         >
           {aviso.texto}
         </p>
       )}
 
-      {cargando && <p className="text-tinta-suave">Cargando...</p>}
+      {cargando && <p className="text-suave">Cargando...</p>}
 
       {!cargando && !carga.datos && (
-        <p role="alert" className="text-[15px] text-[#8a1c26]">
+        <p role="alert" className="text-[14px] text-alerta">
           No se pudo cargar la bitácora. Inténtalo otra vez.
         </p>
       )}
@@ -227,37 +208,37 @@ export default function PaginaBitacora({
       {!cargando && carga.datos && (
         <>
           {carga.datos.eventos.length === 0 && (
-            <p className="text-tinta-suave">
+            <p className="text-suave">
               {grupo === 'alertas'
                 ? 'No hay alertas registradas.'
                 : 'Todavía no hay eventos registrados.'}
             </p>
           )}
-          <ul className="flex flex-col gap-3">
+          <ul className={`${TARJETA} flex flex-col`}>
             {carga.datos.eventos.map((evento) => (
               <li
                 key={evento.id}
-                className="flex flex-col gap-1 rounded-xl border border-borde bg-campo px-5 py-4"
+                className="flex flex-col gap-0.5 border-b border-linea px-5 py-3.5 last:border-b-0"
               >
-                <p className="flex flex-wrap items-center gap-2 text-[16px] font-semibold">
+                <p className="flex flex-wrap items-center gap-2 text-[14px] font-bold">
                   <span>{describir(evento)}</span>
                   {ALERTAS.has(evento.tipo) && (
-                    <span className="rounded-md bg-[#fdecee] px-2 py-0.5 text-[13px] font-semibold text-[#8a1c26]">
+                    <span className="rounded-[5px] bg-alerta/15 px-2 py-0.5 text-[12px] font-bold text-alerta">
                       Alerta
                     </span>
                   )}
                 </p>
-                <p className="text-[15px] break-all text-tinta-suave">
+                <p className="text-[13px] break-all text-suave">
                   {evento.correo ?? 'Sin correo'} · {evento.ip ?? 'Sin IP'}
                 </p>
-                <p className="text-[14px] text-gris-azul">
+                <p className="text-[12.5px] text-suave">
                   {fechaHora(evento.ocurrioEn)}
                 </p>
               </li>
             ))}
           </ul>
           {errorMas && (
-            <p role="alert" className="text-[15px] text-[#8a1c26]">
+            <p role="alert" className="text-[14px] text-alerta">
               No se pudieron cargar más eventos. Inténtalo otra vez.
             </p>
           )}
@@ -266,7 +247,7 @@ export default function PaginaBitacora({
               type="button"
               disabled={cargandoMas}
               onClick={cargarMas}
-              className={`${BOTON} self-center bg-white text-[#174ea6] hover:bg-[#eef4ff]`}
+              className={`${boton('neutro')} self-center`}
             >
               {cargandoMas ? 'Cargando...' : 'Cargar más'}
             </button>

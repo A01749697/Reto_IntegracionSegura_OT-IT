@@ -24,21 +24,21 @@ export default function CampoTexto({
   ...resto
 }: Props) {
   return (
-    <div className="flex flex-col gap-2">
-      <label htmlFor={id} className="text-base font-semibold text-tinta">
+    <div className="flex flex-col gap-1.5">
+      <label htmlFor={id} className="text-[13px] font-semibold text-texto">
         {etiqueta}
       </label>
       <div className="relative">
         <Icono
-          size={20}
+          size={18}
           aria-hidden="true"
-          className="pointer-events-none absolute top-[19px] left-4 text-gris-azul"
+          className="pointer-events-none absolute top-[13px] left-3.5 text-suave"
         />
         <input
           id={id}
           value={valor}
           onChange={(e) => alCambiar(e.target.value)}
-          className={`h-[58px] w-full rounded-[10px] border border-borde bg-campo pl-[52px] text-[17px] text-tinta outline-none placeholder:text-[#5a6f8f] hover:border-[#7f9cc9] focus:border-turquesa focus:bg-white focus:ring-[3px] focus:ring-turquesa/30 ${derecha ? 'pr-[58px]' : 'pr-4'}`}
+          className={`h-11 w-full rounded-lg border-[1.5px] border-linea bg-campo pl-11 text-[14px] text-texto outline-none placeholder:text-suave hover:border-suave focus:border-acento focus:ring-[3px] focus:ring-acento/30 ${derecha ? 'pr-12' : 'pr-3.5'}`}
           {...resto}
         />
         {derecha}

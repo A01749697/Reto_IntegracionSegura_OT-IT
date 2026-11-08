@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import FondoOnda from './comun/FondoOnda'
+import PaginaLanding from './landing/PaginaLanding'
 import {
   cerrarSesion,
   crearCuenta,
@@ -18,6 +20,7 @@ import {
 import { exportarBitacora, listarBitacora } from './panel/apiBitacora'
 import { cambiarContrasena } from './panel/apiCuenta'
 import { obtenerEstado } from './panel/apiSistema'
+import EncabezadoPanel, { type Seccion } from './panel/EncabezadoPanel'
 import PaginaAdministracion from './panel/PaginaAdministracion'
 import PaginaBitacora from './panel/PaginaBitacora'
 import { descargarArchivo } from './panel/descarga'
@@ -30,14 +33,22 @@ function leerCodigoDelEnlace(): string | undefined {
   return /^#restablecer=([0-9a-f]{64})$/.exec(window.location.hash)?.[1]
 }
 
-type Pantalla = 'inicio' | 'cuentas' | 'bitacora' | 'estado' | 'cuenta'
+// Lo que se ve sin sesion.
+type Publica = 'landing' | 'login' | 'crear'
 
-function App() {
+function Contenido() {
   const [codigo, setCodigo] = useState(leerCodigoDelEnlace)
   const [sesion, setSesion] = useState<Usuario | null | 'cargando'>('cargando')
-  const [pantalla, setPantalla] = useState<Pantalla>('inicio')
+  const [pantalla, setPantalla] = useState<Seccion>('inicio')
+  // con el enlace del correo se entra directo al formulario, sin pasar por la landing
+  const [publica, setPublica] = useState<Publica>(() =>
+    leerCodigoDelEnlace() ? 'login' : 'landing',
+  )
+
+  // la sesion se vencio: se vuelve al login
   const alCaducarSesion = useCallback(() => {
     setPantalla('inicio')
+    setPublica('login')
     setSesion(null)
   }, [])
 
@@ -66,88 +77,110 @@ function App() {
     return (
       <p
         role="status"
-        className="flex min-h-screen items-center justify-center bg-[#dbe8fd] font-sans text-tinta-suave"
+        className="flex min-h-screen items-center justify-center font-sans text-suave"
       >
         Cargando...
       </p>
     )
   }
 
-  if (sesion && pantalla === 'cuentas' && sesion.rol === 'administrador') {
+  if (!sesion) {
+    if (publica === 'landing') {
+      return (
+        <PaginaLanding
+          irLogin={() => setPublica('login')}
+          irCrear={() => setPublica('crear')}
+        />
+      )
+    }
     return (
+      <PaginaLogin
+        autenticar={entrar}
+        solicitarCuenta={crearCuenta}
+        recuperarClave={pedirReinicio}
+        restablecerClave={restablecer}
+        alIniciarSesion={(usuario) => {
+          setCodigo(undefined)
+          setSesion(usuario)
+        }}
+        tokenInicial={codigo}
+        vistaInicial={publica === 'crear' ? 'crear' : 'login'}
+        alVolver={() => setPublica('landing')}
+      />
+    )
+  }
+
+  const esAdmin = sesion.rol === 'administrador'
+  // si alguien sin permiso llega a una pantalla de administracion, ve el inicio
+  const seccion: Seccion =
+    (pantalla === 'cuentas' || pantalla === 'bitacora') && !esAdmin
+      ? 'inicio'
+      : pantalla
+
+  let contenido: ReactNode
+  if (seccion === 'cuentas') {
+    contenido = (
       <PaginaAdministracion
         listar={listarCuentas}
         decidir={decidirCuenta}
         desbloquear={desbloquearCuenta}
         hacerAdministrador={hacerAdministrador}
-        volver={() => setPantalla('inicio')}
         sesionCaducada={alCaducarSesion}
       />
     )
-  }
-
-  if (sesion && pantalla === 'bitacora' && sesion.rol === 'administrador') {
-    return (
+  } else if (seccion === 'bitacora') {
+    contenido = (
       <PaginaBitacora
         listar={listarBitacora}
         exportar={exportarBitacora}
         descargar={descargarArchivo}
-        volver={() => setPantalla('inicio')}
         sesionCaducada={alCaducarSesion}
       />
     )
-  }
-
-  if (sesion && pantalla === 'estado') {
-    return (
-      <PaginaEstado
-        obtener={obtenerEstado}
-        volver={() => setPantalla('inicio')}
-        sesionCaducada={alCaducarSesion}
-      />
+  } else if (seccion === 'estado') {
+    contenido = (
+      <PaginaEstado obtener={obtenerEstado} sesionCaducada={alCaducarSesion} />
     )
-  }
-
-  if (sesion && pantalla === 'cuenta') {
-    return (
+  } else if (seccion === 'cuenta') {
+    contenido = (
       <PaginaMiCuenta
         usuario={sesion}
         cambiar={cambiarContrasena}
-        volver={() => setPantalla('inicio')}
         sesionCaducada={alCaducarSesion}
       />
     )
-  }
-
-  if (sesion) {
-    return (
-      <PaginaInicio
-        usuario={sesion}
-        irCuentas={() => setPantalla('cuentas')}
-        irBitacora={() => setPantalla('bitacora')}
-        irEstado={() => setPantalla('estado')}
-        irCuenta={() => setPantalla('cuenta')}
-        cerrarSesion={async () => {
-          const cerrada = await cerrarSesion()
-          if (cerrada) alCaducarSesion()
-          return cerrada
-        }}
-      />
-    )
+  } else {
+    contenido = <PaginaInicio usuario={sesion} />
   }
 
   return (
-    <PaginaLogin
-      autenticar={entrar}
-      solicitarCuenta={crearCuenta}
-      recuperarClave={pedirReinicio}
-      restablecerClave={restablecer}
-      alIniciarSesion={(usuario) => {
-        setCodigo(undefined)
-        setSesion(usuario)
-      }}
-      tokenInicial={codigo}
-    />
+    <div className="min-h-screen font-sans text-texto">
+      <EncabezadoPanel
+        usuario={sesion}
+        actual={seccion}
+        irA={setPantalla}
+        cerrarSesion={async () => {
+          const cerrada = await cerrarSesion()
+          if (cerrada) {
+            setPantalla('inicio')
+            setPublica('landing')
+            setSesion(null)
+          }
+          return cerrada
+        }}
+      />
+      {contenido}
+    </div>
+  )
+}
+
+// El fondo de onda va detras de todas las pantallas.
+function App() {
+  return (
+    <>
+      <FondoOnda />
+      <Contenido />
+    </>
   )
 }
 

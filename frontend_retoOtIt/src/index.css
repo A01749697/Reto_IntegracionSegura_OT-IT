@@ -1,26 +1,30 @@
 @import 'tailwindcss';
 
+/* Los colores cambian con el modo; las utilidades (bg-fondo, text-suave...) leen estas variables. */
+@theme inline {
+  --font-sans: 'JetBrains Mono', ui-monospace, monospace;
+  --font-mono: 'JetBrains Mono', ui-monospace, monospace;
+
+  --color-fondo: var(--c-fondo);
+  --color-panel: var(--c-panel);
+  --color-linea: var(--c-linea);
+  --color-texto: var(--c-texto);
+  --color-suave: var(--c-suave);
+  --color-campo: var(--c-campo);
+  --color-acento: var(--c-acento);
+  --color-sobre: var(--c-sobre);
+  --color-alerta: var(--c-alerta);
+  --color-ok: var(--c-ok);
+  --color-info: var(--c-info);
+
+  /* Un color por zona de la red */
+  --color-zona-ot: var(--c-ot);
+  --color-zona-idmz: var(--c-idmz);
+  --color-zona-it: var(--c-it);
+  --color-zona-nube: var(--c-nube);
+}
+
 @theme {
-  --font-sans: 'IBM Plex Sans', system-ui, sans-serif;
-  --font-mono: 'IBM Plex Mono', ui-monospace, monospace;
-
-  /* Escala de azules: de la planta (oscuro) a la nube (claro) */
-  --color-tinta: #0a2a5e;
-  --color-tinta-suave: #25457a;
-  --color-gris-azul: #3d5680;
-  --color-azul-ot: #0b2f6b;
-  --color-azul-idmz: #1f5fd0;
-  --color-azul-it: #6fa5f2;
-  --color-azul-claro: #bcd5fb;
-  --color-azul-marino: #06214d;
-
-  /* Acento: conexion segura */
-  --color-turquesa: #0fa3a3;
-  --color-turquesa-oscuro: #0b7a7a;
-
-  --color-borde: #b7c8e3;
-  --color-campo: #f3f8ff;
-
   --animate-flujo: flujo 1.2s linear infinite;
 
   @keyframes flujo {
@@ -30,7 +34,69 @@
   }
 }
 
+:root,
+:root[data-tema='oscuro'] {
+  color-scheme: dark;
+  --c-fondo: #0e1013;
+  --c-panel: #161a20;
+  --c-linea: #262c35;
+  --c-texto: #eceff3;
+  --c-suave: #98a2af;
+  --c-campo: #0b0d10;
+  --c-acento: #2ec4b6;
+  --c-sobre: #04201d;
+  --c-alerta: #ff7a6e;
+  --c-ok: #4fd8c8;
+  --c-info: #7cbcff;
+  --c-ot: #f0705a;
+  --c-idmz: #a08cff;
+  --c-it: #2ec4b6;
+  --c-nube: #62b0ff;
+}
+
+:root[data-tema='claro'] {
+  color-scheme: light;
+  --c-fondo: #eef0f3;
+  --c-panel: #ffffff;
+  --c-linea: #d6dbe2;
+  --c-texto: #12161c;
+  --c-suave: #586270;
+  --c-campo: #f7f8fa;
+  --c-acento: #0a7b71;
+  --c-sobre: #ffffff;
+  --c-alerta: #b32a1c;
+  --c-ok: #0a6a62;
+  --c-info: #1a64b8;
+  --c-ot: #d6452d;
+  --c-idmz: #6d57e0;
+  --c-it: #0d8a7e;
+  --c-nube: #1f78d1;
+}
+
+/* Sin elección guardada, se sigue al sistema (el script de index.html la fija antes de pintar). */
+@media (prefers-color-scheme: light) {
+  :root:not([data-tema]) {
+    color-scheme: light;
+    --c-fondo: #eef0f3;
+    --c-panel: #ffffff;
+    --c-linea: #d6dbe2;
+    --c-texto: #12161c;
+    --c-suave: #586270;
+    --c-campo: #f7f8fa;
+    --c-acento: #0a7b71;
+    --c-sobre: #ffffff;
+    --c-alerta: #b32a1c;
+    --c-ok: #0a6a62;
+    --c-info: #1a64b8;
+    --c-ot: #d6452d;
+    --c-idmz: #6d57e0;
+    --c-it: #0d8a7e;
+    --c-nube: #1f78d1;
+  }
+}
+
 body {
   margin: 0;
-  background: #dbe8fd;
+  background: var(--c-fondo);
+  color: var(--c-texto);
 }

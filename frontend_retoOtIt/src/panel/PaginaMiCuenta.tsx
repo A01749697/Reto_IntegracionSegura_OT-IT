@@ -1,5 +1,6 @@
 import { useState, type FormEvent } from 'react'
 import { AlertCircle, CheckCircle, Lock } from 'reicon-react'
+import { avisoClases, boton } from '../comun/estilos'
 import CampoTexto from '../login/CampoTexto'
 import type { Usuario } from '../login/apiPanel'
 import type { ResultadoCambioClave } from './apiCuenta'
@@ -8,7 +9,6 @@ import MarcoPanel from './MarcoPanel'
 type Props = {
   usuario: Usuario
   cambiar: (actual: string, nueva: string) => Promise<ResultadoCambioClave>
-  volver: () => void
   sesionCaducada: () => void
 }
 
@@ -30,7 +30,6 @@ const MENSAJES: Record<
 export default function PaginaMiCuenta({
   usuario,
   cambiar,
-  volver,
   sesionCaducada,
 }: Props) {
   const [actual, setActual] = useState('')
@@ -88,8 +87,8 @@ export default function PaginaMiCuenta({
   const tipo = ver ? 'text' : 'password'
 
   return (
-    <MarcoPanel titulo="Mi cuenta" volver={volver}>
-      <dl className="flex flex-col gap-1 text-[17px] text-tinta-suave">
+    <MarcoPanel titulo="Mi cuenta">
+      <dl className="flex flex-col gap-1 text-[14px] text-suave">
         <div className="flex gap-2">
           <dt className="font-semibold">Nombre:</dt>
           <dd>{usuario.nombre}</dd>
@@ -108,18 +107,14 @@ export default function PaginaMiCuenta({
         onSubmit={enviar}
         noValidate
         aria-label="Cambiar contraseña"
-        className="flex flex-col gap-[22px]"
+        className="flex max-w-[460px] flex-col gap-5"
       >
-        <h2 className="text-[19px] font-bold">Cambiar contraseña</h2>
+        <h2 className="text-[18px] font-bold">Cambiar contraseña</h2>
 
         {aviso && (
           <div
             role={aviso.error ? 'alert' : 'status'}
-            className={`flex items-start gap-2.5 rounded-lg border px-3.5 py-3 text-[15px] leading-snug ${
-              aviso.error
-                ? 'border-[#e5848c] bg-[#fdecee] text-[#8a1c26]'
-                : 'border-turquesa bg-[#e6f6f6] text-[#064e4e]'
-            }`}
+            className={avisoClases(aviso.error)}
           >
             {aviso.error ? (
               <AlertCircle
@@ -167,12 +162,12 @@ export default function PaginaMiCuenta({
           autoComplete="new-password"
         />
 
-        <label className="flex cursor-pointer items-center gap-2 text-[15px]">
+        <label className="flex cursor-pointer items-center gap-2 text-[13.5px]">
           <input
             type="checkbox"
             checked={ver}
             onChange={(e) => setVer(e.target.checked)}
-            className="h-5 w-5"
+            className="h-4 w-4 accent-acento"
           />
           Mostrar contraseñas
         </label>
@@ -180,7 +175,7 @@ export default function PaginaMiCuenta({
         <button
           type="submit"
           disabled={enviando}
-          className="flex h-[58px] w-full cursor-pointer items-center justify-center rounded-[10px] bg-[linear-gradient(90deg,#174ea6,#2f6fe0)] text-[17px] font-semibold text-white hover:bg-[linear-gradient(90deg,#123f86,#2560c8)] focus-visible:ring-[3px] focus-visible:ring-turquesa/45 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-75"
+          className={`${boton('principal', 'grande')} w-full`}
         >
           {enviando ? 'Guardando...' : 'Cambiar contraseña'}
         </button>

@@ -16,7 +16,6 @@ function preparar(respuesta: ResultadoCambioClave = { ok: true }) {
     cambiar: vi
       .fn<(a: string, n: string) => Promise<ResultadoCambioClave>>()
       .mockResolvedValue(respuesta),
-    volver: vi.fn(),
     sesionCaducada: vi.fn(),
   }
   render(<PaginaMiCuenta {...props} />)
@@ -114,11 +113,5 @@ describe('PaginaMiCuenta', () => {
     expect(campo).toHaveAttribute('type', 'password')
     fireEvent.click(screen.getByLabelText('Mostrar contraseñas'))
     expect(campo).toHaveAttribute('type', 'text')
-  })
-
-  it('vuelve al inicio con el botón Volver', () => {
-    const props = preparar()
-    fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
-    expect(props.volver).toHaveBeenCalledTimes(1)
   })
 })

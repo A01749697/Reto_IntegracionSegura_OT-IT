@@ -27,7 +27,6 @@ const estadoBase: EstadoSistema = {
 function preparar(respuesta: ResultadoEstado) {
   const props = {
     obtener: vi.fn().mockResolvedValue(respuesta),
-    volver: vi.fn(),
     sesionCaducada: vi.fn(),
   }
   render(<PaginaEstado {...props} />)
@@ -104,12 +103,5 @@ describe('PaginaEstado', () => {
   it('avisa a la app cuando la sesión caducó', async () => {
     const props = preparar({ ok: false, motivo: 'sesion' })
     await waitFor(() => expect(props.sesionCaducada).toHaveBeenCalledTimes(1))
-  })
-
-  it('vuelve al inicio con el botón Volver', async () => {
-    const props = preparar({ ok: true, estado: estadoBase })
-    await screen.findByText('API del panel')
-    fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
-    expect(props.volver).toHaveBeenCalledTimes(1)
   })
 })

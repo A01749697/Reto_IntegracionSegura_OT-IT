@@ -31,7 +31,6 @@ function preparar(cuentasPorEstado: Partial<Record<FiltroCuentas, Cuenta[]>>) {
     decidir: vi.fn().mockResolvedValue({ ok: true }),
     desbloquear: vi.fn().mockResolvedValue({ ok: true }),
     hacerAdministrador: vi.fn().mockResolvedValue({ ok: true }),
-    volver: vi.fn(),
     sesionCaducada: vi.fn(),
   }
   render(<PaginaAdministracion {...props} />)
@@ -161,7 +160,6 @@ describe('PaginaAdministracion', () => {
       decidir: vi.fn(),
       desbloquear: vi.fn(),
       hacerAdministrador: vi.fn(),
-      volver: vi.fn(),
       sesionCaducada: vi.fn(),
     }
     render(<PaginaAdministracion {...props} />)
@@ -176,7 +174,6 @@ describe('PaginaAdministracion', () => {
       decidir: vi.fn(),
       desbloquear: vi.fn(),
       hacerAdministrador: vi.fn(),
-      volver: vi.fn(),
       sesionCaducada: vi.fn(),
     }
     render(<PaginaAdministracion {...props} />)
@@ -190,13 +187,6 @@ describe('PaginaAdministracion', () => {
       await screen.findByRole('button', { name: 'Aprobar a Ana Lopez' }),
     )
     await waitFor(() => expect(props.sesionCaducada).toHaveBeenCalledTimes(1))
-  })
-
-  it('vuelve al inicio con el boton Volver', async () => {
-    const props = preparar({})
-    await screen.findByText('No hay cuentas pendientes.')
-    fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
-    expect(props.volver).toHaveBeenCalledTimes(1)
   })
 
   it('desactiva y reactiva con su propio aviso', async () => {
@@ -366,5 +356,85 @@ describe('PaginaAdministracion', () => {
       await screen.findByRole('button', { name: 'Desbloquear a Ana Lopez' }),
     )
     await waitFor(() => expect(props.sesionCaducada).toHaveBeenCalledTimes(1))
+  })
+})
+
+describe('buscador por nombre', () => {
+  const tomas: Cuenta = {
+    ...ana,
+    id: 6,
+    nombre: 'Tomás Beltrán',
+    correo: 'tomas@ejemplo.com',
+  }
+  const buscar = (texto: string) =>
+    fireEvent.change(
+      screen.getByRole('searchbox', { name: 'Buscar por nombre' }),
+      {
+        target: { value: texto },
+      },
+    )
+
+  it('deja solo las cuentas cuyo nombre coincide', async () => {
+    preparar({ pendiente: [ana, tomas] })
+    await screen.findByText('Ana Lopez')
+    buscar('ana')
+    expect(screen.getByText('Ana Lopez')).toBeInTheDocument()
+    expect(screen.queryByText('Tomás Beltrán')).not.toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      '1 de 2 cuentas con «ana»',
+    )
+  })
+
+  it('no distingue acentos ni mayúsculas', async () => {
+    preparar({ pendiente: [ana, tomas] })
+    await screen.findByText('Ana Lopez')
+    buscar('TOMAS')
+    expect(screen.getByText('Tomás Beltrán')).toBeInTheDocument()
+    expect(screen.queryByText('Ana Lopez')).not.toBeInTheDocument()
+  })
+
+  it('busca solo por nombre, no por correo', async () => {
+    preparar({ pendiente: [ana, tomas] })
+    await screen.findByText('Ana Lopez')
+    buscar('ejemplo.com')
+    expect(
+      screen.getByText(/Nadie coincide con «ejemplo.com»/),
+    ).toBeInTheDocument()
+  })
+
+  it('avisa cuando nadie coincide y vuelve la lista al borrar', async () => {
+    preparar({ pendiente: [ana, tomas] })
+    await screen.findByText('Ana Lopez')
+    buscar('zzz')
+    expect(screen.getByText(/Nadie coincide con «zzz»/)).toBeInTheDocument()
+    expect(screen.queryByText('Ana Lopez')).not.toBeInTheDocument()
+    buscar('')
+    expect(screen.getByText('Ana Lopez')).toBeInTheDocument()
+    expect(screen.getByText('Tomás Beltrán')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('2 cuentas')
+  })
+
+  it('la búsqueda se mantiene al cambiar de filtro', async () => {
+    preparar({
+      pendiente: [ana],
+      aprobado: [jefe, { ...tomas, estado: 'aprobado' }],
+    })
+    await screen.findByText('Ana Lopez')
+    buscar('tomas')
+    fireEvent.click(screen.getByRole('button', { name: 'Aprobadas' }))
+    expect(await screen.findByText('Tomás Beltrán')).toBeInTheDocument()
+    expect(screen.queryByText('Eduardo Serrano')).not.toBeInTheDocument()
+  })
+
+  it('los botones de cada cuenta siguen funcionando con la lista filtrada', async () => {
+    const props = preparar({ pendiente: [ana, tomas] })
+    await screen.findByText('Ana Lopez')
+    buscar('tomas')
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Aprobar a Tomás Beltrán' }),
+    )
+    await waitFor(() =>
+      expect(props.decidir).toHaveBeenCalledWith(6, 'aprobado'),
+    )
   })
 })

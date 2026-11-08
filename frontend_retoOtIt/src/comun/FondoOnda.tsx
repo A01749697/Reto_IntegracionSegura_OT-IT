@@ -38,43 +38,44 @@ function crearMalla() {
   for (let x = LIMITE.x0 - 200; x < LIMITE.x1 + 200; x += PASO) xs.push(x)
 
   const normales: string[] = []
-  const turquesa: string[] = []
+  const acento: string[] = []
   let indice = 0
   for (let c = -1500; c < 1700; c += SEPARACION) {
     const d = trazar(xs.map((x): Punto => [x, x - c]))
-    if (d) (indice % 7 === 3 ? turquesa : normales).push(d)
+    if (d) (indice % 7 === 3 ? acento : normales).push(d)
     indice += 1
   }
   for (let c = -300; c < 3000; c += SEPARACION) {
     const d = trazar(xs.map((x): Punto => [x, c - x]))
     if (d) normales.push(d)
   }
-  return { normales: normales.join(' '), turquesa: turquesa.join(' ') }
+  return { normales: normales.join(' '), acento: acento.join(' ') }
 }
 
 const MALLA = crearMalla()
 
+// Va detras de todas las pantallas; los colores salen del tema, asi sirve en claro y oscuro.
 export default function FondoOnda() {
   return (
     <svg
       viewBox={`0 0 ${ANCHO} ${ALTO}`}
       preserveAspectRatio="xMidYMid slice"
       aria-hidden="true"
-      className="pointer-events-none absolute inset-0 h-full w-full"
+      className="pointer-events-none fixed inset-0 -z-10 h-full w-full"
     >
       <path
         d={MALLA.normales}
         fill="none"
-        stroke="#1f5fd0"
+        className="stroke-suave"
         strokeOpacity={0.17}
         strokeWidth={1.1}
         vectorEffect="non-scaling-stroke"
       />
       <path
-        d={MALLA.turquesa}
+        d={MALLA.acento}
         fill="none"
-        stroke="#0fa3a3"
-        strokeOpacity={0.38}
+        className="stroke-acento"
+        strokeOpacity={0.4}
         strokeWidth={1.4}
         vectorEffect="non-scaling-stroke"
       />
