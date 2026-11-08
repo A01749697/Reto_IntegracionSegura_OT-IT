@@ -45,41 +45,65 @@ const usuario: api.Usuario = {
 
 const codigo = 'ab12'.repeat(16)
 
+const TITULO_LANDING = 'Tus datos de planta, seguros hasta la nube'
+
 beforeEach(() => {
   vi.resetAllMocks()
   vi.mocked(api.obtenerSesion).mockResolvedValue(null)
   window.history.replaceState(null, '', '/')
 })
 
-describe('App', () => {
-  it('muestra el login cuando no hay sesion', async () => {
+// Sin sesion se ve la landing; esto avanza hasta el formulario de entrada.
+async function irAlLogin() {
+  render(<App />)
+  fireEvent.click(await screen.findByRole('button', { name: 'Iniciar sesión' }))
+  return screen.findByLabelText('Correo')
+}
+
+const irA = (nombre: string) =>
+  fireEvent.click(screen.getByRole('button', { name: nombre }))
+
+describe('App sin sesión', () => {
+  it('muestra la página de inicio cuando no hay sesión', async () => {
     render(<App />)
     expect(
-      await screen.findByRole('heading', { name: 'Panel Reto OT-IT' }),
+      await screen.findByRole('heading', { name: TITULO_LANDING }),
     ).toBeInTheDocument()
-    expect(screen.getByLabelText('Correo')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Correo')).not.toBeInTheDocument()
   })
 
   it('muestra una pantalla de carga mientras revisa la sesion', async () => {
     render(<App />)
     expect(screen.getByRole('status')).toHaveTextContent('Cargando')
-    await screen.findByLabelText('Correo')
+    await screen.findByRole('heading', { name: TITULO_LANDING })
   })
 
-  it('muestra el panel cuando ya hay sesion', async () => {
-    vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
-    render(<App />)
+  it('Iniciar sesión lleva al formulario de entrada', async () => {
+    await irAlLogin()
     expect(
-      await screen.findByRole('heading', { name: 'Sesión iniciada' }),
+      screen.getByRole('heading', { name: 'Entrar al panel' }),
     ).toBeInTheDocument()
-    expect(screen.getByText('Eduardo Serrano')).toBeInTheDocument()
-    expect(screen.getByText('administrador')).toBeInTheDocument()
+  })
+
+  it('Crear cuenta lleva directo al formulario de solicitud', async () => {
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Crear cuenta' }))
+    expect(
+      await screen.findByRole('heading', { name: 'Crear cuenta' }),
+    ).toBeInTheDocument()
+  })
+
+  it('desde el login se puede volver a la página de inicio', async () => {
+    await irAlLogin()
+    irA('Panel Reto OT-IT, ir al inicio')
+    expect(
+      await screen.findByRole('heading', { name: TITULO_LANDING }),
+    ).toBeInTheDocument()
   })
 
   it('pasa del login al panel al entrar', async () => {
     vi.mocked(api.entrar).mockResolvedValue({ ok: true, usuario })
-    render(<App />)
-    fireEvent.change(await screen.findByLabelText('Correo'), {
+    fireEvent.change(await irAlLogin(), {
       target: { value: 'eduardo@ejemplo.com' },
     })
     fireEvent.change(screen.getByLabelText('Contraseña'), {
@@ -87,7 +111,7 @@ describe('App', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
     expect(
-      await screen.findByRole('heading', { name: 'Sesión iniciada' }),
+      await screen.findByRole('heading', { name: 'Inicio' }),
     ).toBeInTheDocument()
     expect(api.entrar).toHaveBeenCalledWith(
       'eduardo@ejemplo.com',
@@ -95,32 +119,7 @@ describe('App', () => {
     )
   })
 
-  it('vuelve al login al cerrar la sesion', async () => {
-    vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
-    vi.mocked(api.cerrarSesion).mockResolvedValue(true)
-    render(<App />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Cerrar sesión' }),
-    )
-    expect(await screen.findByLabelText('Correo')).toBeInTheDocument()
-  })
-
-  it('avisa y se queda en el panel si no se pudo cerrar la sesion', async () => {
-    vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
-    vi.mocked(api.cerrarSesion).mockResolvedValue(false)
-    render(<App />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Cerrar sesión' }),
-    )
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'No se pudo cerrar la sesión',
-    )
-    expect(
-      screen.getByRole('heading', { name: 'Sesión iniciada' }),
-    ).toBeInTheDocument()
-  })
-
-  it('abre la contrasena nueva con el codigo del enlace y lo quita de la barra', async () => {
+  it('abre la contrasena nueva con el codigo del enlace sin pasar por la página de inicio', async () => {
     vi.mocked(api.restablecer).mockResolvedValue({ ok: true })
     window.history.replaceState(null, '', `/#restablecer=${codigo}`)
     render(<App />)
@@ -144,25 +143,66 @@ describe('App', () => {
   it('ignora un enlace con el codigo mal formado', async () => {
     window.history.replaceState(null, '', '/#restablecer=corto')
     render(<App />)
-    await screen.findByLabelText('Correo')
+    expect(
+      await screen.findByRole('heading', { name: TITULO_LANDING }),
+    ).toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { name: 'Contraseña nueva' }),
     ).not.toBeInTheDocument()
   })
+})
 
-  it('abre la pantalla de cuentas y vuelve al inicio', async () => {
+describe('App con sesión', () => {
+  it('muestra el inicio con el encabezado y los datos de la sesión', async () => {
+    vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
+    render(<App />)
+    expect(
+      await screen.findByRole('heading', { name: 'Inicio' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('navigation', { name: 'Secciones' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('eduardo@ejemplo.com')).toBeInTheDocument()
+    expect(screen.getAllByText('Eduardo Serrano').length).toBeGreaterThan(0)
+  })
+
+  it('Salir cierra la sesión y vuelve a la página de inicio', async () => {
+    vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
+    vi.mocked(api.cerrarSesion).mockResolvedValue(true)
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Salir' }))
+    expect(
+      await screen.findByRole('heading', { name: TITULO_LANDING }),
+    ).toBeInTheDocument()
+  })
+
+  it('avisa y se queda en el panel si no se pudo cerrar la sesion', async () => {
+    vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
+    vi.mocked(api.cerrarSesion).mockResolvedValue(false)
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Salir' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'No se pudo cerrar la sesión',
+    )
+    expect(screen.getByRole('heading', { name: 'Inicio' })).toBeInTheDocument()
+  })
+
+  it('navega a Cuentas y de regreso a Inicio con las pestañas', async () => {
     vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
     vi.mocked(admin.listarCuentas).mockResolvedValue({ ok: true, cuentas: [] })
     render(<App />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Administrar cuentas' }),
-    )
+    await screen.findByRole('heading', { name: 'Inicio' })
+    irA('Cuentas')
     expect(
       await screen.findByRole('heading', { name: 'Cuentas' }),
     ).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
+    expect(screen.getByRole('button', { name: 'Cuentas' })).toHaveAttribute(
+      'aria-current',
+      'page',
+    )
+    irA('Inicio')
     expect(
-      await screen.findByRole('heading', { name: 'Sesión iniciada' }),
+      await screen.findByRole('heading', { name: 'Inicio' }),
     ).toBeInTheDocument()
   })
 
@@ -173,21 +213,23 @@ describe('App', () => {
       motivo: 'sesion',
     })
     render(<App />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Administrar cuentas' }),
-    )
+    await screen.findByRole('heading', { name: 'Inicio' })
+    irA('Cuentas')
     expect(await screen.findByLabelText('Correo')).toBeInTheDocument()
   })
 
-  it('no deja entrar a cuentas a quien no es administrador', async () => {
+  it('a quien no es administrador no le muestra Cuentas ni Bitácora', async () => {
     vi.mocked(api.obtenerSesion).mockResolvedValue({
       ...usuario,
       rol: 'usuario',
     })
     render(<App />)
-    await screen.findByRole('heading', { name: 'Sesión iniciada' })
+    await screen.findByRole('heading', { name: 'Inicio' })
     expect(
-      screen.queryByRole('button', { name: 'Administrar cuentas' }),
+      screen.queryByRole('button', { name: 'Cuentas' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Bitácora' }),
     ).not.toBeInTheDocument()
   })
 
@@ -199,15 +241,14 @@ describe('App', () => {
       hayMas: false,
     })
     render(<App />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Bitácora de seguridad' }),
-    )
+    await screen.findByRole('heading', { name: 'Inicio' })
+    irA('Bitácora')
     expect(
       await screen.findByRole('heading', { name: 'Bitácora de seguridad' }),
     ).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
+    irA('Inicio')
     expect(
-      await screen.findByRole('heading', { name: 'Sesión iniciada' }),
+      await screen.findByRole('heading', { name: 'Inicio' }),
     ).toBeInTheDocument()
   })
 
@@ -227,45 +268,37 @@ describe('App', () => {
       },
     })
     render(<App />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Estado del sistema' }),
-    )
+    await screen.findByRole('heading', { name: 'Inicio' })
+    irA('Estado')
     expect(
       await screen.findByRole('heading', { name: 'Estado del sistema' }),
     ).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'Bitácora de seguridad' }),
-    ).not.toBeInTheDocument()
   })
 
-  it('manda al login si la sesión caduca en la bitácora o en el estado', async () => {
+  it('manda al login si la sesión caduca en el estado', async () => {
     vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
     vi.mocked(sistema.obtenerEstado).mockResolvedValue({
       ok: false,
       motivo: 'sesion',
     })
     render(<App />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Estado del sistema' }),
-    )
+    await screen.findByRole('heading', { name: 'Inicio' })
+    irA('Estado')
     expect(await screen.findByLabelText('Correo')).toBeInTheDocument()
   })
 
-  it('abre Mi cuenta con los datos de la sesión y vuelve al inicio', async () => {
+  it('abre Mi cuenta con los datos de la sesión', async () => {
     vi.mocked(api.obtenerSesion).mockResolvedValue({
       ...usuario,
       rol: 'usuario',
     })
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Mi cuenta' }))
+    await screen.findByRole('heading', { name: 'Inicio' })
+    irA('Mi cuenta')
     expect(
       await screen.findByRole('heading', { name: 'Mi cuenta' }),
     ).toBeInTheDocument()
     expect(screen.getByText('eduardo@ejemplo.com')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
-    expect(
-      await screen.findByRole('heading', { name: 'Sesión iniciada' }),
-    ).toBeInTheDocument()
   })
 
   it('manda al login si la sesión caduca al cambiar la contraseña', async () => {
@@ -275,7 +308,8 @@ describe('App', () => {
       motivo: 'sesion',
     })
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Mi cuenta' }))
+    await screen.findByRole('heading', { name: 'Inicio' })
+    irA('Mi cuenta')
     fireEvent.change(await screen.findByLabelText('Contraseña actual'), {
       target: { value: 'la-clave-actual' },
     })
@@ -307,9 +341,8 @@ describe('App', () => {
     })
     vi.mocked(admin.desbloquearCuenta).mockResolvedValue({ ok: true })
     render(<App />)
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Administrar cuentas' }),
-    )
+    await screen.findByRole('heading', { name: 'Inicio' })
+    irA('Cuentas')
     fireEvent.click(
       await screen.findByRole('button', { name: 'Desbloquear a Ana Lopez' }),
     )

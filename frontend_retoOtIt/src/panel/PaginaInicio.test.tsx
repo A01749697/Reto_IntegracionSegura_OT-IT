@@ -1,5 +1,5 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { describe, expect, it, vi } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import { describe, expect, it } from 'vitest'
 import type { Usuario } from '../login/apiPanel'
 import PaginaInicio from './PaginaInicio'
 
@@ -11,98 +11,20 @@ const usuario: Usuario = {
 }
 
 describe('PaginaInicio', () => {
-  it('muestra el nombre, el correo y el rol', () => {
-    render(<PaginaInicio usuario={usuario} cerrarSesion={vi.fn()} />)
+  it('lleva el título Inicio', () => {
+    render(<PaginaInicio usuario={usuario} />)
+    expect(screen.getByRole('heading', { name: 'Inicio' })).toBeInTheDocument()
+  })
+
+  it('saluda y muestra el nombre, el correo y el rol', () => {
+    render(<PaginaInicio usuario={usuario} />)
     expect(screen.getByText('Eduardo Serrano')).toBeInTheDocument()
     expect(screen.getByText('eduardo@ejemplo.com')).toBeInTheDocument()
     expect(screen.getByText('administrador')).toBeInTheDocument()
   })
 
-  it('llama a cerrarSesion al pulsar el boton', async () => {
-    const cerrarSesion = vi.fn().mockResolvedValue(true)
-    render(<PaginaInicio usuario={usuario} cerrarSesion={cerrarSesion} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }))
-    await waitFor(() => expect(cerrarSesion).toHaveBeenCalledTimes(1))
-  })
-
-  it('avisa si no se pudo cerrar y deja intentar otra vez', async () => {
-    const cerrarSesion = vi.fn().mockResolvedValue(false)
-    render(<PaginaInicio usuario={usuario} cerrarSesion={cerrarSesion} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Cerrar sesión' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'No se pudo cerrar la sesión',
-    )
-    expect(screen.getByRole('button', { name: 'Cerrar sesión' })).toBeEnabled()
-  })
-
-  it('muestra el boton de cuentas solo a los administradores', () => {
-    const irCuentas = vi.fn()
-    const { rerender } = render(
-      <PaginaInicio
-        usuario={usuario}
-        cerrarSesion={vi.fn()}
-        irCuentas={irCuentas}
-      />,
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'Administrar cuentas' }))
-    expect(irCuentas).toHaveBeenCalledTimes(1)
-
-    rerender(
-      <PaginaInicio
-        usuario={{ ...usuario, rol: 'usuario' }}
-        cerrarSesion={vi.fn()}
-        irCuentas={irCuentas}
-      />,
-    )
-    expect(
-      screen.queryByRole('button', { name: 'Administrar cuentas' }),
-    ).not.toBeInTheDocument()
-  })
-
-  it('muestra bitácora solo a administradores y estado a todos', () => {
-    const irBitacora = vi.fn()
-    const irEstado = vi.fn()
-    const { rerender } = render(
-      <PaginaInicio
-        usuario={usuario}
-        cerrarSesion={vi.fn()}
-        irBitacora={irBitacora}
-        irEstado={irEstado}
-      />,
-    )
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Bitácora de seguridad' }),
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'Estado del sistema' }))
-    expect(irBitacora).toHaveBeenCalledTimes(1)
-    expect(irEstado).toHaveBeenCalledTimes(1)
-
-    rerender(
-      <PaginaInicio
-        usuario={{ ...usuario, rol: 'usuario' }}
-        cerrarSesion={vi.fn()}
-        irBitacora={irBitacora}
-        irEstado={irEstado}
-      />,
-    )
-    expect(
-      screen.queryByRole('button', { name: 'Bitácora de seguridad' }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'Estado del sistema' }),
-    ).toBeInTheDocument()
-  })
-
-  it('muestra Mi cuenta a cualquier rol y lo abre', () => {
-    const irCuenta = vi.fn()
-    render(
-      <PaginaInicio
-        usuario={{ ...usuario, rol: 'usuario' }}
-        cerrarSesion={vi.fn()}
-        irCuenta={irCuenta}
-      />,
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'Mi cuenta' }))
-    expect(irCuenta).toHaveBeenCalledTimes(1)
+  it('avisa que el dashboard todavía no está', () => {
+    render(<PaginaInicio usuario={usuario} />)
+    expect(screen.getByText(/Todavía no está el dashboard/)).toBeInTheDocument()
   })
 })

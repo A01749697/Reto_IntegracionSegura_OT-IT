@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
-import { AlertCircle, CheckCircle } from 'reicon-react'
+import { AlertCircle, CheckCircle, Magnifier } from 'reicon-react'
+import { avisoClases, boton, CAMPO_BUSQUEDA, TARJETA } from '../comun/estilos'
+import Segmentos from '../comun/Segmentos'
 import MarcoPanel from './MarcoPanel'
+import { coincide } from './buscar'
 import type {
   Cuenta,
   DecisionCuenta,
@@ -16,15 +19,14 @@ type Props = {
   decidir: (id: number, decision: DecisionCuenta) => Promise<ResultadoDecision>
   desbloquear: (id: number) => Promise<ResultadoDecision>
   hacerAdministrador: (id: number) => Promise<ResultadoDecision>
-  volver: () => void
   sesionCaducada: () => void
 }
 
-const FILTROS: { filtro: FiltroCuentas; texto: string }[] = [
-  { filtro: 'pendiente', texto: 'Pendientes' },
-  { filtro: 'aprobado', texto: 'Aprobadas' },
-  { filtro: 'rechazado', texto: 'Rechazadas' },
-  { filtro: 'todas', texto: 'Todas' },
+const FILTROS: { valor: FiltroCuentas; texto: string }[] = [
+  { valor: 'pendiente', texto: 'Pendientes' },
+  { valor: 'aprobado', texto: 'Aprobadas' },
+  { valor: 'rechazado', texto: 'Rechazadas' },
+  { valor: 'todas', texto: 'Todas' },
 ]
 
 const VACIO: Record<FiltroCuentas, string> = {
@@ -47,11 +49,18 @@ const MENSAJES_ERROR: Record<Exclude<MotivoDecision, 'sesion'>, string> = {
   fallo: 'No se pudo completar. Inténtalo otra vez.',
 }
 
-const BOTON =
-  'h-11 cursor-pointer rounded-lg px-5 text-[15px] font-semibold focus-visible:ring-[3px] focus-visible:ring-turquesa/45 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60'
-const PRIMARIO = `${BOTON} bg-[#174ea6] text-white hover:bg-[#123f86]`
-const CONTORNO = `${BOTON} border-2 border-azul-idmz bg-white text-[#174ea6] hover:bg-[#eef4ff]`
-const PELIGRO = `${BOTON} border-2 border-[#b3202d] bg-white text-[#8a1c26] hover:bg-[#fdecee]`
+const PRIMARIO = boton('principal')
+const CONTORNO = boton('contorno')
+const PELIGRO = boton('peligro')
+
+function iniciales(nombre: string) {
+  return nombre
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((p) => p[0].toUpperCase())
+    .join('')
+}
 
 function fechaCorta(iso: string) {
   return new Date(iso).toLocaleDateString('es-MX', {
@@ -72,10 +81,10 @@ export default function PaginaAdministracion({
   decidir,
   desbloquear,
   hacerAdministrador,
-  volver,
   sesionCaducada,
 }: Props) {
   const [filtro, setFiltro] = useState<FiltroCuentas>('pendiente')
+  const [busqueda, setBusqueda] = useState('')
   const [version, setVersion] = useState(0)
   const [carga, setCarga] = useState<Carga | null>(null)
   const [ocupada, setOcupada] = useState<number | null>(null)
@@ -98,6 +107,10 @@ export default function PaginaAdministracion({
 
   const cargando =
     carga === null || carga.filtro !== filtro || carga.version !== version
+
+  const todas = !cargando && carga.resultado.ok ? carga.resultado.cuentas : []
+  const visibles = todas.filter((c) => coincide(c.nombre, busqueda))
+  const buscando = busqueda.trim() !== ''
 
   function cambiarFiltro(nuevo: FiltroCuentas) {
     setAviso(null)
@@ -149,33 +162,35 @@ export default function PaginaAdministracion({
   }
 
   return (
-    <MarcoPanel titulo="Cuentas" volver={volver}>
-      <div className="flex flex-wrap gap-2" role="group" aria-label="Filtro">
-        {FILTROS.map(({ filtro: f, texto }) => (
-          <button
-            key={f}
-            type="button"
-            aria-pressed={filtro === f}
-            onClick={() => cambiarFiltro(f)}
-            className={`${BOTON} border-2 border-azul-idmz ${
-              filtro === f
-                ? 'bg-[#174ea6] text-white'
-                : 'bg-white text-[#174ea6] hover:bg-[#eef4ff]'
-            }`}
-          >
-            {texto}
-          </button>
-        ))}
+    <MarcoPanel titulo="Cuentas">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Segmentos
+          opciones={FILTROS}
+          valor={filtro}
+          alCambiar={cambiarFiltro}
+        />
+        <div className="relative w-full sm:w-[290px]">
+          <Magnifier
+            size={16}
+            aria-hidden="true"
+            className="pointer-events-none absolute top-[10px] left-3 text-suave"
+          />
+          <input
+            type="search"
+            value={busqueda}
+            onChange={(e) => setBusqueda(e.target.value)}
+            aria-label="Buscar por nombre"
+            placeholder="Buscar por nombre"
+            autoComplete="off"
+            className={CAMPO_BUSQUEDA}
+          />
+        </div>
       </div>
 
       {aviso && (
         <div
           role={aviso.error ? 'alert' : 'status'}
-          className={`flex items-start gap-2.5 rounded-lg border px-3.5 py-3 text-[15px] leading-snug ${
-            aviso.error
-              ? 'border-[#e5848c] bg-[#fdecee] text-[#8a1c26]'
-              : 'border-turquesa bg-[#e6f6f6] text-[#064e4e]'
-          }`}
+          className={avisoClases(aviso.error)}
         >
           {aviso.error ? (
             <AlertCircle
@@ -194,50 +209,70 @@ export default function PaginaAdministracion({
         </div>
       )}
 
-      {cargando && <p className="text-tinta-suave">Cargando...</p>}
+      {cargando && <p className="text-suave">Cargando...</p>}
 
       {!cargando && !carga.resultado.ok && (
-        <p role="alert" className="text-[15px] text-[#8a1c26]">
+        <p role="alert" className="text-[14px] text-alerta">
           No se pudo cargar la lista. Inténtalo otra vez.
         </p>
       )}
 
       {!cargando && carga.resultado.ok && (
         <>
-          {carga.resultado.cuentas.length === 0 && (
-            <p className="text-tinta-suave">{VACIO[filtro]}</p>
+          {todas.length === 0 && (
+            <p className="text-[14px] text-suave">{VACIO[filtro]}</p>
           )}
-          <ul className="flex flex-col gap-4">
-            {carga.resultado.cuentas.map((cuenta) => {
+          {todas.length > 0 && (
+            <p role="status" className="-mb-2 text-[12px] text-suave">
+              {buscando
+                ? `${visibles.length} de ${todas.length} cuentas con «${busqueda.trim()}»`
+                : `${todas.length} ${todas.length === 1 ? 'cuenta' : 'cuentas'}`}
+            </p>
+          )}
+          {todas.length > 0 && visibles.length === 0 && (
+            <p className="text-[14px] text-suave">
+              Nadie coincide con «{busqueda.trim()}».
+            </p>
+          )}
+          <ul className={`${TARJETA} flex flex-col empty:hidden`}>
+            {visibles.map((cuenta) => {
               const esUsuario = cuenta.rol === 'usuario'
               const deshabilitado = ocupada === cuenta.id
               return (
                 <li
                   key={cuenta.id}
-                  className="flex flex-col gap-4 rounded-xl border border-borde bg-campo px-5 py-4"
+                  className="flex flex-col gap-3 border-b border-linea px-5 py-3.5 last:border-b-0 sm:flex-row sm:items-center sm:justify-between sm:gap-6"
                 >
-                  <div className="min-w-0">
-                    <p className="flex flex-wrap items-center gap-2 text-[17px] font-semibold break-words">
-                      <span>{cuenta.nombre}</span>
-                      {cuenta.bloqueada && (
-                        <span className="rounded-md bg-[#fdecee] px-2 py-0.5 text-[13px] font-semibold text-[#8a1c26]">
-                          Bloqueada
-                        </span>
-                      )}
-                    </p>
-                    <p className="text-[15px] break-all text-tinta-suave">
-                      {cuenta.correo}
-                    </p>
-                    <p className="text-[14px] text-gris-azul">
-                      Solicitada el {fechaCorta(cuenta.creadoEn)} ·{' '}
-                      {ETIQUETA_ESTADO[cuenta.estado]}
-                      {!esUsuario && ' · Administrador'}
-                    </p>
+                  <div className="flex min-w-0 items-center gap-3.5">
+                    <span
+                      aria-hidden="true"
+                      className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-linea bg-fondo text-[13px] font-bold"
+                    >
+                      {iniciales(cuenta.nombre)}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="flex flex-wrap items-center gap-2 text-[14px] font-bold break-words">
+                        <span>{cuenta.nombre}</span>
+                        {cuenta.bloqueada && (
+                          <span className="rounded-[5px] bg-alerta/15 px-2 py-0.5 text-[12px] font-bold text-alerta">
+                            Bloqueada
+                          </span>
+                        )}
+                      </p>
+                      <p className="text-[13px] break-all text-suave">
+                        {cuenta.correo}
+                      </p>
+                      <p className="text-[12px] text-suave">
+                        Solicitada el {fechaCorta(cuenta.creadoEn)} ·{' '}
+                        {ETIQUETA_ESTADO[cuenta.estado]}
+                        {!esUsuario && ' · Administrador'}
+                      </p>
+                    </div>
                   </div>
 
                   {confirmando === cuenta.id ? (
-                    <div className="flex flex-col gap-3">
-                      <p className="text-[15px]">
+                    <div className="flex flex-col gap-3 sm:max-w-[340px]">
+                      <p className="text-[13.5px]">
                         ¿Dar acceso de administrador a{' '}
                         <strong>{cuenta.nombre}</strong>? Desde el panel no se
                         puede deshacer.
@@ -267,7 +302,7 @@ export default function PaginaAdministracion({
                       </div>
                     </div>
                   ) : (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 sm:justify-end">
                       {esUsuario && cuenta.estado === 'pendiente' && (
                         <>
                           <button

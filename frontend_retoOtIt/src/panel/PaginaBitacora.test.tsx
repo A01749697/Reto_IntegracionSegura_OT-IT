@@ -34,7 +34,6 @@ function preparar(respuesta: ResultadoBitacora) {
         truncado: false,
       }),
     descargar: vi.fn(),
-    volver: vi.fn(),
     sesionCaducada: vi.fn(),
   }
   render(<PaginaBitacora {...props} />)
@@ -164,13 +163,6 @@ describe('PaginaBitacora', () => {
   it('avisa a la app cuando la sesión caducó', async () => {
     const props = preparar({ ok: false, motivo: 'sesion' })
     await waitFor(() => expect(props.sesionCaducada).toHaveBeenCalledTimes(1))
-  })
-
-  it('vuelve al inicio con el botón Volver', async () => {
-    const props = preparar({ ok: true, eventos: [], hayMas: false })
-    await screen.findByText('Todavía no hay eventos registrados.')
-    fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
-    expect(props.volver).toHaveBeenCalledTimes(1)
   })
 
   it.each([

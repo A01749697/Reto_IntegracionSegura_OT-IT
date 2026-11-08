@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { AlertCircle, CheckCircle } from 'reicon-react'
+import { boton } from '../comun/estilos'
 import type { EstadoDatos, EstadoSistema, ResultadoEstado } from './apiSistema'
 import MarcoPanel from './MarcoPanel'
 import { fechaHora, hace } from './tiempo'
 
 type Props = {
   obtener: () => Promise<ResultadoEstado>
-  volver: () => void
   sesionCaducada: () => void
 }
 
@@ -20,9 +20,9 @@ const DATOS: Record<EstadoDatos, { tono: Tono; texto: string }> = {
 }
 
 const ESTILOS: Record<Tono, string> = {
-  bien: 'border-turquesa bg-[#e6f6f6] text-[#064e4e]',
-  mal: 'border-[#e5848c] bg-[#fdecee] text-[#8a1c26]',
-  neutro: 'border-borde bg-campo text-tinta-suave',
+  bien: 'border-ok/50 bg-ok/10 text-ok',
+  mal: 'border-alerta/50 bg-alerta/10 text-alerta',
+  neutro: 'border-linea bg-panel text-suave',
 }
 
 function Tarjeta({
@@ -36,10 +36,10 @@ function Tarjeta({
 }) {
   return (
     <div
-      className={`flex flex-col gap-1 rounded-xl border px-5 py-4 ${ESTILOS[tono]}`}
+      className={`flex flex-col gap-1 rounded-[10px] border px-5 py-4 ${ESTILOS[tono]}`}
     >
-      <p className="text-[15px] font-semibold">{nombre}</p>
-      <p className="flex items-center gap-2 text-[17px] font-semibold">
+      <p className="text-[13px] font-semibold">{nombre}</p>
+      <p className="flex items-center gap-2 text-[15px] font-bold">
         {tono === 'bien' ? (
           <CheckCircle size={20} aria-hidden="true" />
         ) : (
@@ -56,11 +56,7 @@ const tonoDe = (parte: 'ok' | 'falla'): Tono =>
 
 type Carga = { version: number; estado: EstadoSistema | null }
 
-export default function PaginaEstado({
-  obtener,
-  volver,
-  sesionCaducada,
-}: Props) {
+export default function PaginaEstado({ obtener, sesionCaducada }: Props) {
   const [version, setVersion] = useState(0)
   const [carga, setCarga] = useState<Carga | null>(null)
 
@@ -80,22 +76,22 @@ export default function PaginaEstado({
   const estado = !cargando ? carga.estado : null
 
   return (
-    <MarcoPanel titulo="Estado del sistema" volver={volver}>
+    <MarcoPanel titulo="Estado del sistema">
       <div className="flex justify-end">
         <button
           type="button"
           disabled={cargando}
           onClick={() => setVersion((v) => v + 1)}
-          className="h-11 cursor-pointer rounded-lg border-2 border-azul-idmz bg-white px-5 text-[15px] font-semibold text-[#174ea6] hover:bg-[#eef4ff] focus-visible:ring-[3px] focus-visible:ring-turquesa/45 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+          className={boton('neutro')}
         >
           Actualizar
         </button>
       </div>
 
-      {cargando && <p className="text-tinta-suave">Cargando...</p>}
+      {cargando && <p className="text-suave">Cargando...</p>}
 
       {!cargando && !estado && (
-        <p role="alert" className="text-[15px] text-[#8a1c26]">
+        <p role="alert" className="text-[14px] text-alerta">
           No se pudo consultar el estado. Inténtalo otra vez.
         </p>
       )}
@@ -126,18 +122,18 @@ export default function PaginaEstado({
           </div>
 
           {estado.variables.length === 0 ? (
-            <p className="text-tinta-suave">
+            <p className="text-[14px] text-suave">
               Cuando el agente empiece a mandar datos a la nube, aquí aparecerá
               cada variable con la hora de su última lectura.
             </p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left text-[15px]">
-                <caption className="pb-2 text-left text-[16px] font-semibold">
+              <table className="w-full text-left text-[14px]">
+                <caption className="pb-2 text-left text-[15px] font-bold">
                   Última lectura por variable
                 </caption>
-                <thead className="text-gris-azul">
-                  <tr className="border-b border-borde">
+                <thead className="text-suave">
+                  <tr className="border-b border-linea">
                     <th className="py-2 pr-4 font-semibold">PLC</th>
                     <th className="py-2 pr-4 font-semibold">Variable</th>
                     <th className="py-2 pr-4 font-semibold">Lectura</th>
@@ -148,7 +144,7 @@ export default function PaginaEstado({
                   {estado.variables.map((v) => (
                     <tr
                       key={`${v.plc}/${v.variable}`}
-                      className="border-b border-borde"
+                      className="border-b border-linea"
                     >
                       <td className="py-2 pr-4">{v.plc}</td>
                       <td className="py-2 pr-4">{v.variable}</td>
