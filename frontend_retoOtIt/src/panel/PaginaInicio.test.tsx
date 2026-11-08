@@ -92,4 +92,17 @@ describe('PaginaInicio', () => {
       screen.getByRole('button', { name: 'Estado del sistema' }),
     ).toBeInTheDocument()
   })
+
+  it('muestra Mi cuenta a cualquier rol y lo abre', () => {
+    const irCuenta = vi.fn()
+    render(
+      <PaginaInicio
+        usuario={{ ...usuario, rol: 'usuario' }}
+        cerrarSesion={vi.fn()}
+        irCuenta={irCuenta}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Mi cuenta' }))
+    expect(irCuenta).toHaveBeenCalledTimes(1)
+  })
 })

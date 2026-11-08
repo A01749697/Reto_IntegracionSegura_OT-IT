@@ -4,6 +4,7 @@ import App from './App'
 import * as api from './login/apiPanel'
 import * as admin from './panel/apiAdministracion'
 import * as bitacora from './panel/apiBitacora'
+import * as cuenta from './panel/apiCuenta'
 import * as sistema from './panel/apiSistema'
 
 vi.mock('./login/apiPanel', () => ({
@@ -18,10 +19,17 @@ vi.mock('./login/apiPanel', () => ({
 vi.mock('./panel/apiAdministracion', () => ({
   listarCuentas: vi.fn(),
   decidirCuenta: vi.fn(),
+  desbloquearCuenta: vi.fn(),
+  hacerAdministrador: vi.fn(),
 }))
 
 vi.mock('./panel/apiBitacora', () => ({
   listarBitacora: vi.fn(),
+  exportarBitacora: vi.fn(),
+}))
+
+vi.mock('./panel/apiCuenta', () => ({
+  cambiarContrasena: vi.fn(),
 }))
 
 vi.mock('./panel/apiSistema', () => ({
@@ -241,5 +249,70 @@ describe('App', () => {
       await screen.findByRole('button', { name: 'Estado del sistema' }),
     )
     expect(await screen.findByLabelText('Correo')).toBeInTheDocument()
+  })
+
+  it('abre Mi cuenta con los datos de la sesión y vuelve al inicio', async () => {
+    vi.mocked(api.obtenerSesion).mockResolvedValue({
+      ...usuario,
+      rol: 'usuario',
+    })
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Mi cuenta' }))
+    expect(
+      await screen.findByRole('heading', { name: 'Mi cuenta' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('eduardo@ejemplo.com')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
+    expect(
+      await screen.findByRole('heading', { name: 'Sesión iniciada' }),
+    ).toBeInTheDocument()
+  })
+
+  it('manda al login si la sesión caduca al cambiar la contraseña', async () => {
+    vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
+    vi.mocked(cuenta.cambiarContrasena).mockResolvedValue({
+      ok: false,
+      motivo: 'sesion',
+    })
+    render(<App />)
+    fireEvent.click(await screen.findByRole('button', { name: 'Mi cuenta' }))
+    fireEvent.change(await screen.findByLabelText('Contraseña actual'), {
+      target: { value: 'la-clave-actual' },
+    })
+    fireEvent.change(screen.getByLabelText('Contraseña nueva'), {
+      target: { value: 'una-clave-nueva-1' },
+    })
+    fireEvent.change(screen.getByLabelText('Repite la contraseña nueva'), {
+      target: { value: 'una-clave-nueva-1' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Cambiar contraseña' }))
+    expect(await screen.findByLabelText('Correo')).toBeInTheDocument()
+  })
+
+  it('la pantalla de cuentas recibe las acciones nuevas', async () => {
+    vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
+    vi.mocked(admin.listarCuentas).mockResolvedValue({
+      ok: true,
+      cuentas: [
+        {
+          id: 7,
+          nombre: 'Ana Lopez',
+          correo: 'ana@ejemplo.com',
+          rol: 'usuario',
+          estado: 'aprobado',
+          bloqueada: true,
+          creadoEn: '2026-10-30T15:00:00.000Z',
+        },
+      ],
+    })
+    vi.mocked(admin.desbloquearCuenta).mockResolvedValue({ ok: true })
+    render(<App />)
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Administrar cuentas' }),
+    )
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Desbloquear a Ana Lopez' }),
+    )
+    await waitFor(() => expect(admin.desbloquearCuenta).toHaveBeenCalledWith(7))
   })
 })

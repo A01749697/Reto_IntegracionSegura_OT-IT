@@ -4,6 +4,7 @@ import type {
   EventoBitacora,
   GrupoBitacora,
   ResultadoBitacora,
+  ResultadoExportar,
 } from './apiBitacora'
 import PaginaBitacora from './PaginaBitacora'
 
@@ -25,6 +26,14 @@ function preparar(respuesta: ResultadoBitacora) {
     listar: vi
       .fn<(g: GrupoBitacora, a?: number) => Promise<ResultadoBitacora>>()
       .mockResolvedValue(respuesta),
+    exportar: vi
+      .fn<(g: GrupoBitacora) => Promise<ResultadoExportar>>()
+      .mockResolvedValue({
+        ok: true,
+        archivo: new Blob(['id\r\n']),
+        truncado: false,
+      }),
+    descargar: vi.fn(),
     volver: vi.fn(),
     sesionCaducada: vi.fn(),
   }
@@ -162,5 +171,84 @@ describe('PaginaBitacora', () => {
     await screen.findByText('Todavía no hay eventos registrados.')
     fireEvent.click(screen.getByRole('button', { name: 'Volver' }))
     expect(props.volver).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['cuenta_desbloqueada', 'Cuenta desbloqueada'],
+    ['rol_cambiado', 'Cuenta promovida a administrador'],
+    ['contrasena_cambiada', 'Cambió su contraseña desde Mi cuenta'],
+    ['bitacora_exportada', 'Descargó la bitácora en CSV'],
+  ])('describe el evento %s sin marcarlo como alerta', async (tipo, texto) => {
+    preparar({ ok: true, eventos: [evento(1, { tipo })], hayMas: false })
+    expect(await screen.findByText(texto)).toBeInTheDocument()
+    expect(screen.queryByText('Alerta')).not.toBeInTheDocument()
+  })
+
+  it('marca como alerta el cambio de contraseña con la actual incorrecta', async () => {
+    preparar({
+      ok: true,
+      eventos: [evento(1, { tipo: 'cambio_contrasena_fallido' })],
+      hayMas: false,
+    })
+    expect(
+      await screen.findByText(
+        'Intentó cambiar su contraseña con la actual incorrecta',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Alerta')).toBeInTheDocument()
+  })
+
+  describe('descargar CSV', () => {
+    it('pide el archivo del filtro activo y lo entrega al navegador', async () => {
+      const props = preparar({ ok: true, eventos: [], hayMas: false })
+      await screen.findByText('Todavía no hay eventos registrados.')
+      fireEvent.click(screen.getByRole('button', { name: 'Alertas' }))
+      await screen.findByText('No hay alertas registradas.')
+
+      fireEvent.click(screen.getByRole('button', { name: 'Descargar CSV' }))
+
+      await waitFor(() => expect(props.descargar).toHaveBeenCalledTimes(1))
+      expect(props.exportar).toHaveBeenCalledWith('alertas')
+      expect(props.descargar.mock.calls[0]?.[0]).toMatch(
+        /^bitacora-alertas-\d{4}-\d{2}-\d{2}\.csv$/,
+      )
+      expect(screen.getByRole('status')).toHaveTextContent(
+        'Archivo descargado.',
+      )
+    })
+
+    it('si el archivo quedó recortado lo dice', async () => {
+      const props = preparar({ ok: true, eventos: [], hayMas: false })
+      props.exportar.mockResolvedValue({
+        ok: true,
+        archivo: new Blob(['x']),
+        truncado: true,
+      })
+      await screen.findByText('Todavía no hay eventos registrados.')
+      fireEvent.click(screen.getByRole('button', { name: 'Descargar CSV' }))
+      expect(await screen.findByRole('status')).toHaveTextContent(
+        'Solo incluye los 5000 eventos más recientes',
+      )
+      expect(props.descargar.mock.calls[0]?.[0]).toMatch(/^bitacora-\d{4}/)
+    })
+
+    it('avisa si no se pudo descargar y no entrega nada', async () => {
+      const props = preparar({ ok: true, eventos: [], hayMas: false })
+      props.exportar.mockResolvedValue({ ok: false, motivo: 'fallo' })
+      await screen.findByText('Todavía no hay eventos registrados.')
+      fireEvent.click(screen.getByRole('button', { name: 'Descargar CSV' }))
+      expect(await screen.findByRole('alert')).toHaveTextContent(
+        'No se pudo descargar el archivo',
+      )
+      expect(props.descargar).not.toHaveBeenCalled()
+    })
+
+    it('avisa a la app si la sesión caducó al descargar', async () => {
+      const props = preparar({ ok: true, eventos: [], hayMas: false })
+      props.exportar.mockResolvedValue({ ok: false, motivo: 'sesion' })
+      await screen.findByText('Todavía no hay eventos registrados.')
+      fireEvent.click(screen.getByRole('button', { name: 'Descargar CSV' }))
+      await waitFor(() => expect(props.sesionCaducada).toHaveBeenCalledTimes(1))
+    })
   })
 })

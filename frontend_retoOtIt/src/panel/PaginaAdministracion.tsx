@@ -5,28 +5,39 @@ import type {
   Cuenta,
   DecisionCuenta,
   EstadoCuenta,
+  FiltroCuentas,
   MotivoDecision,
   ResultadoDecision,
   ResultadoLista,
 } from './apiAdministracion'
 
 type Props = {
-  listar: (estado: EstadoCuenta) => Promise<ResultadoLista>
+  listar: (filtro: FiltroCuentas) => Promise<ResultadoLista>
   decidir: (id: number, decision: DecisionCuenta) => Promise<ResultadoDecision>
+  desbloquear: (id: number) => Promise<ResultadoDecision>
+  hacerAdministrador: (id: number) => Promise<ResultadoDecision>
   volver: () => void
   sesionCaducada: () => void
 }
 
-const FILTROS: { estado: EstadoCuenta; texto: string }[] = [
-  { estado: 'pendiente', texto: 'Pendientes' },
-  { estado: 'aprobado', texto: 'Aprobadas' },
-  { estado: 'rechazado', texto: 'Rechazadas' },
+const FILTROS: { filtro: FiltroCuentas; texto: string }[] = [
+  { filtro: 'pendiente', texto: 'Pendientes' },
+  { filtro: 'aprobado', texto: 'Aprobadas' },
+  { filtro: 'rechazado', texto: 'Rechazadas' },
+  { filtro: 'todas', texto: 'Todas' },
 ]
 
-const VACIO: Record<EstadoCuenta, string> = {
+const VACIO: Record<FiltroCuentas, string> = {
   pendiente: 'No hay cuentas pendientes.',
   aprobado: 'No hay cuentas aprobadas.',
   rechazado: 'No hay cuentas rechazadas.',
+  todas: 'No hay cuentas.',
+}
+
+const ETIQUETA_ESTADO: Record<EstadoCuenta, string> = {
+  pendiente: 'Pendiente',
+  aprobado: 'Aprobada',
+  rechazado: 'Rechazada',
 }
 
 const MENSAJES_ERROR: Record<Exclude<MotivoDecision, 'sesion'>, string> = {
@@ -38,6 +49,9 @@ const MENSAJES_ERROR: Record<Exclude<MotivoDecision, 'sesion'>, string> = {
 
 const BOTON =
   'h-11 cursor-pointer rounded-lg px-5 text-[15px] font-semibold focus-visible:ring-[3px] focus-visible:ring-turquesa/45 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60'
+const PRIMARIO = `${BOTON} bg-[#174ea6] text-white hover:bg-[#123f86]`
+const CONTORNO = `${BOTON} border-2 border-azul-idmz bg-white text-[#174ea6] hover:bg-[#eef4ff]`
+const PELIGRO = `${BOTON} border-2 border-[#b3202d] bg-white text-[#8a1c26] hover:bg-[#fdecee]`
 
 function fechaCorta(iso: string) {
   return new Date(iso).toLocaleDateString('es-MX', {
@@ -48,7 +62,7 @@ function fechaCorta(iso: string) {
 }
 
 type Carga = {
-  filtro: EstadoCuenta
+  filtro: FiltroCuentas
   version: number
   resultado: ResultadoLista
 }
@@ -56,13 +70,16 @@ type Carga = {
 export default function PaginaAdministracion({
   listar,
   decidir,
+  desbloquear,
+  hacerAdministrador,
   volver,
   sesionCaducada,
 }: Props) {
-  const [filtro, setFiltro] = useState<EstadoCuenta>('pendiente')
+  const [filtro, setFiltro] = useState<FiltroCuentas>('pendiente')
   const [version, setVersion] = useState(0)
   const [carga, setCarga] = useState<Carga | null>(null)
   const [ocupada, setOcupada] = useState<number | null>(null)
+  const [confirmando, setConfirmando] = useState<number | null>(null)
   const [aviso, setAviso] = useState<{ error: boolean; texto: string } | null>(
     null,
   )
@@ -82,24 +99,29 @@ export default function PaginaAdministracion({
   const cargando =
     carga === null || carga.filtro !== filtro || carga.version !== version
 
-  function cambiarFiltro(nuevo: EstadoCuenta) {
+  function cambiarFiltro(nuevo: FiltroCuentas) {
     setAviso(null)
+    setConfirmando(null)
     setFiltro(nuevo)
   }
 
-  async function decidirSobre(cuenta: Cuenta, decision: DecisionCuenta) {
+  async function ejecutar(
+    cuenta: Cuenta,
+    accion: () => Promise<ResultadoDecision>,
+    exito: string,
+  ) {
     setOcupada(cuenta.id)
+    setConfirmando(null)
     setAviso(null)
     let resultado: ResultadoDecision
     try {
-      resultado = await decidir(cuenta.id, decision)
+      resultado = await accion()
     } catch {
       resultado = { ok: false, motivo: 'fallo' }
     }
     setOcupada(null)
     if (resultado.ok) {
-      const verbo = decision === 'aprobado' ? 'aprobada' : 'rechazada'
-      setAviso({ error: false, texto: `Cuenta ${verbo}: ${cuenta.nombre}.` })
+      setAviso({ error: false, texto: exito })
       setVersion((v) => v + 1)
     } else if (resultado.motivo === 'sesion') {
       sesionCaducada()
@@ -110,19 +132,35 @@ export default function PaginaAdministracion({
     }
   }
 
+  function decidirSobre(cuenta: Cuenta, decision: DecisionCuenta) {
+    const verbo =
+      decision === 'aprobado'
+        ? cuenta.estado === 'rechazado'
+          ? 'reactivada'
+          : 'aprobada'
+        : cuenta.estado === 'aprobado'
+          ? 'desactivada'
+          : 'rechazada'
+    return ejecutar(
+      cuenta,
+      () => decidir(cuenta.id, decision),
+      `Cuenta ${verbo}: ${cuenta.nombre}.`,
+    )
+  }
+
   return (
     <MarcoPanel titulo="Cuentas" volver={volver}>
       <div className="flex flex-wrap gap-2" role="group" aria-label="Filtro">
-        {FILTROS.map(({ estado, texto }) => (
+        {FILTROS.map(({ filtro: f, texto }) => (
           <button
-            key={estado}
+            key={f}
             type="button"
-            aria-pressed={filtro === estado}
-            onClick={() => cambiarFiltro(estado)}
-            className={`${BOTON} border-2 ${
-              filtro === estado
-                ? 'border-azul-idmz bg-[#174ea6] text-white'
-                : 'border-azul-idmz bg-white text-[#174ea6] hover:bg-[#eef4ff]'
+            aria-pressed={filtro === f}
+            onClick={() => cambiarFiltro(f)}
+            className={`${BOTON} border-2 border-azul-idmz ${
+              filtro === f
+                ? 'bg-[#174ea6] text-white'
+                : 'bg-white text-[#174ea6] hover:bg-[#eef4ff]'
             }`}
           >
             {texto}
@@ -170,51 +208,143 @@ export default function PaginaAdministracion({
             <p className="text-tinta-suave">{VACIO[filtro]}</p>
           )}
           <ul className="flex flex-col gap-4">
-            {carga.resultado.cuentas.map((cuenta) => (
-              <li
-                key={cuenta.id}
-                className="flex flex-col gap-4 rounded-xl border border-borde bg-campo px-5 py-4 sm:flex-row sm:items-center sm:justify-between"
-              >
-                <div className="min-w-0">
-                  <p className="text-[17px] font-semibold break-words">
-                    {cuenta.nombre}
-                  </p>
-                  <p className="text-[15px] break-all text-tinta-suave">
-                    {cuenta.correo}
-                  </p>
-                  <p className="text-[14px] text-gris-azul">
-                    Solicitada el {fechaCorta(cuenta.creadoEn)}
-                    {cuenta.rol === 'administrador' && ' · Administrador'}
-                  </p>
-                </div>
-                {cuenta.rol === 'usuario' && (
-                  <div className="flex shrink-0 gap-2">
-                    {cuenta.estado !== 'aprobado' && (
-                      <button
-                        type="button"
-                        disabled={ocupada === cuenta.id}
-                        onClick={() => decidirSobre(cuenta, 'aprobado')}
-                        aria-label={`Aprobar a ${cuenta.nombre}`}
-                        className={`${BOTON} bg-[#174ea6] text-white hover:bg-[#123f86]`}
-                      >
-                        Aprobar
-                      </button>
-                    )}
-                    {cuenta.estado !== 'rechazado' && (
-                      <button
-                        type="button"
-                        disabled={ocupada === cuenta.id}
-                        onClick={() => decidirSobre(cuenta, 'rechazado')}
-                        aria-label={`Rechazar a ${cuenta.nombre}`}
-                        className={`${BOTON} border-2 border-[#b3202d] bg-white text-[#8a1c26] hover:bg-[#fdecee]`}
-                      >
-                        Rechazar
-                      </button>
-                    )}
+            {carga.resultado.cuentas.map((cuenta) => {
+              const esUsuario = cuenta.rol === 'usuario'
+              const deshabilitado = ocupada === cuenta.id
+              return (
+                <li
+                  key={cuenta.id}
+                  className="flex flex-col gap-4 rounded-xl border border-borde bg-campo px-5 py-4"
+                >
+                  <div className="min-w-0">
+                    <p className="flex flex-wrap items-center gap-2 text-[17px] font-semibold break-words">
+                      <span>{cuenta.nombre}</span>
+                      {cuenta.bloqueada && (
+                        <span className="rounded-md bg-[#fdecee] px-2 py-0.5 text-[13px] font-semibold text-[#8a1c26]">
+                          Bloqueada
+                        </span>
+                      )}
+                    </p>
+                    <p className="text-[15px] break-all text-tinta-suave">
+                      {cuenta.correo}
+                    </p>
+                    <p className="text-[14px] text-gris-azul">
+                      Solicitada el {fechaCorta(cuenta.creadoEn)} ·{' '}
+                      {ETIQUETA_ESTADO[cuenta.estado]}
+                      {!esUsuario && ' · Administrador'}
+                    </p>
                   </div>
-                )}
-              </li>
-            ))}
+
+                  {confirmando === cuenta.id ? (
+                    <div className="flex flex-col gap-3">
+                      <p className="text-[15px]">
+                        ¿Dar acceso de administrador a{' '}
+                        <strong>{cuenta.nombre}</strong>? Desde el panel no se
+                        puede deshacer.
+                      </p>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          disabled={deshabilitado}
+                          onClick={() =>
+                            ejecutar(
+                              cuenta,
+                              () => hacerAdministrador(cuenta.id),
+                              `${cuenta.nombre} ahora es administrador.`,
+                            )
+                          }
+                          className={PRIMARIO}
+                        >
+                          Sí, hacer administrador
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmando(null)}
+                          className={CONTORNO}
+                        >
+                          Cancelar
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="flex flex-wrap gap-2">
+                      {esUsuario && cuenta.estado === 'pendiente' && (
+                        <>
+                          <button
+                            type="button"
+                            disabled={deshabilitado}
+                            onClick={() => decidirSobre(cuenta, 'aprobado')}
+                            aria-label={`Aprobar a ${cuenta.nombre}`}
+                            className={PRIMARIO}
+                          >
+                            Aprobar
+                          </button>
+                          <button
+                            type="button"
+                            disabled={deshabilitado}
+                            onClick={() => decidirSobre(cuenta, 'rechazado')}
+                            aria-label={`Rechazar a ${cuenta.nombre}`}
+                            className={PELIGRO}
+                          >
+                            Rechazar
+                          </button>
+                        </>
+                      )}
+                      {esUsuario && cuenta.estado === 'aprobado' && (
+                        <button
+                          type="button"
+                          disabled={deshabilitado}
+                          onClick={() => decidirSobre(cuenta, 'rechazado')}
+                          aria-label={`Desactivar a ${cuenta.nombre}`}
+                          className={PELIGRO}
+                        >
+                          Desactivar
+                        </button>
+                      )}
+                      {esUsuario && cuenta.estado === 'rechazado' && (
+                        <button
+                          type="button"
+                          disabled={deshabilitado}
+                          onClick={() => decidirSobre(cuenta, 'aprobado')}
+                          aria-label={`Reactivar a ${cuenta.nombre}`}
+                          className={PRIMARIO}
+                        >
+                          Reactivar
+                        </button>
+                      )}
+                      {cuenta.bloqueada && (
+                        <button
+                          type="button"
+                          disabled={deshabilitado}
+                          onClick={() =>
+                            ejecutar(
+                              cuenta,
+                              () => desbloquear(cuenta.id),
+                              `Cuenta desbloqueada: ${cuenta.nombre}.`,
+                            )
+                          }
+                          aria-label={`Desbloquear a ${cuenta.nombre}`}
+                          className={CONTORNO}
+                        >
+                          Desbloquear
+                        </button>
+                      )}
+                      {esUsuario && cuenta.estado === 'aprobado' && (
+                        <button
+                          type="button"
+                          disabled={deshabilitado}
+                          onClick={() => setConfirmando(cuenta.id)}
+                          aria-label={`Hacer administrador a ${cuenta.nombre}`}
+                          className={CONTORNO}
+                        >
+                          Hacer administrador
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </li>
+              )
+            })}
           </ul>
         </>
       )}

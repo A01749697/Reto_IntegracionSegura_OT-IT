@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { decidirCuenta, listarCuentas } from './apiAdministracion'
+import {
+  decidirCuenta,
+  desbloquearCuenta,
+  hacerAdministrador,
+  listarCuentas,
+} from './apiAdministracion'
 
 function responder(estado: number, cuerpo?: unknown) {
   vi.stubGlobal(
@@ -17,6 +22,7 @@ const cuenta = {
   correo: 'ana@ejemplo.com',
   rol: 'usuario',
   estado: 'pendiente',
+  bloqueada: false,
   creadoEn: '2026-10-30T15:00:00.000Z',
 }
 
@@ -96,5 +102,55 @@ describe('decidirCuenta', () => {
       ok: false,
       motivo: 'fallo',
     })
+  })
+})
+
+describe('listarCuentas con todas y bloqueada', () => {
+  it('pide todas las cuentas', async () => {
+    responder(200, { usuarios: [{ ...cuenta, bloqueada: true }] })
+    const resultado = await listarCuentas('todas')
+    expect(resultado.ok && resultado.cuentas[0]?.bloqueada).toBe(true)
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/panel/administracion/usuarios?estado=todas',
+      expect.anything(),
+    )
+  })
+
+  it('falla si una cuenta no trae bloqueada', async () => {
+    responder(200, { usuarios: [{ ...cuenta, bloqueada: undefined }] })
+    expect(await listarCuentas('todas')).toEqual({
+      ok: false,
+      motivo: 'fallo',
+    })
+  })
+})
+
+describe.each([
+  ['desbloquearCuenta', desbloquearCuenta, '/desbloqueo'],
+  ['hacerAdministrador', hacerAdministrador, '/administrador'],
+] as const)('%s', (_nombre, accion, ruta) => {
+  it('hace POST a la ruta de la cuenta y responde ok', async () => {
+    responder(200, { mensaje: 'listo' })
+    expect(await accion(5)).toEqual({ ok: true })
+    expect(fetch).toHaveBeenCalledWith(
+      `/api/panel/administracion/usuarios/5${ruta}`,
+      expect.objectContaining({ method: 'POST' }),
+    )
+  })
+
+  it.each([
+    [401, 'sesion'],
+    [403, 'no_permitido'],
+    [404, 'no_existe'],
+    [409, 'sin_cambio'],
+    [500, 'fallo'],
+  ] as const)('el %s se toma como %s', async (codigo, motivo) => {
+    responder(codigo, { error: 'x' })
+    expect(await accion(5)).toEqual({ ok: false, motivo })
+  })
+
+  it('falla si no hay red', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('red')))
+    expect(await accion(5)).toEqual({ ok: false, motivo: 'fallo' })
   })
 })

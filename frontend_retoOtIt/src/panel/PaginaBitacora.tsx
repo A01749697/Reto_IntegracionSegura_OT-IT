@@ -3,12 +3,15 @@ import type {
   EventoBitacora,
   GrupoBitacora,
   ResultadoBitacora,
+  ResultadoExportar,
 } from './apiBitacora'
 import MarcoPanel from './MarcoPanel'
 import { fechaHora } from './tiempo'
 
 type Props = {
   listar: (grupo: GrupoBitacora, antes?: number) => Promise<ResultadoBitacora>
+  exportar: (grupo: GrupoBitacora) => Promise<ResultadoExportar>
+  descargar: (nombre: string, archivo: Blob) => void
   volver: () => void
   sesionCaducada: () => void
 }
@@ -33,6 +36,12 @@ const DESCRIPCIONES: Record<string, string> = {
   sesion_cerrada: 'Cerró sesión',
   cuenta_aprobada: 'Cuenta aprobada',
   cuenta_rechazada: 'Cuenta rechazada',
+  cuenta_desbloqueada: 'Cuenta desbloqueada',
+  rol_cambiado: 'Cuenta promovida a administrador',
+  contrasena_cambiada: 'Cambió su contraseña desde Mi cuenta',
+  cambio_contrasena_fallido:
+    'Intentó cambiar su contraseña con la actual incorrecta',
+  bitacora_exportada: 'Descargó la bitácora en CSV',
 }
 
 const ALERTAS = new Set([
@@ -43,6 +52,7 @@ const ALERTAS = new Set([
   'entrada_rechazada',
   'solicitud_repetida',
   'reinicio_fallido',
+  'cambio_contrasena_fallido',
 ])
 
 const BOTON =
@@ -58,6 +68,8 @@ type Carga = { grupo: GrupoBitacora; version: number; datos: Datos | null }
 
 export default function PaginaBitacora({
   listar,
+  exportar,
+  descargar,
   volver,
   sesionCaducada,
 }: Props) {
@@ -66,6 +78,10 @@ export default function PaginaBitacora({
   const [carga, setCarga] = useState<Carga | null>(null)
   const [cargandoMas, setCargandoMas] = useState(false)
   const [errorMas, setErrorMas] = useState(false)
+  const [exportando, setExportando] = useState(false)
+  const [aviso, setAviso] = useState<{ error: boolean; texto: string } | null>(
+    null,
+  )
 
   useEffect(() => {
     let vigente = true
@@ -89,7 +105,38 @@ export default function PaginaBitacora({
 
   function cambiarGrupo(nuevo: GrupoBitacora) {
     setErrorMas(false)
+    setAviso(null)
     setGrupo(nuevo)
+  }
+
+  async function descargarCsv() {
+    setExportando(true)
+    setAviso(null)
+    let resultado: ResultadoExportar
+    try {
+      resultado = await exportar(grupo)
+    } catch {
+      resultado = { ok: false, motivo: 'fallo' }
+    }
+    setExportando(false)
+    if (resultado.ok) {
+      const fecha = new Date().toISOString().slice(0, 10)
+      const sufijo = grupo === 'alertas' ? '-alertas' : ''
+      descargar(`bitacora${sufijo}-${fecha}.csv`, resultado.archivo)
+      setAviso({
+        error: false,
+        texto: resultado.truncado
+          ? 'Archivo descargado. Solo incluye los 5000 eventos más recientes.'
+          : 'Archivo descargado.',
+      })
+    } else if (resultado.motivo === 'sesion') {
+      sesionCaducada()
+    } else {
+      setAviso({
+        error: true,
+        texto: 'No se pudo descargar el archivo. Inténtalo otra vez.',
+      })
+    }
   }
 
   async function cargarMas() {
@@ -140,15 +187,34 @@ export default function PaginaBitacora({
             </button>
           ))}
         </div>
-        <button
-          type="button"
-          disabled={cargando}
-          onClick={() => setVersion((v) => v + 1)}
-          className={`${BOTON} bg-white text-[#174ea6] hover:bg-[#eef4ff]`}
-        >
-          Actualizar
-        </button>
+        <div className="flex gap-2">
+          <button
+            type="button"
+            disabled={exportando}
+            onClick={descargarCsv}
+            className={`${BOTON} bg-white text-[#174ea6] hover:bg-[#eef4ff]`}
+          >
+            {exportando ? 'Descargando...' : 'Descargar CSV'}
+          </button>
+          <button
+            type="button"
+            disabled={cargando}
+            onClick={() => setVersion((v) => v + 1)}
+            className={`${BOTON} bg-white text-[#174ea6] hover:bg-[#eef4ff]`}
+          >
+            Actualizar
+          </button>
+        </div>
       </div>
+
+      {aviso && (
+        <p
+          role={aviso.error ? 'alert' : 'status'}
+          className={`text-[15px] ${aviso.error ? 'text-[#8a1c26]' : 'text-[#064e4e]'}`}
+        >
+          {aviso.texto}
+        </p>
+      )}
 
       {cargando && <p className="text-tinta-suave">Cargando...</p>}
 

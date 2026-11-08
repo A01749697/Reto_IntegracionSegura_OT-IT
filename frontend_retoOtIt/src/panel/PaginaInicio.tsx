@@ -8,6 +8,7 @@ type Props = {
   irCuentas?: () => void
   irBitacora?: () => void
   irEstado?: () => void
+  irCuenta?: () => void
 }
 
 // Pantalla provisional mientras no esta el dashboard.
@@ -17,6 +18,7 @@ export default function PaginaInicio({
   irCuentas,
   irBitacora,
   irEstado,
+  irCuenta,
 }: Props) {
   const [cerrando, setCerrando] = useState(false)
   const [error, setError] = useState(false)
@@ -87,6 +89,15 @@ export default function PaginaInicio({
               className="flex h-[58px] w-full cursor-pointer items-center justify-center rounded-[10px] border-2 border-azul-idmz bg-white text-[17px] font-semibold text-[#174ea6] hover:bg-[#eef4ff] focus-visible:ring-[3px] focus-visible:ring-turquesa/45 focus-visible:outline-none"
             >
               Estado del sistema
+            </button>
+          )}
+          {irCuenta && (
+            <button
+              type="button"
+              onClick={irCuenta}
+              className="flex h-[58px] w-full cursor-pointer items-center justify-center rounded-[10px] border-2 border-azul-idmz bg-white text-[17px] font-semibold text-[#174ea6] hover:bg-[#eef4ff] focus-visible:ring-[3px] focus-visible:ring-turquesa/45 focus-visible:outline-none"
+            >
+              Mi cuenta
             </button>
           )}
           <button
