@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { AlertCircle, CheckCircle, Magnifier } from 'reicon-react'
 import { avisoClases, boton, CAMPO_BUSQUEDA, TARJETA } from '../comun/estilos'
+import { iniciales } from '../comun/iniciales'
 import Segmentos from '../comun/Segmentos'
 import MarcoPanel from './MarcoPanel'
 import { coincide } from './buscar'
@@ -52,15 +53,6 @@ const MENSAJES_ERROR: Record<Exclude<MotivoDecision, 'sesion'>, string> = {
 const PRIMARIO = boton('principal')
 const CONTORNO = boton('contorno')
 const PELIGRO = boton('peligro')
-
-function iniciales(nombre: string) {
-  return nombre
-    .split(/\s+/)
-    .filter(Boolean)
-    .slice(0, 2)
-    .map((p) => p[0].toUpperCase())
-    .join('')
-}
 
 function fechaCorta(iso: string) {
   return new Date(iso).toLocaleDateString('es-MX', {

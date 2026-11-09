@@ -68,25 +68,31 @@ describe('EncabezadoPanel', () => {
     expect(screen.getByText('administrador')).toBeInTheDocument()
   })
 
-  it('Salir cierra la sesión', () => {
+  it('el menú de la cuenta tiene Cerrar sesión, y no queda un botón Salir suelto', () => {
     const props = montar(ADMIN)
-    fireEvent.click(screen.getByRole('button', { name: 'Salir' }))
+    expect(screen.queryByRole('button', { name: 'Salir' })).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /Menú de Ana Lugo/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Cerrar sesión' }))
     expect(props.cerrarSesion).toHaveBeenCalledTimes(1)
   })
 
-  it('si no se pudo cerrar la sesión, lo dice y deja volver a intentar', async () => {
-    const props = {
-      usuario: ADMIN,
-      actual: 'inicio' as const,
-      irA: vi.fn(),
-      cerrarSesion: vi.fn().mockResolvedValue(false),
+  it('Mi cuenta y Ayuda del menú avisan a dónde ir', () => {
+    const props = montar(ADMIN)
+    fireEvent.click(screen.getByRole('button', { name: /Menú de/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Ayuda' }))
+    expect(props.irA).toHaveBeenLastCalledWith('ayuda')
+    fireEvent.click(screen.getByRole('button', { name: /Menú de/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mi cuenta' }))
+    expect(props.irA).toHaveBeenLastCalledWith('cuenta')
+  })
+
+  it('en Ayuda no se marca ninguna pestaña', () => {
+    montar(ADMIN, 'ayuda')
+    for (const boton of screen
+      .getByRole('navigation', { name: 'Secciones' })
+      .querySelectorAll('button')) {
+      expect(boton).not.toHaveAttribute('aria-current')
     }
-    render(<EncabezadoPanel {...props} />)
-    fireEvent.click(screen.getByRole('button', { name: 'Salir' }))
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'No se pudo cerrar la sesión',
-    )
-    expect(screen.getByRole('button', { name: 'Salir' })).toBeEnabled()
   })
 
   it('trae el selector de modo claro y oscuro', () => {

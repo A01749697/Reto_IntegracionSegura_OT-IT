@@ -40,6 +40,33 @@ const enviar = () =>
 beforeEach(() => vi.clearAllMocks())
 
 describe('PaginaMiCuenta', () => {
+  it('los campos de contraseña traen una pista de qué escribir', () => {
+    render(
+      <PaginaMiCuenta
+        usuario={{
+          id: 1,
+          nombre: 'Ana',
+          correo: 'a@b.com',
+          rol: 'usuario',
+        }}
+        cambiar={vi.fn()}
+        sesionCaducada={vi.fn()}
+      />,
+    )
+    expect(screen.getByLabelText('Contraseña actual')).toHaveAttribute(
+      'placeholder',
+      '••••••••',
+    )
+    expect(screen.getByLabelText('Contraseña nueva')).toHaveAttribute(
+      'placeholder',
+      'Mínimo 12 caracteres',
+    )
+    expect(screen.getByLabelText('Repite la contraseña nueva')).toHaveAttribute(
+      'placeholder',
+      'Escríbela otra vez',
+    )
+  })
+
   it('muestra los datos de la persona', () => {
     preparar()
     expect(screen.getByText('Ana Lopez')).toBeInTheDocument()

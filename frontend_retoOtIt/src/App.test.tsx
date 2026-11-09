@@ -172,11 +172,12 @@ describe('App con sesión', () => {
     expect(screen.getAllByText('Eduardo Serrano').length).toBeGreaterThan(0)
   })
 
-  it('Salir cierra la sesión y vuelve a la página de inicio', async () => {
+  it('Cerrar sesión cierra la sesión y vuelve a la página de inicio', async () => {
     vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
     vi.mocked(api.cerrarSesion).mockResolvedValue(true)
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Salir' }))
+    fireEvent.click(await screen.findByRole('button', { name: /Menú de/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Cerrar sesión' }))
     expect(
       await screen.findByRole('heading', { name: TITULO_LANDING }),
     ).toBeInTheDocument()
@@ -186,11 +187,32 @@ describe('App con sesión', () => {
     vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
     vi.mocked(api.cerrarSesion).mockResolvedValue(false)
     render(<App />)
-    fireEvent.click(await screen.findByRole('button', { name: 'Salir' }))
+    fireEvent.click(await screen.findByRole('button', { name: /Menú de/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Cerrar sesión' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(
       'No se pudo cerrar la sesión',
     )
     expect(screen.getByRole('heading', { name: 'Inicio' })).toBeInTheDocument()
+  })
+
+  it('desde el menú de la cuenta se llega a Mi cuenta y a Ayuda', async () => {
+    vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Inicio' })
+
+    fireEvent.click(screen.getByRole('button', { name: /Menú de/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Ayuda' }))
+    expect(
+      await screen.findByRole('heading', { name: 'Ayuda' }),
+    ).toBeInTheDocument()
+    // el menú se cierra al elegir
+    expect(screen.queryByRole('menu')).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /Menú de/ }))
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Mi cuenta' }))
+    expect(
+      await screen.findByRole('heading', { name: 'Mi cuenta' }),
+    ).toBeInTheDocument()
   })
 
   it('navega a Cuentas y de regreso a Inicio con las pestañas', async () => {

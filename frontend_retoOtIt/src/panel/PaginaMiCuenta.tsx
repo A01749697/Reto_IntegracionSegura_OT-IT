@@ -141,6 +141,7 @@ export default function PaginaMiCuenta({
           alCambiar={setActual}
           type={tipo}
           autoComplete="current-password"
+          placeholder="••••••••"
         />
         <CampoTexto
           id="clave-nueva"
@@ -160,6 +161,7 @@ export default function PaginaMiCuenta({
           alCambiar={setRepetida}
           type={tipo}
           autoComplete="new-password"
+          placeholder="Escríbela otra vez"
         />
 
         <label className="flex cursor-pointer items-center gap-2 text-[13.5px]">
