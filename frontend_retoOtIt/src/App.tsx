@@ -23,6 +23,7 @@ import { leerDatos, listarTablas } from './panel/apiDatos'
 import { obtenerEstado } from './panel/apiSistema'
 import EncabezadoPanel, { type Seccion } from './panel/EncabezadoPanel'
 import PaginaAdministracion from './panel/PaginaAdministracion'
+import PaginaAyuda from './panel/PaginaAyuda'
 import PaginaBitacora from './panel/PaginaBitacora'
 import PaginaDatos from './panel/PaginaDatos'
 import { descargarArchivo } from './panel/descarga'
@@ -154,6 +155,8 @@ function Contenido() {
     contenido = (
       <PaginaEstado obtener={obtenerEstado} sesionCaducada={alCaducarSesion} />
     )
+  } else if (seccion === 'ayuda') {
+    contenido = <PaginaAyuda esAdmin={esAdmin} />
   } else if (seccion === 'cuenta') {
     contenido = (
       <PaginaMiCuenta
