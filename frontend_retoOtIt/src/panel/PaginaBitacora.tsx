@@ -43,6 +43,8 @@ const DESCRIPCIONES: Record<string, string> = {
   cambio_contrasena_fallido:
     'Intentó cambiar su contraseña con la actual incorrecta',
   bitacora_exportada: 'Descargó la bitácora en CSV',
+  datos_cuentas_consultadas: 'Consultó la tabla de cuentas en Datos',
+  datos_bitacora_consultada: 'Consultó la tabla de bitácora en Datos',
 }
 
 const ALERTAS = new Set([

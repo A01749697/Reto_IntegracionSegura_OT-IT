@@ -31,11 +31,12 @@ describe('EncabezadoPanel', () => {
   it('a un administrador le muestra todas las secciones', () => {
     montar(ADMIN)
     const nav = screen.getByRole('navigation', { name: 'Secciones' })
-    expect(nav.textContent).toBe('InicioCuentasBitácoraEstadoMi cuenta')
+    expect(nav.textContent).toBe('InicioCuentasBitácoraDatosEstadoMi cuenta')
   })
 
-  it('a una persona sin rol de administrador no le muestra Cuentas ni Bitácora', () => {
+  it('a una persona sin rol de administrador no le muestra Cuentas, Bitácora ni Datos', () => {
     montar(USUARIO)
+    expect(screen.queryByRole('button', { name: 'Datos' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Cuentas' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Bitácora' })).toBeNull()
     expect(screen.getByRole('button', { name: 'Estado' })).toBeInTheDocument()
