@@ -19,10 +19,12 @@ import {
 } from './panel/apiAdministracion'
 import { exportarBitacora, listarBitacora } from './panel/apiBitacora'
 import { cambiarContrasena } from './panel/apiCuenta'
+import { leerDatos, listarTablas } from './panel/apiDatos'
 import { obtenerEstado } from './panel/apiSistema'
 import EncabezadoPanel, { type Seccion } from './panel/EncabezadoPanel'
 import PaginaAdministracion from './panel/PaginaAdministracion'
 import PaginaBitacora from './panel/PaginaBitacora'
+import PaginaDatos from './panel/PaginaDatos'
 import { descargarArchivo } from './panel/descarga'
 import PaginaEstado from './panel/PaginaEstado'
 import PaginaInicio from './panel/PaginaInicio'
@@ -113,7 +115,10 @@ function Contenido() {
   const esAdmin = sesion.rol === 'administrador'
   // si alguien sin permiso llega a una pantalla de administracion, ve el inicio
   const seccion: Seccion =
-    (pantalla === 'cuentas' || pantalla === 'bitacora') && !esAdmin
+    (pantalla === 'cuentas' ||
+      pantalla === 'bitacora' ||
+      pantalla === 'datos') &&
+    !esAdmin
       ? 'inicio'
       : pantalla
 
@@ -134,6 +139,14 @@ function Contenido() {
         listar={listarBitacora}
         exportar={exportarBitacora}
         descargar={descargarArchivo}
+        sesionCaducada={alCaducarSesion}
+      />
+    )
+  } else if (seccion === 'datos') {
+    contenido = (
+      <PaginaDatos
+        listarTablas={listarTablas}
+        leer={leerDatos}
         sesionCaducada={alCaducarSesion}
       />
     )

@@ -170,6 +170,8 @@ describe('PaginaBitacora', () => {
     ['rol_cambiado', 'Cuenta promovida a administrador'],
     ['contrasena_cambiada', 'Cambió su contraseña desde Mi cuenta'],
     ['bitacora_exportada', 'Descargó la bitácora en CSV'],
+    ['datos_cuentas_consultadas', 'Consultó la tabla de cuentas en Datos'],
+    ['datos_bitacora_consultada', 'Consultó la tabla de bitácora en Datos'],
   ])('describe el evento %s sin marcarlo como alerta', async (tipo, texto) => {
     preparar({ ok: true, eventos: [evento(1, { tipo })], hayMas: false })
     expect(await screen.findByText(texto)).toBeInTheDocument()

@@ -3,7 +3,8 @@ import FranjaZonas from '../comun/FranjaZonas'
 import type { Usuario } from '../login/apiPanel'
 import BotonTema from '../tema/BotonTema'
 
-export type Seccion = 'inicio' | 'cuentas' | 'bitacora' | 'estado' | 'cuenta'
+export type Seccion =
+  'inicio' | 'cuentas' | 'bitacora' | 'datos' | 'estado' | 'cuenta'
 
 type Props = {
   usuario: Usuario
@@ -16,6 +17,7 @@ const SECCIONES: { seccion: Seccion; texto: string; soloAdmin: boolean }[] = [
   { seccion: 'inicio', texto: 'Inicio', soloAdmin: false },
   { seccion: 'cuentas', texto: 'Cuentas', soloAdmin: true },
   { seccion: 'bitacora', texto: 'Bitácora', soloAdmin: true },
+  { seccion: 'datos', texto: 'Datos', soloAdmin: true },
   { seccion: 'estado', texto: 'Estado', soloAdmin: false },
   { seccion: 'cuenta', texto: 'Mi cuenta', soloAdmin: false },
 ]

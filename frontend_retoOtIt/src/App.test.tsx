@@ -5,6 +5,7 @@ import * as api from './login/apiPanel'
 import * as admin from './panel/apiAdministracion'
 import * as bitacora from './panel/apiBitacora'
 import * as cuenta from './panel/apiCuenta'
+import * as datos from './panel/apiDatos'
 import * as sistema from './panel/apiSistema'
 
 vi.mock('./login/apiPanel', () => ({
@@ -30,6 +31,11 @@ vi.mock('./panel/apiBitacora', () => ({
 
 vi.mock('./panel/apiCuenta', () => ({
   cambiarContrasena: vi.fn(),
+}))
+
+vi.mock('./panel/apiDatos', () => ({
+  listarTablas: vi.fn(),
+  leerDatos: vi.fn(),
 }))
 
 vi.mock('./panel/apiSistema', () => ({
@@ -250,6 +256,53 @@ describe('App con sesión', () => {
     expect(
       await screen.findByRole('heading', { name: 'Inicio' }),
     ).toBeInTheDocument()
+  })
+
+  it('abre Datos y muestra una tabla', async () => {
+    vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
+    vi.mocked(datos.listarTablas).mockResolvedValue({
+      ok: true,
+      tablas: [{ id: 'cuentas', nombre: 'Cuentas' }],
+    })
+    vi.mocked(datos.leerDatos).mockResolvedValue({
+      ok: true,
+      columnas: [{ clave: 'nombre', titulo: 'nombre' }],
+      filas: [{ nombre: 'Ana Lugo' }],
+      hayMas: false,
+    })
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Inicio' })
+    irA('Datos')
+    expect(
+      await screen.findByRole('heading', { name: 'Datos' }),
+    ).toBeInTheDocument()
+    expect(await screen.findByText('Ana Lugo')).toBeInTheDocument()
+    expect(datos.leerDatos).toHaveBeenCalledWith('cuentas', '')
+  })
+
+  it('manda al login si la sesión caduca en Datos', async () => {
+    vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
+    vi.mocked(datos.listarTablas).mockResolvedValue({
+      ok: false,
+      motivo: 'sesion',
+    })
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Inicio' })
+    irA('Datos')
+    expect(await screen.findByLabelText('Correo')).toBeInTheDocument()
+  })
+
+  it('a quien no es administrador no le muestra Datos ni la consulta', async () => {
+    vi.mocked(api.obtenerSesion).mockResolvedValue({
+      ...usuario,
+      rol: 'usuario',
+    })
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Inicio' })
+    expect(
+      screen.queryByRole('button', { name: 'Datos' }),
+    ).not.toBeInTheDocument()
+    expect(datos.listarTablas).not.toHaveBeenCalled()
   })
 
   it('abre el estado del sistema aunque no sea administrador', async () => {
