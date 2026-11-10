@@ -1,0 +1,92 @@
+# Revisa cada semana si hay versiones nuevas de lo que usa el proyecto.
+version: 2
+
+updates:
+  - package-ecosystem: npm
+    directory: /frontend_retoOtIt
+    schedule:
+      interval: weekly
+      day: monday
+      time: '08:00'
+      timezone: America/Mexico_City
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      frontend-menores:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /backend_retoOtIt
+    schedule:
+      interval: weekly
+      day: monday
+      time: '08:00'
+      timezone: America/Mexico_City
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      api-receptora-menores:
+        update-types: [minor, patch]
+
+  - package-ecosystem: npm
+    directory: /backend_panel_retoOtIt
+    schedule:
+      interval: weekly
+      day: monday
+      time: '08:00'
+      timezone: America/Mexico_City
+    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    groups:
+      api-panel-menores:
+        update-types: [minor, patch]
+
+  # Imagen base de Node de cada API. El salto de version mayor se decide a mano.
+  - package-ecosystem: docker
+    directory: /backend_retoOtIt
+    schedule:
+      interval: weekly
+      day: monday
+      time: '08:00'
+      timezone: America/Mexico_City
+    ignore:
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: docker
+    directory: /backend_panel_retoOtIt
+    schedule:
+      interval: weekly
+      day: monday
+      time: '08:00'
+      timezone: America/Mexico_City
+    ignore:
+      - dependency-name: node
+        update-types: [version-update:semver-major]
+
+  # PostgreSQL: pasar a otra version mayor exige migrar los datos, nunca automatico.
+  - package-ecosystem: docker-compose
+    directory: /docker_retoOtIt
+    schedule:
+      interval: weekly
+      day: monday
+      time: '08:00'
+      timezone: America/Mexico_City
+    ignore:
+      - dependency-name: postgres
+        update-types: [version-update:semver-major]
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: '08:00'
+      timezone: America/Mexico_City
+    groups:
+      actions:
+        patterns: ['*']
+        update-types: [minor, patch]
