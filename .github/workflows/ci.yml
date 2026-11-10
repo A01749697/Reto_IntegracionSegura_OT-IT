@@ -153,7 +153,7 @@ jobs:
           persist-credentials: false
 
       - name: Descargar la pagina compilada
-        uses: actions/download-artifact@v7
+        uses: actions/download-artifact@v8
         with:
           name: pagina-compilada
           path: dist
