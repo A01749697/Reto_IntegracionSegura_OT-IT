@@ -166,7 +166,16 @@ function Contenido() {
       />
     )
   } else {
-    contenido = <PaginaInicio usuario={sesion} />
+    contenido = (
+      <PaginaInicio
+        usuario={sesion}
+        obtenerEstado={obtenerEstado}
+        listarPendientes={listarPendientes}
+        listarEventos={listarEventosRecientes}
+        irA={setPantalla}
+        sesionCaducada={alCaducarSesion}
+      />
+    )
   }
 
   return (
@@ -189,6 +198,10 @@ function Contenido() {
     </div>
   )
 }
+
+// fuera del componente para que no cambien en cada pintada
+const listarPendientes = () => listarCuentas('pendiente')
+const listarEventosRecientes = () => listarBitacora('todos')
 
 // El fondo de onda va detras de todas las pantallas.
 function App() {

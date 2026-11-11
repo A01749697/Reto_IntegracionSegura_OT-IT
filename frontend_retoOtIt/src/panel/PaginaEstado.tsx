@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
-import { AlertCircle, CheckCircle } from 'reicon-react'
-import { boton } from '../comun/estilos'
+import type { ComponentType } from 'react'
+import { AlertCircle, CheckCircle, Database, Pulse, Server } from 'reicon-react'
+import { boton, TARJETA } from '../comun/estilos'
 import type { EstadoDatos, EstadoSistema, ResultadoEstado } from './apiSistema'
 import MarcoPanel from './MarcoPanel'
 import { fechaHora, hace } from './tiempo'
@@ -25,30 +26,54 @@ const ESTILOS: Record<Tono, string> = {
   neutro: 'border-linea bg-panel text-suave',
 }
 
+type Icono = ComponentType<{ size?: number; className?: string }>
+
 function Tarjeta({
   nombre,
   tono,
   texto,
+  detalle,
+  Icono,
 }: {
   nombre: string
   tono: Tono
   texto: string
+  detalle: string
+  Icono: Icono
 }) {
   return (
     <div
-      className={`flex flex-col gap-1 rounded-[10px] border px-5 py-4 ${ESTILOS[tono]}`}
+      className={`flex items-start gap-3.5 rounded-[10px] border px-5 py-4 ${ESTILOS[tono]}`}
     >
-      <p className="text-[13px] font-semibold">{nombre}</p>
-      <p className="flex items-center gap-2 text-[15px] font-bold">
-        {tono === 'bien' ? (
-          <CheckCircle size={20} aria-hidden="true" />
-        ) : (
-          <AlertCircle size={20} aria-hidden="true" />
-        )}
-        <span>{texto}</span>
-      </p>
+      <span
+        aria-hidden="true"
+        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-current/30"
+      >
+        <Icono size={20} />
+      </span>
+      <div className="flex min-w-0 flex-col gap-1">
+        <p className="text-[13px] font-semibold">{nombre}</p>
+        <p className="flex items-center gap-2 text-[15px] font-bold">
+          {tono === 'bien' ? (
+            <CheckCircle size={18} aria-hidden="true" />
+          ) : (
+            <AlertCircle size={18} aria-hidden="true" />
+          )}
+          <span>{texto}</span>
+        </p>
+        <p className="text-[12.5px] text-suave">{detalle}</p>
+      </div>
     </div>
   )
+}
+
+// la lectura mas reciente de todas, para la tarjeta de llegada de datos
+function detalleDatos(estado: EstadoSistema): string {
+  if (estado.variables.length === 0) return 'Aún no llega ninguna lectura'
+  const menor = Math.min(
+    ...estado.variables.map((v) => v.segundosDesdeRecibida),
+  )
+  return `Última lectura ${hace(menor)}`
 }
 
 const tonoDe = (parte: 'ok' | 'falla'): Tono =>
@@ -98,14 +123,22 @@ export default function PaginaEstado({ obtener, sesionCaducada }: Props) {
 
       {estado && (
         <>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <Tarjeta nombre="API del panel" tono="bien" texto="Responde" />
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <Tarjeta
+              nombre="API del panel"
+              tono="bien"
+              texto="Responde"
+              detalle="Atiende las peticiones de esta página"
+              Icono={Server}
+            />
             <Tarjeta
               nombre="Base de datos del panel"
               tono={tonoDe(estado.baseDatosPanel)}
               texto={
                 estado.baseDatosPanel === 'ok' ? 'Responde' : 'No responde'
               }
+              detalle="Cuentas, sesiones y bitácora"
+              Icono={Database}
             />
             <Tarjeta
               nombre="Base de datos de lecturas"
@@ -113,11 +146,15 @@ export default function PaginaEstado({ obtener, sesionCaducada }: Props) {
               texto={
                 estado.baseDatosLecturas === 'ok' ? 'Responde' : 'No responde'
               }
+              detalle="Lecturas que manda el agente IT"
+              Icono={Database}
             />
             <Tarjeta
               nombre="Llegada de datos"
               tono={DATOS[estado.datos].tono}
               texto={DATOS[estado.datos].texto}
+              detalle={detalleDatos(estado)}
+              Icono={Pulse}
             />
           </div>
 
@@ -127,7 +164,7 @@ export default function PaginaEstado({ obtener, sesionCaducada }: Props) {
               cada variable con la hora de su última lectura.
             </p>
           ) : (
-            <div className="overflow-x-auto">
+            <div className={`${TARJETA} overflow-x-auto px-5 py-4`}>
               <table className="w-full text-left text-[14px]">
                 <caption className="pb-2 text-left text-[15px] font-bold">
                   Última lectura por variable

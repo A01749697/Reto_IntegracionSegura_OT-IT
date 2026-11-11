@@ -89,7 +89,8 @@ describe('PaginaBitacora', () => {
       hayMas: false,
     })
     expect(await screen.findByText('tipo_nuevo')).toBeInTheDocument()
-    expect(screen.getByText('Sin correo · Sin IP')).toBeInTheDocument()
+    expect(screen.getByText('Sin correo')).toBeInTheDocument()
+    expect(screen.getByText('Sin IP')).toBeInTheDocument()
   })
 
   it('avisa cuando no hay eventos', async () => {
@@ -244,5 +245,35 @@ describe('PaginaBitacora', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Descargar CSV' }))
       await waitFor(() => expect(props.sesionCaducada).toHaveBeenCalledTimes(1))
     })
+  })
+})
+
+describe('PaginaBitacora, tabla', () => {
+  it('muestra los eventos en una tabla con sus columnas', async () => {
+    preparar({
+      ok: true,
+      eventos: [evento(1), evento(2, { tipo: 'entrada_fallida' })],
+      hayMas: false,
+    })
+    expect(
+      await screen.findByRole('columnheader', { name: 'Evento' }),
+    ).toBeInTheDocument()
+    for (const titulo of ['Cuenta', 'IP', 'Fecha y hora']) {
+      expect(
+        screen.getByRole('columnheader', { name: titulo }),
+      ).toBeInTheDocument()
+    }
+    expect(screen.getAllByRole('row')).toHaveLength(3)
+    expect(screen.getByText('persona1@ejemplo.com')).toBeInTheDocument()
+  })
+
+  it('solo las alertas llevan la etiqueta Alerta', async () => {
+    preparar({
+      ok: true,
+      eventos: [evento(1), evento(2, { tipo: 'entrada_fallida' })],
+      hayMas: false,
+    })
+    await screen.findByText('Inició sesión')
+    expect(screen.getAllByText('Alerta')).toHaveLength(1)
   })
 })

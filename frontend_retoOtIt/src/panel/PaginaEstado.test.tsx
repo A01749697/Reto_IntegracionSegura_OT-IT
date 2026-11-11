@@ -105,3 +105,26 @@ describe('PaginaEstado', () => {
     await waitFor(() => expect(props.sesionCaducada).toHaveBeenCalledTimes(1))
   })
 })
+
+describe('PaginaEstado, detalles de las tarjetas', () => {
+  it('cada tarjeta dice para qué sirve y cuándo llegó la última lectura', async () => {
+    preparar({ ok: true, estado: estadoBase })
+    expect(
+      await screen.findByText('Cuentas, sesiones y bitácora'),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Lecturas que manda el agente IT'),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Última lectura hace 12 s')).toBeInTheDocument()
+  })
+
+  it('sin lecturas la tarjeta de llegada lo dice', async () => {
+    preparar({
+      ok: true,
+      estado: { ...estadoBase, datos: 'sin_datos', variables: [] },
+    })
+    expect(
+      await screen.findByText('Aún no llega ninguna lectura'),
+    ).toBeInTheDocument()
+  })
+})

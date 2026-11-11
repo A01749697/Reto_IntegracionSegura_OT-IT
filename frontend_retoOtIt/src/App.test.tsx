@@ -56,6 +56,17 @@ const TITULO_LANDING = 'Tus datos de planta, seguros hasta la nube'
 beforeEach(() => {
   vi.resetAllMocks()
   vi.mocked(api.obtenerSesion).mockResolvedValue(null)
+  // el inicio pide estas tres cosas al abrirse
+  vi.mocked(sistema.obtenerEstado).mockResolvedValue({
+    ok: false,
+    motivo: 'fallo',
+  })
+  vi.mocked(admin.listarCuentas).mockResolvedValue({ ok: true, cuentas: [] })
+  vi.mocked(bitacora.listarBitacora).mockResolvedValue({
+    ok: true,
+    eventos: [],
+    hayMas: false,
+  })
   window.history.replaceState(null, '', '/')
 })
 
@@ -236,10 +247,10 @@ describe('App con sesión', () => {
 
   it('manda al login si la sesion caduca en la pantalla de cuentas', async () => {
     vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
-    vi.mocked(admin.listarCuentas).mockResolvedValue({
-      ok: false,
-      motivo: 'sesion',
-    })
+    // la primera llamada es la del inicio; la segunda, la de Cuentas
+    vi.mocked(admin.listarCuentas)
+      .mockResolvedValueOnce({ ok: true, cuentas: [] })
+      .mockResolvedValue({ ok: false, motivo: 'sesion' })
     render(<App />)
     await screen.findByRole('heading', { name: 'Inicio' })
     irA('Cuentas')
@@ -352,10 +363,10 @@ describe('App con sesión', () => {
 
   it('manda al login si la sesión caduca en el estado', async () => {
     vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
-    vi.mocked(sistema.obtenerEstado).mockResolvedValue({
-      ok: false,
-      motivo: 'sesion',
-    })
+    // la primera llamada es la del inicio; la segunda, la de Estado
+    vi.mocked(sistema.obtenerEstado)
+      .mockResolvedValueOnce({ ok: false, motivo: 'fallo' })
+      .mockResolvedValue({ ok: false, motivo: 'sesion' })
     render(<App />)
     await screen.findByRole('heading', { name: 'Inicio' })
     irA('Estado')
