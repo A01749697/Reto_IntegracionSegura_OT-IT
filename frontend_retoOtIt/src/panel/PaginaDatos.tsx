@@ -264,14 +264,14 @@ export default function PaginaDatos({
                   tabIndex={0}
                   className={`${TARJETA} overflow-x-auto focus-visible:ring-[3px] focus-visible:ring-acento/45 focus-visible:outline-none`}
                 >
-                  <table className="min-w-full text-left text-[12.5px]">
+                  <table className="min-w-full text-left text-[13px]">
                     <thead>
                       <tr>
                         {pagina.columnas.map((columna) => (
                           <th
                             key={columna.clave}
                             scope="col"
-                            className="border-b border-linea px-3.5 py-2.5 font-bold whitespace-nowrap text-suave"
+                            className="border-b border-linea px-4 py-2.5 text-[12.5px] font-bold whitespace-nowrap text-suave"
                           >
                             {columna.titulo}
                           </th>
@@ -282,14 +282,14 @@ export default function PaginaDatos({
                       {pagina.filas.map((fila, indice) => (
                         <tr
                           key={String(fila.id ?? indice)}
-                          className="border-b border-linea last:border-b-0"
+                          className="border-b border-linea last:border-b-0 hover:bg-fondo/60"
                         >
                           {pagina.columnas.map((columna) => {
                             const valor = fila[columna.clave] ?? null
                             return (
                               <td
                                 key={columna.clave}
-                                className="px-3.5 py-2 whitespace-nowrap"
+                                className="px-4 py-2.5 whitespace-nowrap"
                               >
                                 {valor === null ? (
                                   <span className="text-suave">—</span>

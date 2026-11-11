@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
-import { AlertCircle, CheckCircle, Lock } from 'reicon-react'
-import { avisoClases, boton } from '../comun/estilos'
+import { AlertCircle, CheckCircle, Lock, ShieldCheck } from 'reicon-react'
+import { avisoClases, boton, TARJETA } from '../comun/estilos'
+import { iniciales } from '../comun/iniciales'
 import CampoTexto from '../login/CampoTexto'
 import type { Usuario } from '../login/apiPanel'
 import type { ResultadoCambioClave } from './apiCuenta'
@@ -88,100 +89,126 @@ export default function PaginaMiCuenta({
 
   return (
     <MarcoPanel titulo="Mi cuenta">
-      <dl className="flex flex-col gap-1 text-[14px] text-suave">
-        <div className="flex gap-2">
-          <dt className="font-semibold">Nombre:</dt>
-          <dd>{usuario.nombre}</dd>
-        </div>
-        <div className="flex gap-2">
-          <dt className="font-semibold">Correo:</dt>
-          <dd className="break-all">{usuario.correo}</dd>
-        </div>
-        <div className="flex gap-2">
-          <dt className="font-semibold">Rol:</dt>
-          <dd>{usuario.rol}</dd>
-        </div>
-      </dl>
-
-      <form
-        onSubmit={enviar}
-        noValidate
-        aria-label="Cambiar contraseña"
-        className="flex max-w-[460px] flex-col gap-5"
-      >
-        <h2 className="text-[18px] font-bold">Cambiar contraseña</h2>
-
-        {aviso && (
-          <div
-            role={aviso.error ? 'alert' : 'status'}
-            className={avisoClases(aviso.error)}
-          >
-            {aviso.error ? (
-              <AlertCircle
-                size={18}
-                aria-hidden="true"
-                className="mt-px shrink-0"
-              />
-            ) : (
-              <CheckCircle
-                size={18}
-                aria-hidden="true"
-                className="mt-px shrink-0"
-              />
-            )}
-            <span>{aviso.texto}</span>
+      <div className="grid items-start gap-5 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
+        <section className={`${TARJETA} flex flex-col gap-4 px-5 py-5`}>
+          <h2 className="text-[18px] font-bold">Tus datos</h2>
+          <div className="flex items-center gap-3.5">
+            <span
+              aria-hidden="true"
+              className="flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-acento text-[16px] font-bold text-sobre"
+            >
+              {iniciales(usuario.nombre)}
+            </span>
+            <dl className="flex min-w-0 flex-col gap-1 text-[14px] text-suave">
+              <div className="flex gap-2">
+                <dt className="font-semibold">Nombre:</dt>
+                <dd>{usuario.nombre}</dd>
+              </div>
+              <div className="flex gap-2">
+                <dt className="font-semibold">Correo:</dt>
+                <dd className="break-all">{usuario.correo}</dd>
+              </div>
+              <div className="flex gap-2">
+                <dt className="font-semibold">Rol:</dt>
+                <dd>{usuario.rol}</dd>
+              </div>
+            </dl>
           </div>
-        )}
+        </section>
 
-        <CampoTexto
-          id="clave-actual"
-          etiqueta="Contraseña actual"
-          Icono={Lock}
-          valor={actual}
-          alCambiar={setActual}
-          type={tipo}
-          autoComplete="current-password"
-          placeholder="••••••••"
-        />
-        <CampoTexto
-          id="clave-nueva"
-          etiqueta="Contraseña nueva"
-          Icono={Lock}
-          valor={nueva}
-          alCambiar={setNueva}
-          type={tipo}
-          autoComplete="new-password"
-          placeholder={`Mínimo ${LARGO_MINIMO} caracteres`}
-        />
-        <CampoTexto
-          id="clave-repetida"
-          etiqueta="Repite la contraseña nueva"
-          Icono={Lock}
-          valor={repetida}
-          alCambiar={setRepetida}
-          type={tipo}
-          autoComplete="new-password"
-          placeholder="Escríbela otra vez"
-        />
-
-        <label className="flex cursor-pointer items-center gap-2 text-[13.5px]">
-          <input
-            type="checkbox"
-            checked={ver}
-            onChange={(e) => setVer(e.target.checked)}
-            className="h-4 w-4 accent-acento"
-          />
-          Mostrar contraseñas
-        </label>
-
-        <button
-          type="submit"
-          disabled={enviando}
-          className={`${boton('principal', 'grande')} w-full`}
+        <form
+          onSubmit={enviar}
+          noValidate
+          aria-label="Cambiar contraseña"
+          className={`${TARJETA} flex flex-col gap-5 px-5 py-5`}
         >
-          {enviando ? 'Guardando...' : 'Cambiar contraseña'}
-        </button>
-      </form>
+          <h2 className="text-[18px] font-bold">Cambiar contraseña</h2>
+
+          {aviso && (
+            <div
+              role={aviso.error ? 'alert' : 'status'}
+              className={avisoClases(aviso.error)}
+            >
+              {aviso.error ? (
+                <AlertCircle
+                  size={18}
+                  aria-hidden="true"
+                  className="mt-px shrink-0"
+                />
+              ) : (
+                <CheckCircle
+                  size={18}
+                  aria-hidden="true"
+                  className="mt-px shrink-0"
+                />
+              )}
+              <span>{aviso.texto}</span>
+            </div>
+          )}
+
+          <CampoTexto
+            id="clave-actual"
+            etiqueta="Contraseña actual"
+            Icono={Lock}
+            valor={actual}
+            alCambiar={setActual}
+            type={tipo}
+            autoComplete="current-password"
+            placeholder="••••••••"
+          />
+          <CampoTexto
+            id="clave-nueva"
+            etiqueta="Contraseña nueva"
+            Icono={Lock}
+            valor={nueva}
+            alCambiar={setNueva}
+            type={tipo}
+            autoComplete="new-password"
+            placeholder={`Mínimo ${LARGO_MINIMO} caracteres`}
+          />
+          <CampoTexto
+            id="clave-repetida"
+            etiqueta="Repite la contraseña nueva"
+            Icono={Lock}
+            valor={repetida}
+            alCambiar={setRepetida}
+            type={tipo}
+            autoComplete="new-password"
+            placeholder="Escríbela otra vez"
+          />
+
+          <label className="flex cursor-pointer items-center gap-2 text-[13.5px]">
+            <input
+              type="checkbox"
+              checked={ver}
+              onChange={(e) => setVer(e.target.checked)}
+              className="h-4 w-4 accent-acento"
+            />
+            Mostrar contraseñas
+          </label>
+
+          <button
+            type="submit"
+            disabled={enviando}
+            className={`${boton('principal', 'grande')} w-full`}
+          >
+            {enviando ? 'Guardando...' : 'Cambiar contraseña'}
+          </button>
+        </form>
+
+        <section className={`${TARJETA} flex flex-col gap-3 px-5 py-5`}>
+          <h2 className="flex items-center gap-2.5 text-[18px] font-bold">
+            <ShieldCheck size={20} aria-hidden="true" className="text-acento" />
+            Cómo se cuida tu sesión
+          </h2>
+          <ul className="flex list-disc flex-col gap-2 pl-5 text-[13.5px] text-suave">
+            <li>Se cierra sola después de 30 minutos sin uso.</li>
+            <li>Dura 8 horas como máximo, aunque la sigas usando.</li>
+            <li>Tras 3 intentos fallidos la cuenta se bloquea 15 minutos.</li>
+            <li>Al cambiar tu contraseña se cierran tus otras sesiones.</li>
+          </ul>
+        </section>
+      </div>
     </MarcoPanel>
   )
 }

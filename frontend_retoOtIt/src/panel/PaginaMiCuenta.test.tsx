@@ -142,3 +142,18 @@ describe('PaginaMiCuenta', () => {
     expect(campo).toHaveAttribute('type', 'text')
   })
 })
+
+describe('PaginaMiCuenta, acomodo', () => {
+  it('muestra los datos con las iniciales y el resumen de la sesión', () => {
+    preparar()
+    expect(
+      screen.getByRole('heading', { name: 'Tus datos' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('AL')).toBeInTheDocument()
+    expect(screen.getByText('ana@ejemplo.com')).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'Cómo se cuida tu sesión' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText(/30 minutos sin uso/)).toBeInTheDocument()
+  })
+})

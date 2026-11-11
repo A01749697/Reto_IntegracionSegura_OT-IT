@@ -7,6 +7,8 @@ import type {
 } from './apiBitacora'
 import { boton, TARJETA } from '../comun/estilos'
 import Segmentos from '../comun/Segmentos'
+import { describir, esAlerta } from './eventos'
+import IconoEvento from './IconoEvento'
 import MarcoPanel from './MarcoPanel'
 import { fechaHora } from './tiempo'
 
@@ -22,46 +24,8 @@ const FILTROS: { valor: GrupoBitacora; texto: string }[] = [
   { valor: 'alertas', texto: 'Alertas' },
 ]
 
-const DESCRIPCIONES: Record<string, string> = {
-  entrada_correcta: 'Inició sesión',
-  entrada_fallida: 'Intento de entrada con datos incorrectos',
-  entrada_bloqueada: 'Intento de entrada con la cuenta bloqueada',
-  cuenta_bloqueada: 'Cuenta bloqueada por demasiados intentos',
-  entrada_pendiente: 'Intentó entrar con una cuenta pendiente de aprobación',
-  entrada_rechazada: 'Intentó entrar con una cuenta rechazada',
-  cuenta_solicitada: 'Pidió una cuenta nueva',
-  solicitud_repetida: 'Pidió una cuenta con un correo que ya existe',
-  reinicio_solicitado: 'Pidió cambiar su contraseña',
-  reinicio_fallido: 'Usó un enlace de recuperación inválido o caducado',
-  contrasena_restablecida: 'Cambió su contraseña con el enlace del correo',
-  sesion_cerrada: 'Cerró sesión',
-  cuenta_aprobada: 'Cuenta aprobada',
-  cuenta_rechazada: 'Cuenta rechazada',
-  cuenta_desbloqueada: 'Cuenta desbloqueada',
-  rol_cambiado: 'Cuenta promovida a administrador',
-  contrasena_cambiada: 'Cambió su contraseña desde Mi cuenta',
-  cambio_contrasena_fallido:
-    'Intentó cambiar su contraseña con la actual incorrecta',
-  bitacora_exportada: 'Descargó la bitácora en CSV',
-  datos_cuentas_consultadas: 'Consultó la tabla de cuentas en Datos',
-  datos_bitacora_consultada: 'Consultó la tabla de bitácora en Datos',
-}
-
-const ALERTAS = new Set([
-  'entrada_fallida',
-  'entrada_bloqueada',
-  'cuenta_bloqueada',
-  'entrada_pendiente',
-  'entrada_rechazada',
-  'solicitud_repetida',
-  'reinicio_fallido',
-  'cambio_contrasena_fallido',
-])
-
-function describir(evento: EventoBitacora) {
-  const texto = DESCRIPCIONES[evento.tipo] ?? evento.tipo
-  return evento.actorCorreo ? `${texto} por ${evento.actorCorreo}` : texto
-}
+const CELDA_TITULO =
+  'border-b border-linea px-4 py-2.5 font-bold whitespace-nowrap'
 
 type Datos = { eventos: EventoBitacora[]; hayMas: boolean }
 type Carga = { grupo: GrupoBitacora; version: number; datos: Datos | null }
@@ -216,29 +180,62 @@ export default function PaginaBitacora({
                 : 'Todavía no hay eventos registrados.'}
             </p>
           )}
-          <ul className={`${TARJETA} flex flex-col`}>
-            {carga.datos.eventos.map((evento) => (
-              <li
-                key={evento.id}
-                className="flex flex-col gap-0.5 border-b border-linea px-5 py-3.5 last:border-b-0"
-              >
-                <p className="flex flex-wrap items-center gap-2 text-[14px] font-bold">
-                  <span>{describir(evento)}</span>
-                  {ALERTAS.has(evento.tipo) && (
-                    <span className="rounded-[5px] bg-alerta/15 px-2 py-0.5 text-[12px] font-bold text-alerta">
-                      Alerta
-                    </span>
-                  )}
-                </p>
-                <p className="text-[13px] break-all text-suave">
-                  {evento.correo ?? 'Sin correo'} · {evento.ip ?? 'Sin IP'}
-                </p>
-                <p className="text-[12.5px] text-suave">
-                  {fechaHora(evento.ocurrioEn)}
-                </p>
-              </li>
-            ))}
-          </ul>
+          {carga.datos.eventos.length > 0 && (
+            <div
+              role="region"
+              aria-label="Eventos de la bitácora"
+              tabIndex={0}
+              className={`${TARJETA} overflow-x-auto focus-visible:ring-[3px] focus-visible:ring-acento/45 focus-visible:outline-none`}
+            >
+              <table className="min-w-full text-left text-[13.5px]">
+                <thead>
+                  <tr className="text-[12.5px] text-suave">
+                    <th scope="col" className={CELDA_TITULO}>
+                      Evento
+                    </th>
+                    <th scope="col" className={CELDA_TITULO}>
+                      Cuenta
+                    </th>
+                    <th scope="col" className={CELDA_TITULO}>
+                      IP
+                    </th>
+                    <th scope="col" className={CELDA_TITULO}>
+                      Fecha y hora
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {carga.datos.eventos.map((evento) => (
+                    <tr
+                      key={evento.id}
+                      className="border-b border-linea last:border-b-0 hover:bg-fondo/60"
+                    >
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-3">
+                          <IconoEvento tipo={evento.tipo} />
+                          <span className="font-bold">{describir(evento)}</span>
+                          {esAlerta(evento.tipo) && (
+                            <span className="rounded-[5px] bg-alerta/15 px-2 py-0.5 text-[12px] font-bold text-alerta">
+                              Alerta
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap text-suave">
+                        {evento.correo ?? 'Sin correo'}
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap text-suave">
+                        {evento.ip ?? 'Sin IP'}
+                      </td>
+                      <td className="px-4 py-2.5 whitespace-nowrap text-suave">
+                        {fechaHora(evento.ocurrioEn)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
           {errorMas && (
             <p role="alert" className="text-[14px] text-alerta">
               No se pudieron cargar más eventos. Inténtalo otra vez.
