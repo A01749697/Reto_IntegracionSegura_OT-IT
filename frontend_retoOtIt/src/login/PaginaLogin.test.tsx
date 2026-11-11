@@ -448,3 +448,43 @@ describe('PaginaLogin', () => {
     })
   })
 })
+
+describe('PaginaLogin en inglés', () => {
+  it('muestra el formulario y los errores en inglés', async () => {
+    const props = preparar()
+    fireEvent.click(screen.getByRole('button', { name: 'English' }))
+    expect(
+      await screen.findByRole('heading', { name: 'Sign in to the panel' }),
+    ).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Type your email and your password.',
+    )
+    escribir('Email', 'eduardo@ejemplo.com')
+    escribir('Password', 'mala')
+    fireEvent.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Wrong email or password.',
+    )
+    expect(props.autenticar).toHaveBeenCalledTimes(1)
+  })
+
+  it('el aviso de contraseña corta usa el número en inglés', async () => {
+    preparar({ vistaInicial: 'crear' })
+    fireEvent.click(screen.getByRole('button', { name: 'English' }))
+    await screen.findByRole('heading', { name: 'Create account' })
+    escribir('Full name', 'Ana')
+    escribir('Email', 'ana@ejemplo.com')
+    escribir('Password', 'corta')
+    escribir('Repeat the password', 'corta')
+    fireEvent.click(screen.getByRole('button', { name: 'Send request' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'The password must have at least 12 characters.',
+    )
+  })
+
+  it('trae el selector de idioma', () => {
+    preparar()
+    expect(screen.getByRole('group', { name: 'Idioma' })).toBeInTheDocument()
+  })
+})

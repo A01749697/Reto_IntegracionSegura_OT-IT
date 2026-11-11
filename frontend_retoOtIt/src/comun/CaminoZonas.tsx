@@ -1,24 +1,20 @@
+import { useTranslation } from 'react-i18next'
+
 type Props = {
   tamano: 'grande' | 'compacto'
 }
 
 type Zona = {
-  nombre: string
-  descripcion: string
+  clave: 'ot' | 'idmz' | 'it' | 'nube'
   punto: string
 }
 
 const ZONAS: Zona[] = [
-  { nombre: 'OT', descripcion: 'Planta y PLC', punto: 'border-zona-ot' },
+  { clave: 'ot', punto: 'border-zona-ot' },
+  { clave: 'idmz', punto: 'border-zona-idmz' },
+  { clave: 'it', punto: 'border-zona-it' },
   {
-    nombre: 'IDMZ',
-    descripcion: 'Zona intermedia',
-    punto: 'border-zona-idmz',
-  },
-  { nombre: 'IT', descripcion: 'Red de oficina', punto: 'border-zona-it' },
-  {
-    nombre: 'Nube',
-    descripcion: 'Servidor en AWS',
+    clave: 'nube',
     punto:
       'border-zona-nube bg-zona-nube shadow-[0_0_0_6px_color-mix(in_srgb,var(--c-nube)_22%,transparent)]',
   },
@@ -63,17 +59,18 @@ function Linea({ margen }: { margen: string }) {
 }
 
 export default function CaminoZonas({ tamano }: Props) {
+  const { t } = useTranslation()
   const m = MEDIDAS[tamano]
   return (
     <div
       role="img"
-      aria-label="Camino de los datos: de la zona OT a la IDMZ, luego a la zona IT y por último a la nube"
+      aria-label={t('camino.etiqueta')}
       className="flex items-start"
     >
       {ZONAS.map((zona, i) => {
         const esNube = i === ZONAS.length - 1
         return (
-          <div key={zona.nombre} className="contents">
+          <div key={zona.clave} className="contents">
             {i > 0 && <Linea margen={m.linea} />}
             <div className={`flex flex-none flex-col items-center ${m.nodo}`}>
               <span
@@ -82,12 +79,12 @@ export default function CaminoZonas({ tamano }: Props) {
               <span
                 className={`font-bold ${esNube ? `${m.nombreNube} text-zona-nube` : `${m.nombre} text-texto`}`}
               >
-                {zona.nombre}
+                {t(`camino.zonas.${zona.clave}.nombre`)}
               </span>
               <span
                 className={`text-center leading-tight text-suave ${m.detalle}`}
               >
-                {zona.descripcion}
+                {t(`camino.zonas.${zona.clave}.descripcion`)}
               </span>
             </div>
           </div>
