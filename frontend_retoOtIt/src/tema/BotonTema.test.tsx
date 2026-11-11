@@ -1,5 +1,6 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
+import i18n from '../idioma/i18n'
 import BotonTema from './BotonTema'
 
 afterEach(() => {
@@ -28,5 +29,16 @@ describe('BotonTema', () => {
       screen.getByRole('button', { name: 'Cambiar a modo oscuro' }),
     )
     expect(document.documentElement.dataset.tema).toBe('oscuro')
+  })
+})
+
+describe('BotonTema en inglés', () => {
+  it('ofrece el cambio de modo en inglés', async () => {
+    await i18n.changeLanguage('en')
+    document.documentElement.dataset.tema = 'oscuro'
+    render(<BotonTema />)
+    expect(
+      screen.getByRole('button', { name: 'Switch to light mode' }),
+    ).toBeInTheDocument()
   })
 })

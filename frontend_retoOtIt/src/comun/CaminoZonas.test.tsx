@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import i18n from '../idioma/i18n'
 import CaminoZonas from './CaminoZonas'
 
 describe('CaminoZonas', () => {
@@ -23,5 +24,16 @@ describe('CaminoZonas', () => {
     render(<CaminoZonas tamano="grande" />)
     expect(screen.getByText('Planta y PLC')).toBeInTheDocument()
     expect(screen.getByText('Servidor en AWS')).toBeInTheDocument()
+  })
+})
+
+describe('CaminoZonas en inglés', () => {
+  it('traduce la etiqueta y las zonas', async () => {
+    await i18n.changeLanguage('en')
+    render(<CaminoZonas tamano="grande" />)
+    expect(screen.getByRole('img', { name: /Data path/ })).toBeInTheDocument()
+    expect(screen.getByText('Cloud')).toBeInTheDocument()
+    expect(screen.getByText('Plant and PLCs')).toBeInTheDocument()
+    expect(screen.queryByText('Nube')).not.toBeInTheDocument()
   })
 })
