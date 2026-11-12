@@ -1,3 +1,5 @@
+import type { TFunction } from 'i18next'
+import { useTranslation } from 'react-i18next'
 import { useEffect, useState, type FormEvent } from 'react'
 import { Magnifier } from 'reicon-react'
 import { boton, CAMPO_BUSQUEDA, TARJETA } from '../comun/estilos'
@@ -22,15 +24,16 @@ type Props = {
   sesionCaducada: () => void
 }
 
-const PISTAS: Record<string, string> = {
-  cuentas: 'Buscar por nombre o correo',
-  bitacora: 'Buscar por tipo, correo o IP',
-}
+// tablas con nombre y pista propios; cualquier otra usa lo que mande la API
+const CONOCIDAS = ['cuentas', 'bitacora'] as const
+type Conocida = (typeof CONOCIDAS)[number]
+const esConocida = (id: string): id is Conocida =>
+  CONOCIDAS.some((conocida) => conocida === id)
 
 const FECHA_ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/
 
-function mostrar(valor: Celda): string {
-  if (typeof valor === 'boolean') return valor ? 'sí' : 'no'
+function mostrar(valor: Celda, t: TFunction): string {
+  if (typeof valor === 'boolean') return valor ? t('datos.si') : t('datos.no')
   if (typeof valor === 'string' && FECHA_ISO.test(valor)) {
     return fechaHora(valor)
   }
@@ -49,6 +52,7 @@ export default function PaginaDatos({
   leer,
   sesionCaducada,
 }: Props) {
+  const { t } = useTranslation()
   const [tablas, setTablas] = useState<TablaDatos[] | null | 'error'>(null)
   const [intento, setIntento] = useState(0)
   const [elegida, setElegida] = useState<string | null>(null)
@@ -159,22 +163,22 @@ export default function PaginaDatos({
     )
   }
 
-  const nombreTabla = lista.find((t) => t.id === tabla)?.nombre ?? ''
+  const nombreDe = (una: TablaDatos) =>
+    esConocida(una.id) ? t(`datos.tablas.${una.id}`) : una.nombre
+  const actual = lista.find((una) => una.id === tabla)
+  const nombreTabla = actual ? nombreDe(actual) : ''
   const pagina = cargando ? null : (carga?.pagina ?? null)
 
   return (
-    <MarcoPanel titulo="Datos">
-      <p className="text-[14px] text-suave">
-        Solo lectura. Cada vez que abres o buscas en una tabla queda anotado en
-        la bitácora de seguridad.
-      </p>
+    <MarcoPanel titulo={t('datos.titulo')}>
+      <p className="text-[14px] text-suave">{t('datos.aviso')}</p>
 
-      {tablas === null && <p className="text-suave">Cargando...</p>}
+      {tablas === null && <p className="text-suave">{t('general.cargando')}</p>}
 
       {tablas === 'error' && (
         <div className="flex flex-col items-start gap-3">
           <p role="alert" className="text-[14px] text-alerta">
-            No se pudo cargar la lista de tablas. Inténtalo otra vez.
+            {t('datos.errorTablas')}
           </p>
           <button
             type="button"
@@ -184,7 +188,7 @@ export default function PaginaDatos({
             }}
             className={boton('neutro')}
           >
-            Reintentar
+            {t('general.reintentar')}
           </button>
         </div>
       )}
@@ -193,8 +197,11 @@ export default function PaginaDatos({
         <>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <Segmentos
-              etiqueta="Tabla"
-              opciones={lista.map((t) => ({ valor: t.id, texto: t.nombre }))}
+              etiqueta={t('datos.etiquetaTabla')}
+              opciones={lista.map((una) => ({
+                valor: una.id,
+                texto: nombreDe(una),
+              }))}
               valor={tabla}
               alCambiar={cambiarTabla}
             />
@@ -204,7 +211,7 @@ export default function PaginaDatos({
               onClick={() => setVersion((v) => v + 1)}
               className={boton('neutro')}
             >
-              Actualizar
+              {t('general.actualizar')}
             </button>
           </div>
 
@@ -217,11 +224,15 @@ export default function PaginaDatos({
               />
               <input
                 type="search"
-                aria-label="Buscar en la tabla"
+                aria-label={t('datos.buscarEnTabla')}
                 value={texto}
                 onChange={(e) => setTexto(e.target.value)}
                 maxLength={60}
-                placeholder={PISTAS[tabla] ?? 'Buscar'}
+                placeholder={
+                  esConocida(tabla)
+                    ? t(`datos.pistas.${tabla}`)
+                    : t('general.buscar')
+                }
                 autoComplete="off"
                 className={CAMPO_BUSQUEDA}
               />
@@ -231,15 +242,15 @@ export default function PaginaDatos({
               disabled={cargando}
               className={boton('contorno')}
             >
-              Buscar
+              {t('general.buscar')}
             </button>
           </form>
 
-          {cargando && <p className="text-suave">Cargando...</p>}
+          {cargando && <p className="text-suave">{t('general.cargando')}</p>}
 
           {!cargando && carga && !carga.pagina && (
             <p role="alert" className="text-[14px] text-alerta">
-              No se pudo cargar la tabla. Inténtalo otra vez.
+              {t('datos.errorTabla')}
             </p>
           )}
 
@@ -248,19 +259,19 @@ export default function PaginaDatos({
               <p className="text-[13px] text-suave">
                 {pagina.filas.length === 0
                   ? buscar === ''
-                    ? 'La tabla no tiene filas.'
-                    : `Ninguna fila coincide con «${buscar}».`
-                  : `${pagina.filas.length} ${
-                      pagina.filas.length === 1 ? 'fila' : 'filas'
-                    }${pagina.hayMas ? ' (hay más)' : ''}${
-                      buscar === '' ? '' : ` con «${buscar}»`
-                    }, de la más nueva a la más vieja.`}
+                    ? t('datos.sinFilas')
+                    : t('datos.ningunaCoincide', { texto: buscar })
+                  : `${t('datos.filas', { count: pagina.filas.length })}${
+                      pagina.hayMas ? t('datos.hayMas') : ''
+                    }${
+                      buscar === '' ? '' : t('datos.con', { texto: buscar })
+                    }${t('datos.orden')}`}
               </p>
 
               {pagina.filas.length > 0 && (
                 <div
                   role="region"
-                  aria-label={`Tabla ${nombreTabla}`}
+                  aria-label={t('datos.region', { nombre: nombreTabla })}
                   tabIndex={0}
                   className={`${TARJETA} overflow-x-auto focus-visible:ring-[3px] focus-visible:ring-acento/45 focus-visible:outline-none`}
                 >
@@ -294,7 +305,7 @@ export default function PaginaDatos({
                                 {valor === null ? (
                                   <span className="text-suave">—</span>
                                 ) : (
-                                  mostrar(valor)
+                                  mostrar(valor, t)
                                 )}
                               </td>
                             )
@@ -308,7 +319,7 @@ export default function PaginaDatos({
 
               {errorMas && (
                 <p role="alert" className="text-[14px] text-alerta">
-                  No se pudieron cargar más filas. Inténtalo otra vez.
+                  {t('datos.errorMas')}
                 </p>
               )}
               {pagina.hayMas && (
@@ -318,7 +329,7 @@ export default function PaginaDatos({
                   onClick={cargarMas}
                   className={`${boton('neutro')} self-center`}
                 >
-                  {cargandoMas ? 'Cargando...' : 'Cargar más'}
+                  {cargandoMas ? t('general.cargando') : t('general.cargarMas')}
                 </button>
               )}
             </>

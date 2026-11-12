@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FilaDatos, ResultadoDatos, ResultadoTablas } from './apiDatos'
+import i18n from '../idioma/i18n'
 import PaginaDatos from './PaginaDatos'
 
 const COLUMNAS_CUENTAS = [
@@ -228,5 +229,23 @@ describe('PaginaDatos', () => {
   it('si la sesión caducó al leer la tabla, avisa', async () => {
     const props = preparar({ ok: false, motivo: 'sesion' })
     await waitFor(() => expect(props.sesionCaducada).toHaveBeenCalledTimes(1))
+  })
+})
+
+describe('PaginaDatos en inglés', () => {
+  it('traduce el nombre de las tablas y el resumen de filas', async () => {
+    await i18n.changeLanguage('en')
+    preparar(pagina([cuenta(2), cuenta(1)], true))
+    expect(screen.getByRole('heading', { name: 'Data' })).toBeInTheDocument()
+    expect(
+      await screen.findByText(
+        '2 rows (there are more), from newest to oldest.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Accounts' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Log' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('region', { name: 'Accounts table' }),
+    ).toBeInTheDocument()
   })
 })

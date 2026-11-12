@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import type { EventoBitacora } from './apiBitacora'
-import { ALERTAS, DESCRIPCIONES, describir, esAlerta } from './eventos'
+import { es } from '../idioma/es'
+import i18n from '../idioma/i18n'
+import { ALERTAS, describir, esAlerta } from './eventos'
 
 const evento = (cambios: Partial<EventoBitacora>): EventoBitacora => ({
   id: 1,
@@ -35,6 +37,14 @@ describe('eventos', () => {
   })
 
   it('toda alerta tiene descripción', () => {
-    for (const tipo of ALERTAS) expect(DESCRIPCIONES[tipo]).toBeDefined()
+    for (const tipo of ALERTAS) expect(es.eventos.tipos).toHaveProperty(tipo)
+  })
+
+  it('en inglés describe el evento y quién lo hizo', async () => {
+    await i18n.changeLanguage('en')
+    expect(describir(evento({}))).toBe('Signed in')
+    expect(
+      describir(evento({ tipo: 'cuenta_aprobada', actorCorreo: 'adm@e.com' })),
+    ).toBe('Account approved by adm@e.com')
   })
 })

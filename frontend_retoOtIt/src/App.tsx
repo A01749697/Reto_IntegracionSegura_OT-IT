@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import FondoOnda from './comun/FondoOnda'
+import FranjaZonas from './comun/FranjaZonas'
 import PaginaLanding from './landing/PaginaLanding'
 import {
   cerrarSesion,
@@ -30,30 +32,35 @@ import { descargarArchivo } from './panel/descarga'
 import PaginaEstado from './panel/PaginaEstado'
 import PaginaInicio from './panel/PaginaInicio'
 import PaginaMiCuenta from './panel/PaginaMiCuenta'
+import PaginaNoEncontrada from './rutas/PaginaNoEncontrada'
+import { destinoDeSeccion, RAIZ } from './rutas/rutas'
+import { useDestino } from './rutas/useDestino'
 
 // el enlace del correo trae #restablecer=CODIGO
 function leerCodigoDelEnlace(): string | undefined {
   return /^#restablecer=([0-9a-f]{64})$/.exec(window.location.hash)?.[1]
 }
 
-// Lo que se ve sin sesion.
-type Publica = 'landing' | 'login' | 'crear'
+const LOGIN = { donde: 'publica', pagina: 'login' } as const
+const CREAR = { donde: 'publica', pagina: 'crear' } as const
 
 function Contenido() {
+  const { t } = useTranslation()
   const [codigo, setCodigo] = useState(leerCodigoDelEnlace)
   const [sesion, setSesion] = useState<Usuario | null | 'cargando'>('cargando')
-  const [pantalla, setPantalla] = useState<Seccion>('inicio')
-  // con el enlace del correo se entra directo al formulario, sin pasar por la landing
-  const [publica, setPublica] = useState<Publica>(() =>
-    leerCodigoDelEnlace() ? 'login' : 'landing',
+  // la pantalla actual sale de la direccion del navegador
+  const [destino, navegar] = useDestino()
+
+  const irA = useCallback(
+    (seccion: Seccion) => navegar(destinoDeSeccion(seccion)),
+    [navegar],
   )
 
   // la sesion se vencio: se vuelve al login
   const alCaducarSesion = useCallback(() => {
-    setPantalla('inicio')
-    setPublica('login')
+    navegar(LOGIN, { reemplazar: true })
     setSesion(null)
-  }, [])
+  }, [navegar])
 
   useEffect(() => {
     // lo quito de la barra para que no se quede en el historial
@@ -76,52 +83,96 @@ function Contenido() {
     }
   }, [])
 
+  async function cerrar() {
+    const cerrada = await cerrarSesion()
+    if (cerrada) {
+      navegar(RAIZ, { reemplazar: true })
+      setSesion(null)
+    }
+    return cerrada
+  }
+
   if (sesion === 'cargando') {
     return (
       <p
         role="status"
         className="flex min-h-screen items-center justify-center font-sans text-suave"
       >
-        Cargando...
+        {t('general.cargando')}
       </p>
     )
   }
 
-  if (!sesion) {
-    if (publica === 'landing') {
+  if (destino.donde === 'desconocida') {
+    const pagina = <PaginaNoEncontrada irAlInicio={() => navegar(RAIZ)} />
+    // con sesion se conserva el encabezado para poder seguir navegando
+    if (!sesion) {
       return (
-        <PaginaLanding
-          irLogin={() => setPublica('login')}
-          irCrear={() => setPublica('crear')}
-        />
+        <div className="min-h-screen font-sans text-texto">
+          <FranjaZonas />
+          {pagina}
+        </div>
       )
     }
     return (
+      <div className="min-h-screen font-sans text-texto">
+        <EncabezadoPanel
+          usuario={sesion}
+          actual={null}
+          irA={irA}
+          cerrarSesion={cerrar}
+        />
+        {pagina}
+      </div>
+    )
+  }
+
+  if (!sesion) {
+    // con el enlace del correo se entra directo al formulario, sin pasar por la portada
+    if (destino.donde === 'raiz' && !codigo) {
+      return (
+        <PaginaLanding
+          irLogin={() => navegar(LOGIN)}
+          irCrear={() => navegar(CREAR)}
+        />
+      )
+    }
+    const vista =
+      destino.donde === 'publica' && destino.pagina === 'crear'
+        ? 'crear'
+        : 'login'
+    return (
       <PaginaLogin
+        // al cambiar de direccion (Atras, Adelante) se arma de nuevo con su vista
+        key={vista}
         autenticar={entrar}
         solicitarCuenta={crearCuenta}
         recuperarClave={pedirReinicio}
         restablecerClave={restablecer}
         alIniciarSesion={(usuario) => {
           setCodigo(undefined)
+          // quien venia a una pantalla del panel llega a ella; los demas, al inicio
+          if (destino.donde !== 'panel') navegar(RAIZ, { reemplazar: true })
           setSesion(usuario)
         }}
         tokenInicial={codigo}
-        vistaInicial={publica === 'crear' ? 'crear' : 'login'}
-        alVolver={() => setPublica('landing')}
+        vistaInicial={vista}
+        alVolver={() => {
+          setCodigo(undefined)
+          navegar(RAIZ)
+        }}
       />
     )
   }
 
   const esAdmin = sesion.rol === 'administrador'
+  const pedida: Seccion = destino.donde === 'panel' ? destino.seccion : 'inicio'
   // si alguien sin permiso llega a una pantalla de administracion, ve el inicio
   const seccion: Seccion =
-    (pantalla === 'cuentas' ||
-      pantalla === 'bitacora' ||
-      pantalla === 'datos') &&
+    (pedida === 'cuentas' || pedida === 'bitacora' || pedida === 'datos') &&
     !esAdmin
       ? 'inicio'
-      : pantalla
+      : pedida
 
   let contenido: ReactNode
   if (seccion === 'cuentas') {
@@ -172,7 +223,7 @@ function Contenido() {
         obtenerEstado={obtenerEstado}
         listarPendientes={listarPendientes}
         listarEventos={listarEventosRecientes}
-        irA={setPantalla}
+        irA={irA}
         sesionCaducada={alCaducarSesion}
       />
     )
@@ -183,16 +234,8 @@ function Contenido() {
       <EncabezadoPanel
         usuario={sesion}
         actual={seccion}
-        irA={setPantalla}
-        cerrarSesion={async () => {
-          const cerrada = await cerrarSesion()
-          if (cerrada) {
-            setPantalla('inicio')
-            setPublica('landing')
-            setSesion(null)
-          }
-          return cerrada
-        }}
+        irA={irA}
+        cerrarSesion={cerrar}
       />
       {contenido}
     </div>

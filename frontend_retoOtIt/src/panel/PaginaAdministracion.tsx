@@ -1,16 +1,16 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { AlertCircle, CheckCircle, Magnifier } from 'reicon-react'
 import { avisoClases, boton, CAMPO_BUSQUEDA, TARJETA } from '../comun/estilos'
 import { iniciales } from '../comun/iniciales'
 import Segmentos from '../comun/Segmentos'
 import MarcoPanel from './MarcoPanel'
 import { coincide } from './buscar'
+import { fechaCorta } from './tiempo'
 import type {
   Cuenta,
   DecisionCuenta,
-  EstadoCuenta,
   FiltroCuentas,
-  MotivoDecision,
   ResultadoDecision,
   ResultadoLista,
 } from './apiAdministracion'
@@ -23,44 +23,11 @@ type Props = {
   sesionCaducada: () => void
 }
 
-const FILTROS: { valor: FiltroCuentas; texto: string }[] = [
-  { valor: 'pendiente', texto: 'Pendientes' },
-  { valor: 'aprobado', texto: 'Aprobadas' },
-  { valor: 'rechazado', texto: 'Rechazadas' },
-  { valor: 'todas', texto: 'Todas' },
-]
-
-const VACIO: Record<FiltroCuentas, string> = {
-  pendiente: 'No hay cuentas pendientes.',
-  aprobado: 'No hay cuentas aprobadas.',
-  rechazado: 'No hay cuentas rechazadas.',
-  todas: 'No hay cuentas.',
-}
-
-const ETIQUETA_ESTADO: Record<EstadoCuenta, string> = {
-  pendiente: 'Pendiente',
-  aprobado: 'Aprobada',
-  rechazado: 'Rechazada',
-}
-
-const MENSAJES_ERROR: Record<Exclude<MotivoDecision, 'sesion'>, string> = {
-  no_existe: 'La cuenta ya no existe.',
-  no_permitido: 'Esa cuenta no se puede cambiar desde el panel.',
-  sin_cambio: 'La cuenta ya tenía ese estado.',
-  fallo: 'No se pudo completar. Inténtalo otra vez.',
-}
+const FILTROS: FiltroCuentas[] = ['pendiente', 'aprobado', 'rechazado', 'todas']
 
 const PRIMARIO = boton('principal')
 const CONTORNO = boton('contorno')
 const PELIGRO = boton('peligro')
-
-function fechaCorta(iso: string) {
-  return new Date(iso).toLocaleDateString('es-MX', {
-    day: 'numeric',
-    month: 'short',
-    year: 'numeric',
-  })
-}
 
 type Carga = {
   filtro: FiltroCuentas
@@ -75,6 +42,7 @@ export default function PaginaAdministracion({
   hacerAdministrador,
   sesionCaducada,
 }: Props) {
+  const { t } = useTranslation()
   const [filtro, setFiltro] = useState<FiltroCuentas>('pendiente')
   const [busqueda, setBusqueda] = useState('')
   const [version, setVersion] = useState(0)
@@ -131,14 +99,17 @@ export default function PaginaAdministracion({
     } else if (resultado.motivo === 'sesion') {
       sesionCaducada()
     } else {
-      setAviso({ error: true, texto: MENSAJES_ERROR[resultado.motivo] })
+      setAviso({
+        error: true,
+        texto: t(`cuentas.errores.${resultado.motivo}`),
+      })
       // si ya cambio de estado o no existe, la lista estaba vieja
       if (resultado.motivo !== 'fallo') setVersion((v) => v + 1)
     }
   }
 
   function decidirSobre(cuenta: Cuenta, decision: DecisionCuenta) {
-    const verbo =
+    const hecho =
       decision === 'aprobado'
         ? cuenta.estado === 'rechazado'
           ? 'reactivada'
@@ -149,15 +120,18 @@ export default function PaginaAdministracion({
     return ejecutar(
       cuenta,
       () => decidir(cuenta.id, decision),
-      `Cuenta ${verbo}: ${cuenta.nombre}.`,
+      t(`cuentas.avisos.${hecho}`, { nombre: cuenta.nombre }),
     )
   }
 
   return (
-    <MarcoPanel titulo="Cuentas">
+    <MarcoPanel titulo={t('cuentas.titulo')}>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <Segmentos
-          opciones={FILTROS}
+          opciones={FILTROS.map((valor) => ({
+            valor,
+            texto: t(`cuentas.filtros.${valor}`),
+          }))}
           valor={filtro}
           alCambiar={cambiarFiltro}
         />
@@ -171,8 +145,8 @@ export default function PaginaAdministracion({
             type="search"
             value={busqueda}
             onChange={(e) => setBusqueda(e.target.value)}
-            aria-label="Buscar por nombre"
-            placeholder="Buscar por nombre"
+            aria-label={t('cuentas.buscar')}
+            placeholder={t('cuentas.buscar')}
             autoComplete="off"
             className={CAMPO_BUSQUEDA}
           />
@@ -201,29 +175,35 @@ export default function PaginaAdministracion({
         </div>
       )}
 
-      {cargando && <p className="text-suave">Cargando...</p>}
+      {cargando && <p className="text-suave">{t('general.cargando')}</p>}
 
       {!cargando && !carga.resultado.ok && (
         <p role="alert" className="text-[14px] text-alerta">
-          No se pudo cargar la lista. Inténtalo otra vez.
+          {t('cuentas.errorLista')}
         </p>
       )}
 
       {!cargando && carga.resultado.ok && (
         <>
           {todas.length === 0 && (
-            <p className="text-[14px] text-suave">{VACIO[filtro]}</p>
+            <p className="text-[14px] text-suave">
+              {t(`cuentas.vacio.${filtro}`)}
+            </p>
           )}
           {todas.length > 0 && (
             <p role="status" className="-mb-2 text-[12px] text-suave">
               {buscando
-                ? `${visibles.length} de ${todas.length} cuentas con «${busqueda.trim()}»`
-                : `${todas.length} ${todas.length === 1 ? 'cuenta' : 'cuentas'}`}
+                ? t('cuentas.encontradas', {
+                    visibles: visibles.length,
+                    total: todas.length,
+                    texto: busqueda.trim(),
+                  })
+                : t('cuentas.total', { count: todas.length })}
             </p>
           )}
           {todas.length > 0 && visibles.length === 0 && (
             <p className="text-[14px] text-suave">
-              Nadie coincide con «{busqueda.trim()}».
+              {t('cuentas.nadie', { texto: busqueda.trim() })}
             </p>
           )}
           <ul className={`${TARJETA} flex flex-col empty:hidden`}>
@@ -247,7 +227,7 @@ export default function PaginaAdministracion({
                         <span>{cuenta.nombre}</span>
                         {cuenta.bloqueada && (
                           <span className="rounded-[5px] bg-alerta/15 px-2 py-0.5 text-[12px] font-bold text-alerta">
-                            Bloqueada
+                            {t('cuentas.bloqueada')}
                           </span>
                         )}
                       </p>
@@ -255,9 +235,11 @@ export default function PaginaAdministracion({
                         {cuenta.correo}
                       </p>
                       <p className="text-[12px] text-suave">
-                        Solicitada el {fechaCorta(cuenta.creadoEn)} ·{' '}
-                        {ETIQUETA_ESTADO[cuenta.estado]}
-                        {!esUsuario && ' · Administrador'}
+                        {t('cuentas.solicitada', {
+                          fecha: fechaCorta(cuenta.creadoEn),
+                        })}{' '}
+                        · {t(`cuentas.estados.${cuenta.estado}`)}
+                        {!esUsuario && ` · ${t('cuentas.administrador')}`}
                       </p>
                     </div>
                   </div>
@@ -265,9 +247,9 @@ export default function PaginaAdministracion({
                   {confirmando === cuenta.id ? (
                     <div className="flex flex-col gap-3 sm:max-w-[340px]">
                       <p className="text-[13.5px]">
-                        ¿Dar acceso de administrador a{' '}
-                        <strong>{cuenta.nombre}</strong>? Desde el panel no se
-                        puede deshacer.
+                        {t('cuentas.confirmarAntes')}{' '}
+                        <strong>{cuenta.nombre}</strong>
+                        {t('cuentas.confirmarDespues')}
                       </p>
                       <div className="flex flex-wrap gap-2">
                         <button
@@ -277,19 +259,21 @@ export default function PaginaAdministracion({
                             ejecutar(
                               cuenta,
                               () => hacerAdministrador(cuenta.id),
-                              `${cuenta.nombre} ahora es administrador.`,
+                              t('cuentas.avisos.ahoraAdmin', {
+                                nombre: cuenta.nombre,
+                              }),
                             )
                           }
                           className={PRIMARIO}
                         >
-                          Sí, hacer administrador
+                          {t('cuentas.acciones.siHacerAdmin')}
                         </button>
                         <button
                           type="button"
                           onClick={() => setConfirmando(null)}
                           className={CONTORNO}
                         >
-                          Cancelar
+                          {t('general.cancelar')}
                         </button>
                       </div>
                     </div>
@@ -301,19 +285,23 @@ export default function PaginaAdministracion({
                             type="button"
                             disabled={deshabilitado}
                             onClick={() => decidirSobre(cuenta, 'aprobado')}
-                            aria-label={`Aprobar a ${cuenta.nombre}`}
+                            aria-label={t('cuentas.accionesPara.aprobar', {
+                              nombre: cuenta.nombre,
+                            })}
                             className={PRIMARIO}
                           >
-                            Aprobar
+                            {t('cuentas.acciones.aprobar')}
                           </button>
                           <button
                             type="button"
                             disabled={deshabilitado}
                             onClick={() => decidirSobre(cuenta, 'rechazado')}
-                            aria-label={`Rechazar a ${cuenta.nombre}`}
+                            aria-label={t('cuentas.accionesPara.rechazar', {
+                              nombre: cuenta.nombre,
+                            })}
                             className={PELIGRO}
                           >
-                            Rechazar
+                            {t('cuentas.acciones.rechazar')}
                           </button>
                         </>
                       )}
@@ -322,10 +310,12 @@ export default function PaginaAdministracion({
                           type="button"
                           disabled={deshabilitado}
                           onClick={() => decidirSobre(cuenta, 'rechazado')}
-                          aria-label={`Desactivar a ${cuenta.nombre}`}
+                          aria-label={t('cuentas.accionesPara.desactivar', {
+                            nombre: cuenta.nombre,
+                          })}
                           className={PELIGRO}
                         >
-                          Desactivar
+                          {t('cuentas.acciones.desactivar')}
                         </button>
                       )}
                       {esUsuario && cuenta.estado === 'rechazado' && (
@@ -333,10 +323,12 @@ export default function PaginaAdministracion({
                           type="button"
                           disabled={deshabilitado}
                           onClick={() => decidirSobre(cuenta, 'aprobado')}
-                          aria-label={`Reactivar a ${cuenta.nombre}`}
+                          aria-label={t('cuentas.accionesPara.reactivar', {
+                            nombre: cuenta.nombre,
+                          })}
                           className={PRIMARIO}
                         >
-                          Reactivar
+                          {t('cuentas.acciones.reactivar')}
                         </button>
                       )}
                       {cuenta.bloqueada && (
@@ -347,13 +339,17 @@ export default function PaginaAdministracion({
                             ejecutar(
                               cuenta,
                               () => desbloquear(cuenta.id),
-                              `Cuenta desbloqueada: ${cuenta.nombre}.`,
+                              t('cuentas.avisos.desbloqueada', {
+                                nombre: cuenta.nombre,
+                              }),
                             )
                           }
-                          aria-label={`Desbloquear a ${cuenta.nombre}`}
+                          aria-label={t('cuentas.accionesPara.desbloquear', {
+                            nombre: cuenta.nombre,
+                          })}
                           className={CONTORNO}
                         >
-                          Desbloquear
+                          {t('cuentas.acciones.desbloquear')}
                         </button>
                       )}
                       {esUsuario && cuenta.estado === 'aprobado' && (
@@ -361,10 +357,12 @@ export default function PaginaAdministracion({
                           type="button"
                           disabled={deshabilitado}
                           onClick={() => setConfirmando(cuenta.id)}
-                          aria-label={`Hacer administrador a ${cuenta.nombre}`}
+                          aria-label={t('cuentas.accionesPara.hacerAdmin', {
+                            nombre: cuenta.nombre,
+                          })}
                           className={CONTORNO}
                         >
-                          Hacer administrador
+                          {t('cuentas.acciones.hacerAdmin')}
                         </button>
                       )}
                     </div>

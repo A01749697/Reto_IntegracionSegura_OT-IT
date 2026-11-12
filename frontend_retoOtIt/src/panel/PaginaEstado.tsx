@@ -1,4 +1,6 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import type { ComponentType } from 'react'
 import { AlertCircle, CheckCircle, Database, Pulse, Server } from 'reicon-react'
 import { boton, TARJETA } from '../comun/estilos'
@@ -13,11 +15,11 @@ type Props = {
 
 type Tono = 'bien' | 'mal' | 'neutro'
 
-const DATOS: Record<EstadoDatos, { tono: Tono; texto: string }> = {
-  al_dia: { tono: 'bien', texto: 'Al día' },
-  retrasado: { tono: 'mal', texto: 'Retrasado' },
-  sin_datos: { tono: 'neutro', texto: 'Sin lecturas todavía' },
-  desconocido: { tono: 'mal', texto: 'No se pudo saber' },
+const TONO_DATOS: Record<EstadoDatos, Tono> = {
+  al_dia: 'bien',
+  retrasado: 'mal',
+  sin_datos: 'neutro',
+  desconocido: 'mal',
 }
 
 const ESTILOS: Record<Tono, string> = {
@@ -68,12 +70,12 @@ function Tarjeta({
 }
 
 // la lectura mas reciente de todas, para la tarjeta de llegada de datos
-function detalleDatos(estado: EstadoSistema): string {
-  if (estado.variables.length === 0) return 'Aún no llega ninguna lectura'
+function detalleDatos(estado: EstadoSistema, t: TFunction): string {
+  if (estado.variables.length === 0) return t('general.sinLecturas')
   const menor = Math.min(
     ...estado.variables.map((v) => v.segundosDesdeRecibida),
   )
-  return `Última lectura ${hace(menor)}`
+  return t('general.ultimaLectura', { hace: hace(menor) })
 }
 
 const tonoDe = (parte: 'ok' | 'falla'): Tono =>
@@ -82,6 +84,7 @@ const tonoDe = (parte: 'ok' | 'falla'): Tono =>
 type Carga = { version: number; estado: EstadoSistema | null }
 
 export default function PaginaEstado({ obtener, sesionCaducada }: Props) {
+  const { t } = useTranslation()
   const [version, setVersion] = useState(0)
   const [carga, setCarga] = useState<Carga | null>(null)
 
@@ -101,7 +104,7 @@ export default function PaginaEstado({ obtener, sesionCaducada }: Props) {
   const estado = !cargando ? carga.estado : null
 
   return (
-    <MarcoPanel titulo="Estado del sistema">
+    <MarcoPanel titulo={t('estado.titulo')}>
       <div className="flex justify-end">
         <button
           type="button"
@@ -109,15 +112,15 @@ export default function PaginaEstado({ obtener, sesionCaducada }: Props) {
           onClick={() => setVersion((v) => v + 1)}
           className={boton('neutro')}
         >
-          Actualizar
+          {t('general.actualizar')}
         </button>
       </div>
 
-      {cargando && <p className="text-suave">Cargando...</p>}
+      {cargando && <p className="text-suave">{t('general.cargando')}</p>}
 
       {!cargando && !estado && (
         <p role="alert" className="text-[14px] text-alerta">
-          No se pudo consultar el estado. Inténtalo otra vez.
+          {t('estado.error')}
         </p>
       )}
 
@@ -125,56 +128,65 @@ export default function PaginaEstado({ obtener, sesionCaducada }: Props) {
         <>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
             <Tarjeta
-              nombre="API del panel"
+              nombre={t('estado.api.nombre')}
               tono="bien"
-              texto="Responde"
-              detalle="Atiende las peticiones de esta página"
+              texto={t('estado.responde')}
+              detalle={t('estado.api.detalle')}
               Icono={Server}
             />
             <Tarjeta
-              nombre="Base de datos del panel"
+              nombre={t('estado.basePanel.nombre')}
               tono={tonoDe(estado.baseDatosPanel)}
               texto={
-                estado.baseDatosPanel === 'ok' ? 'Responde' : 'No responde'
+                estado.baseDatosPanel === 'ok'
+                  ? t('estado.responde')
+                  : t('estado.noResponde')
               }
-              detalle="Cuentas, sesiones y bitácora"
+              detalle={t('estado.basePanel.detalle')}
               Icono={Database}
             />
             <Tarjeta
-              nombre="Base de datos de lecturas"
+              nombre={t('estado.baseLecturas.nombre')}
               tono={tonoDe(estado.baseDatosLecturas)}
               texto={
-                estado.baseDatosLecturas === 'ok' ? 'Responde' : 'No responde'
+                estado.baseDatosLecturas === 'ok'
+                  ? t('estado.responde')
+                  : t('estado.noResponde')
               }
-              detalle="Lecturas que manda el agente IT"
+              detalle={t('estado.baseLecturas.detalle')}
               Icono={Database}
             />
             <Tarjeta
-              nombre="Llegada de datos"
-              tono={DATOS[estado.datos].tono}
-              texto={DATOS[estado.datos].texto}
-              detalle={detalleDatos(estado)}
+              nombre={t('estado.llegada.nombre')}
+              tono={TONO_DATOS[estado.datos]}
+              texto={t(`estado.llegada.estados.${estado.datos}`)}
+              detalle={detalleDatos(estado, t)}
               Icono={Pulse}
             />
           </div>
 
           {estado.variables.length === 0 ? (
-            <p className="text-[14px] text-suave">
-              Cuando el agente empiece a mandar datos a la nube, aquí aparecerá
-              cada variable con la hora de su última lectura.
-            </p>
+            <p className="text-[14px] text-suave">{t('estado.sinVariables')}</p>
           ) : (
             <div className={`${TARJETA} overflow-x-auto px-5 py-4`}>
               <table className="w-full text-left text-[14px]">
                 <caption className="pb-2 text-left text-[15px] font-bold">
-                  Última lectura por variable
+                  {t('estado.tabla.titulo')}
                 </caption>
                 <thead className="text-suave">
                   <tr className="border-b border-linea">
-                    <th className="py-2 pr-4 font-semibold">PLC</th>
-                    <th className="py-2 pr-4 font-semibold">Variable</th>
-                    <th className="py-2 pr-4 font-semibold">Lectura</th>
-                    <th className="py-2 font-semibold">Llegó</th>
+                    <th className="py-2 pr-4 font-semibold">
+                      {t('estado.tabla.plc')}
+                    </th>
+                    <th className="py-2 pr-4 font-semibold">
+                      {t('estado.tabla.variable')}
+                    </th>
+                    <th className="py-2 pr-4 font-semibold">
+                      {t('estado.tabla.lectura')}
+                    </th>
+                    <th className="py-2 font-semibold">
+                      {t('estado.tabla.llego')}
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
