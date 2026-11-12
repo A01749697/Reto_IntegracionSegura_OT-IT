@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { Cuenta, FiltroCuentas } from './apiAdministracion'
+import i18n from '../idioma/i18n'
 import PaginaAdministracion from './PaginaAdministracion'
 
 const ana: Cuenta = {
@@ -436,5 +437,30 @@ describe('buscador por nombre', () => {
     await waitFor(() =>
       expect(props.decidir).toHaveBeenCalledWith(6, 'aprobado'),
     )
+  })
+})
+
+describe('PaginaAdministracion en inglés', () => {
+  it('traduce filtros, conteo, acciones y avisos', async () => {
+    await i18n.changeLanguage('en')
+    const props = preparar({ pendiente: [ana] })
+    expect(
+      screen.getByRole('heading', { name: 'Accounts' }),
+    ).toBeInTheDocument()
+    expect(await screen.findByText('1 account')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pending' })).toBeInTheDocument()
+    fireEvent.click(
+      screen.getByRole('button', { name: `Approve ${ana.nombre}` }),
+    )
+    expect(
+      await screen.findByText(`Account approved: ${ana.nombre}.`),
+    ).toBeInTheDocument()
+    expect(props.decidir).toHaveBeenCalledWith(ana.id, 'aprobado')
+  })
+
+  it('usa el plural en inglés', async () => {
+    await i18n.changeLanguage('en')
+    preparar({ pendiente: [ana, { ...ana, id: 99, nombre: 'Otra' }] })
+    expect(await screen.findByText('2 accounts')).toBeInTheDocument()
   })
 })

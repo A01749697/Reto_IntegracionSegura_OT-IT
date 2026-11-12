@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { useState, type FormEvent } from 'react'
 import { AlertCircle, CheckCircle, Lock, ShieldCheck } from 'reicon-react'
 import { avisoClases, boton, TARJETA } from '../comun/estilos'
@@ -16,23 +17,12 @@ type Props = {
 const LARGO_MINIMO = 12
 const LARGO_MAXIMO = 128
 
-const MENSAJES: Record<
-  Exclude<Extract<ResultadoCambioClave, { ok: false }>['motivo'], 'sesion'>,
-  string
-> = {
-  actual_incorrecta: 'La contraseña actual no es correcta.',
-  bloqueada:
-    'Demasiados intentos fallidos. Espera unos minutos e inténtalo de nuevo.',
-  limite: 'Demasiadas peticiones desde esta red. Espera unos minutos.',
-  invalido: 'Revisa las contraseñas e inténtalo otra vez.',
-  fallo: 'No se pudo completar. Inténtalo más tarde.',
-}
-
 export default function PaginaMiCuenta({
   usuario,
   cambiar,
   sesionCaducada,
 }: Props) {
+  const { t } = useTranslation()
   const [actual, setActual] = useState('')
   const [nueva, setNueva] = useState('')
   const [repetida, setRepetida] = useState('')
@@ -43,13 +33,16 @@ export default function PaginaMiCuenta({
   )
 
   function validar(): string | null {
-    if (!actual || !nueva || !repetida) return 'Completa los tres campos.'
+    if (!actual || !nueva || !repetida) return t('miCuenta.errores.completa')
     if (nueva.length < LARGO_MINIMO || nueva.length > LARGO_MAXIMO) {
-      return `La contraseña nueva debe tener de ${LARGO_MINIMO} a ${LARGO_MAXIMO} caracteres.`
+      return t('miCuenta.errores.largo', {
+        minimo: LARGO_MINIMO,
+        maximo: LARGO_MAXIMO,
+      })
     }
-    if (nueva !== repetida) return 'La contraseña nueva no coincide.'
+    if (nueva !== repetida) return t('miCuenta.errores.noCoincide')
     if (nueva === actual) {
-      return 'La contraseña nueva debe ser distinta de la actual.'
+      return t('miCuenta.errores.igual')
     }
     return null
   }
@@ -76,22 +69,25 @@ export default function PaginaMiCuenta({
       setRepetida('')
       setAviso({
         error: false,
-        texto: 'Tu contraseña se cambió. Cerramos tus otras sesiones.',
+        texto: t('miCuenta.exito'),
       })
     } else if (resultado.motivo === 'sesion') {
       sesionCaducada()
     } else {
-      setAviso({ error: true, texto: MENSAJES[resultado.motivo] })
+      setAviso({
+        error: true,
+        texto: t(`miCuenta.errores.${resultado.motivo}`),
+      })
     }
   }
 
   const tipo = ver ? 'text' : 'password'
 
   return (
-    <MarcoPanel titulo="Mi cuenta">
+    <MarcoPanel titulo={t('miCuenta.titulo')}>
       <div className="grid items-start gap-5 lg:grid-cols-2 xl:grid-cols-[minmax(0,1fr)_minmax(0,1.2fr)_minmax(0,1fr)]">
         <section className={`${TARJETA} flex flex-col gap-4 px-5 py-5`}>
-          <h2 className="text-[18px] font-bold">Tus datos</h2>
+          <h2 className="text-[18px] font-bold">{t('miCuenta.tusDatos')}</h2>
           <div className="flex items-center gap-3.5">
             <span
               aria-hidden="true"
@@ -101,16 +97,16 @@ export default function PaginaMiCuenta({
             </span>
             <dl className="flex min-w-0 flex-col gap-1 text-[14px] text-suave">
               <div className="flex gap-2">
-                <dt className="font-semibold">Nombre:</dt>
+                <dt className="font-semibold">{t('general.campoNombre')}</dt>
                 <dd>{usuario.nombre}</dd>
               </div>
               <div className="flex gap-2">
-                <dt className="font-semibold">Correo:</dt>
+                <dt className="font-semibold">{t('general.campoCorreo')}</dt>
                 <dd className="break-all">{usuario.correo}</dd>
               </div>
               <div className="flex gap-2">
-                <dt className="font-semibold">Rol:</dt>
-                <dd>{usuario.rol}</dd>
+                <dt className="font-semibold">{t('general.campoRol')}</dt>
+                <dd>{t(`general.roles.${usuario.rol}`)}</dd>
               </div>
             </dl>
           </div>
@@ -119,10 +115,10 @@ export default function PaginaMiCuenta({
         <form
           onSubmit={enviar}
           noValidate
-          aria-label="Cambiar contraseña"
+          aria-label={t('miCuenta.cambiar')}
           className={`${TARJETA} flex flex-col gap-5 px-5 py-5`}
         >
-          <h2 className="text-[18px] font-bold">Cambiar contraseña</h2>
+          <h2 className="text-[18px] font-bold">{t('miCuenta.cambiar')}</h2>
 
           {aviso && (
             <div
@@ -148,7 +144,7 @@ export default function PaginaMiCuenta({
 
           <CampoTexto
             id="clave-actual"
-            etiqueta="Contraseña actual"
+            etiqueta={t('miCuenta.campos.actual')}
             Icono={Lock}
             valor={actual}
             alCambiar={setActual}
@@ -158,23 +154,23 @@ export default function PaginaMiCuenta({
           />
           <CampoTexto
             id="clave-nueva"
-            etiqueta="Contraseña nueva"
+            etiqueta={t('miCuenta.campos.nueva')}
             Icono={Lock}
             valor={nueva}
             alCambiar={setNueva}
             type={tipo}
             autoComplete="new-password"
-            placeholder={`Mínimo ${LARGO_MINIMO} caracteres`}
+            placeholder={t('miCuenta.pistas.minimo', { minimo: LARGO_MINIMO })}
           />
           <CampoTexto
             id="clave-repetida"
-            etiqueta="Repite la contraseña nueva"
+            etiqueta={t('miCuenta.campos.repetida')}
             Icono={Lock}
             valor={repetida}
             alCambiar={setRepetida}
             type={tipo}
             autoComplete="new-password"
-            placeholder="Escríbela otra vez"
+            placeholder={t('miCuenta.pistas.repite')}
           />
 
           <label className="flex cursor-pointer items-center gap-2 text-[13.5px]">
@@ -184,7 +180,7 @@ export default function PaginaMiCuenta({
               onChange={(e) => setVer(e.target.checked)}
               className="h-4 w-4 accent-acento"
             />
-            Mostrar contraseñas
+            {t('miCuenta.mostrar')}
           </label>
 
           <button
@@ -192,20 +188,20 @@ export default function PaginaMiCuenta({
             disabled={enviando}
             className={`${boton('principal', 'grande')} w-full`}
           >
-            {enviando ? 'Guardando...' : 'Cambiar contraseña'}
+            {enviando ? t('miCuenta.guardando') : t('miCuenta.cambiar')}
           </button>
         </form>
 
         <section className={`${TARJETA} flex flex-col gap-3 px-5 py-5`}>
           <h2 className="flex items-center gap-2.5 text-[18px] font-bold">
             <ShieldCheck size={20} aria-hidden="true" className="text-acento" />
-            Cómo se cuida tu sesión
+            {t('miCuenta.sesion.titulo')}
           </h2>
           <ul className="flex list-disc flex-col gap-2 pl-5 text-[13.5px] text-suave">
-            <li>Se cierra sola después de 30 minutos sin uso.</li>
-            <li>Dura 8 horas como máximo, aunque la sigas usando.</li>
-            <li>Tras 3 intentos fallidos la cuenta se bloquea 15 minutos.</li>
-            <li>Al cambiar tu contraseña se cierran tus otras sesiones.</li>
+            <li>{t('miCuenta.sesion.inactividad')}</li>
+            <li>{t('miCuenta.sesion.maximo')}</li>
+            <li>{t('miCuenta.sesion.bloqueo')}</li>
+            <li>{t('miCuenta.sesion.otras')}</li>
           </ul>
         </section>
       </div>

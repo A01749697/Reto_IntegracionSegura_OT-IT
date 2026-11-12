@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import type {
   EventoBitacora,
   GrupoBitacora,
@@ -19,10 +20,7 @@ type Props = {
   sesionCaducada: () => void
 }
 
-const FILTROS: { valor: GrupoBitacora; texto: string }[] = [
-  { valor: 'todos', texto: 'Todo' },
-  { valor: 'alertas', texto: 'Alertas' },
-]
+const GRUPOS: GrupoBitacora[] = ['todos', 'alertas']
 
 const CELDA_TITULO =
   'border-b border-linea px-4 py-2.5 font-bold whitespace-nowrap'
@@ -36,6 +34,7 @@ export default function PaginaBitacora({
   descargar,
   sesionCaducada,
 }: Props) {
+  const { t } = useTranslation()
   const [grupo, setGrupo] = useState<GrupoBitacora>('todos')
   const [version, setVersion] = useState(0)
   const [carga, setCarga] = useState<Carga | null>(null)
@@ -89,15 +88,15 @@ export default function PaginaBitacora({
       setAviso({
         error: false,
         texto: resultado.truncado
-          ? 'Archivo descargado. Solo incluye los 5000 eventos más recientes.'
-          : 'Archivo descargado.',
+          ? t('bitacora.descargadoTruncado')
+          : t('bitacora.descargado'),
       })
     } else if (resultado.motivo === 'sesion') {
       sesionCaducada()
     } else {
       setAviso({
         error: true,
-        texto: 'No se pudo descargar el archivo. Inténtalo otra vez.',
+        texto: t('bitacora.errorDescarga'),
       })
     }
   }
@@ -131,9 +130,16 @@ export default function PaginaBitacora({
   }
 
   return (
-    <MarcoPanel titulo="Bitácora de seguridad">
+    <MarcoPanel titulo={t('bitacora.titulo')}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <Segmentos opciones={FILTROS} valor={grupo} alCambiar={cambiarGrupo} />
+        <Segmentos
+          opciones={GRUPOS.map((valor) => ({
+            valor,
+            texto: t(`bitacora.filtros.${valor}`),
+          }))}
+          valor={grupo}
+          alCambiar={cambiarGrupo}
+        />
         <div className="flex gap-2">
           <button
             type="button"
@@ -141,7 +147,7 @@ export default function PaginaBitacora({
             onClick={descargarCsv}
             className={boton('neutro')}
           >
-            {exportando ? 'Descargando...' : 'Descargar CSV'}
+            {exportando ? t('bitacora.descargando') : t('bitacora.descargar')}
           </button>
           <button
             type="button"
@@ -149,7 +155,7 @@ export default function PaginaBitacora({
             onClick={() => setVersion((v) => v + 1)}
             className={boton('neutro')}
           >
-            Actualizar
+            {t('general.actualizar')}
           </button>
         </div>
       </div>
@@ -163,11 +169,11 @@ export default function PaginaBitacora({
         </p>
       )}
 
-      {cargando && <p className="text-suave">Cargando...</p>}
+      {cargando && <p className="text-suave">{t('general.cargando')}</p>}
 
       {!cargando && !carga.datos && (
         <p role="alert" className="text-[14px] text-alerta">
-          No se pudo cargar la bitácora. Inténtalo otra vez.
+          {t('bitacora.errorCarga')}
         </p>
       )}
 
@@ -176,14 +182,14 @@ export default function PaginaBitacora({
           {carga.datos.eventos.length === 0 && (
             <p className="text-suave">
               {grupo === 'alertas'
-                ? 'No hay alertas registradas.'
-                : 'Todavía no hay eventos registrados.'}
+                ? t('bitacora.vacioAlertas')
+                : t('bitacora.vacio')}
             </p>
           )}
           {carga.datos.eventos.length > 0 && (
             <div
               role="region"
-              aria-label="Eventos de la bitácora"
+              aria-label={t('bitacora.region')}
               tabIndex={0}
               className={`${TARJETA} overflow-x-auto focus-visible:ring-[3px] focus-visible:ring-acento/45 focus-visible:outline-none`}
             >
@@ -191,16 +197,16 @@ export default function PaginaBitacora({
                 <thead>
                   <tr className="text-[12.5px] text-suave">
                     <th scope="col" className={CELDA_TITULO}>
-                      Evento
+                      {t('bitacora.columnas.evento')}
                     </th>
                     <th scope="col" className={CELDA_TITULO}>
-                      Cuenta
+                      {t('bitacora.columnas.cuenta')}
                     </th>
                     <th scope="col" className={CELDA_TITULO}>
-                      IP
+                      {t('bitacora.columnas.ip')}
                     </th>
                     <th scope="col" className={CELDA_TITULO}>
-                      Fecha y hora
+                      {t('bitacora.columnas.fecha')}
                     </th>
                   </tr>
                 </thead>
@@ -216,16 +222,16 @@ export default function PaginaBitacora({
                           <span className="font-bold">{describir(evento)}</span>
                           {esAlerta(evento.tipo) && (
                             <span className="rounded-[5px] bg-alerta/15 px-2 py-0.5 text-[12px] font-bold text-alerta">
-                              Alerta
+                              {t('bitacora.alerta')}
                             </span>
                           )}
                         </div>
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap text-suave">
-                        {evento.correo ?? 'Sin correo'}
+                        {evento.correo ?? t('general.sinCorreo')}
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap text-suave">
-                        {evento.ip ?? 'Sin IP'}
+                        {evento.ip ?? t('general.sinIp')}
                       </td>
                       <td className="px-4 py-2.5 whitespace-nowrap text-suave">
                         {fechaHora(evento.ocurrioEn)}
@@ -238,7 +244,7 @@ export default function PaginaBitacora({
           )}
           {errorMas && (
             <p role="alert" className="text-[14px] text-alerta">
-              No se pudieron cargar más eventos. Inténtalo otra vez.
+              {t('bitacora.errorMas')}
             </p>
           )}
           {carga.datos.hayMas && (
@@ -248,7 +254,7 @@ export default function PaginaBitacora({
               onClick={cargarMas}
               className={`${boton('neutro')} self-center`}
             >
-              {cargandoMas ? 'Cargando...' : 'Cargar más'}
+              {cargandoMas ? t('general.cargando') : t('general.cargarMas')}
             </button>
           )}
         </>

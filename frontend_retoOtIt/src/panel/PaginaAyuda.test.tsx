@@ -1,5 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
+import i18n from '../idioma/i18n'
 import PaginaAyuda from './PaginaAyuda'
 
 describe('PaginaAyuda', () => {
@@ -53,5 +54,15 @@ describe('PaginaAyuda', () => {
     expect(container.textContent).not.toMatch(
       /firewall|puerto|PLC|S7-|OPC|MQTT|IDMZ/i,
     )
+  })
+})
+
+describe('PaginaAyuda en inglés', () => {
+  it('muestra las pestañas y las preguntas en inglés', async () => {
+    await i18n.changeLanguage('en')
+    render(<PaginaAyuda esAdmin />)
+    expect(screen.getByRole('heading', { name: 'Help' })).toBeInTheDocument()
+    expect(screen.getByText('Accounts')).toBeInTheDocument()
+    expect(screen.getByText('I forgot my password')).toBeInTheDocument()
   })
 })

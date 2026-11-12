@@ -67,13 +67,30 @@ describe('MenuUsuario', () => {
     expect(screen.queryByRole('menu')).toBeNull()
   })
 
-  it('Idioma se ve pero no se puede usar', () => {
+  it('Idioma cambia a inglés sin cerrar el menú y vuelve a español', async () => {
     montar()
     abrir()
-    expect(screen.getByRole('menuitem', { name: /Idioma/ })).toHaveAttribute(
-      'aria-disabled',
-      'true',
+    fireEvent.click(
+      screen.getByRole('menuitem', {
+        name: 'Idioma: Español. Cambiar a English',
+      }),
     )
+    expect(
+      await screen.findByRole('menuitem', {
+        name: 'Language: English. Switch to Español',
+      }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: 'Sign out' })).toBeVisible()
+    expect(document.documentElement.lang).toBe('en')
+    expect(localStorage.getItem('idioma')).toBe('en')
+    fireEvent.click(
+      screen.getByRole('menuitem', {
+        name: 'Language: English. Switch to Español',
+      }),
+    )
+    expect(
+      await screen.findByRole('menuitem', { name: 'Cerrar sesión' }),
+    ).toBeVisible()
   })
 
   it('Mi cuenta y Ayuda avisan y cierran el menú', () => {
@@ -122,12 +139,14 @@ describe('MenuUsuario', () => {
     expect(screen.queryByRole('menu')).toBeNull()
   })
 
-  it('las flechas recorren las opciones y se saltan Idioma', () => {
+  it('las flechas recorren todas las opciones, también Idioma', () => {
     montar()
     abrir()
     const mover = (tecla: string) =>
       fireEvent.keyDown(document.activeElement as HTMLElement, { key: tecla })
 
+    mover('ArrowDown')
+    expect(screen.getByRole('menuitem', { name: /^Idioma/ })).toHaveFocus()
     mover('ArrowDown')
     expect(screen.getByRole('menuitem', { name: 'Ayuda' })).toHaveFocus()
     mover('ArrowDown')

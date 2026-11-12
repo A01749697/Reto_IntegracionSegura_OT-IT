@@ -1,3 +1,5 @@
+import type { TFunction } from 'i18next'
+import { useTranslation } from 'react-i18next'
 import { useEffect, useState } from 'react'
 import type { ComponentType, ReactNode } from 'react'
 import { Database, History, Pulse, Server, Users } from 'reicon-react'
@@ -33,11 +35,11 @@ const TONOS: Record<Tono, string> = {
   neutro: 'text-texto',
 }
 
-const LLEGADA: Record<EstadoSistema['datos'], { tono: Tono; texto: string }> = {
-  al_dia: { tono: 'bien', texto: 'Al día' },
-  retrasado: { tono: 'mal', texto: 'Retrasado' },
-  sin_datos: { tono: 'neutro', texto: 'Sin lecturas' },
-  desconocido: { tono: 'mal', texto: 'No se pudo saber' },
+const TONO_LLEGADA: Record<EstadoSistema['datos'], Tono> = {
+  al_dia: 'bien',
+  retrasado: 'mal',
+  sin_datos: 'neutro',
+  desconocido: 'mal',
 }
 
 const CUANTOS_EVENTOS = 6
@@ -85,18 +87,22 @@ function Resumen({
   )
 }
 
-function textoDe<T>(dato: Dato<T>, listo: (valor: T) => string): string {
-  if (dato === null) return 'Cargando...'
-  if (dato === 'error') return 'No se pudo cargar'
+function textoDe<T>(
+  dato: Dato<T>,
+  t: TFunction,
+  listo: (valor: T) => string,
+): string {
+  if (dato === null) return t('general.cargando')
+  if (dato === 'error') return t('general.noSePudoCargar')
   return listo(dato)
 }
 
-function ultimaLectura(estado: EstadoSistema): string {
-  if (estado.variables.length === 0) return 'Aún no llega ninguna lectura'
+function ultimaLectura(estado: EstadoSistema, t: TFunction): string {
+  if (estado.variables.length === 0) return t('general.sinLecturas')
   const menor = Math.min(
     ...estado.variables.map((v) => v.segundosDesdeRecibida),
   )
-  return `Última lectura ${hace(menor)}`
+  return t('general.ultimaLectura', { hace: hace(menor) })
 }
 
 export default function PaginaInicio({
@@ -107,6 +113,7 @@ export default function PaginaInicio({
   irA,
   sesionCaducada,
 }: Props) {
+  const { t } = useTranslation()
   const esAdmin = usuario.rol === 'administrador'
   const [estado, setEstado] = useState<Dato<EstadoSistema>>(null)
   const [pendientes, setPendientes] = useState<Dato<number>>(null)
@@ -144,16 +151,18 @@ export default function PaginaInicio({
 
   let listaEventos: ReactNode
   if (eventos === null) {
-    listaEventos = <p className="px-5 py-4 text-suave">Cargando...</p>
+    listaEventos = (
+      <p className="px-5 py-4 text-suave">{t('general.cargando')}</p>
+    )
   } else if (eventos === 'error') {
     listaEventos = (
       <p role="alert" className="px-5 py-4 text-[14px] text-alerta">
-        No se pudieron cargar los eventos.
+        {t('inicio.eventos.error')}
       </p>
     )
   } else if (eventos.length === 0) {
     listaEventos = (
-      <p className="px-5 py-4 text-suave">Todavía no hay eventos.</p>
+      <p className="px-5 py-4 text-suave">{t('inicio.eventos.vacio')}</p>
     )
   } else {
     listaEventos = (
@@ -169,7 +178,7 @@ export default function PaginaInicio({
                 {describir(evento)}
               </p>
               <p className="truncate text-[12.5px] text-suave">
-                {evento.correo ?? 'Sin correo'}
+                {evento.correo ?? t('general.sinCorreo')}
               </p>
             </div>
             <p className="hidden text-[12.5px] whitespace-nowrap text-suave sm:block">
@@ -182,19 +191,19 @@ export default function PaginaInicio({
   }
 
   return (
-    <MarcoPanel titulo="Inicio">
+    <MarcoPanel titulo={t('inicio.titulo')}>
       <div className="flex flex-col gap-1">
         <p className="text-[17px]">
-          Hola, <strong>{usuario.nombre}</strong>.
+          {t('inicio.hola')} <strong>{usuario.nombre}</strong>.
         </p>
         <dl className="flex flex-wrap gap-x-5 gap-y-1 text-[14px] text-suave">
           <div className="flex gap-2">
-            <dt className="font-semibold">Correo:</dt>
+            <dt className="font-semibold">{t('general.campoCorreo')}</dt>
             <dd className="break-all">{usuario.correo}</dd>
           </div>
           <div className="flex gap-2">
-            <dt className="font-semibold">Rol:</dt>
-            <dd>{usuario.rol}</dd>
+            <dt className="font-semibold">{t('general.campoRol')}</dt>
+            <dd>{t(`general.roles.${usuario.rol}`)}</dd>
           </div>
         </dl>
       </div>
@@ -202,9 +211,9 @@ export default function PaginaInicio({
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {esAdmin && (
           <Resumen
-            titulo="Cuentas pendientes"
+            titulo={t('inicio.pendientes.titulo')}
             Icono={Users}
-            valor={textoDe(pendientes, (n) => String(n))}
+            valor={textoDe(pendientes, t, (n) => String(n))}
             tono={
               typeof pendientes === 'number' && pendientes > 0
                 ? 'mal'
@@ -212,66 +221,70 @@ export default function PaginaInicio({
             }
             detalle={
               typeof pendientes === 'number' && pendientes > 0
-                ? 'Esperan que las apruebes o las rechaces'
-                : 'Nadie espera aprobación'
+                ? t('inicio.pendientes.algunas')
+                : t('inicio.pendientes.ninguna')
             }
-            accion="Revisar cuentas"
+            accion={t('inicio.pendientes.accion')}
             alPulsar={() => irA('cuentas')}
           />
         )}
         <Resumen
-          titulo="Servicios"
+          titulo={t('inicio.servicios.titulo')}
           Icono={Server}
-          valor={textoDe(estado, () =>
-            fallas === 0 ? 'Todo responde' : `${fallas} con falla`,
+          valor={textoDe(estado, t, () =>
+            fallas === 0
+              ? t('inicio.servicios.todoResponde')
+              : t('inicio.servicios.conFalla', { n: fallas }),
           )}
           tono={listo ? (fallas === 0 ? 'bien' : 'mal') : 'neutro'}
-          detalle="API del panel y las dos bases de datos"
-          accion="Ver estado"
+          detalle={t('inicio.servicios.detalle')}
+          accion={t('inicio.servicios.accion')}
           alPulsar={() => irA('estado')}
         />
         <Resumen
-          titulo="Llegada de datos"
+          titulo={t('inicio.llegada.titulo')}
           Icono={Pulse}
-          valor={textoDe(estado, (e) => LLEGADA[e.datos].texto)}
-          tono={listo ? LLEGADA[listo.datos].tono : 'neutro'}
-          detalle={listo ? ultimaLectura(listo) : 'Lecturas del agente IT'}
-          accion="Ver lecturas"
+          valor={textoDe(estado, t, (e) =>
+            t(`inicio.llegada.estados.${e.datos}`),
+          )}
+          tono={listo ? TONO_LLEGADA[listo.datos] : 'neutro'}
+          detalle={
+            listo ? ultimaLectura(listo, t) : t('inicio.llegada.detalle')
+          }
+          accion={t('inicio.llegada.accion')}
           alPulsar={() => irA('estado')}
         />
         <Resumen
-          titulo="Variables vigiladas"
+          titulo={t('inicio.variables.titulo')}
           Icono={Database}
-          valor={textoDe(estado, (e) => String(e.variables.length))}
+          valor={textoDe(estado, t, (e) => String(e.variables.length))}
           tono="neutro"
-          detalle="Variables de PLC con al menos una lectura"
-          accion="Ver detalle"
+          detalle={t('inicio.variables.detalle')}
+          accion={t('inicio.variables.accion')}
           alPulsar={() => irA('estado')}
         />
       </div>
 
       {esAdmin && (
-        <section className={TARJETA} aria-label="Últimos eventos">
+        <section className={TARJETA} aria-label={t('inicio.eventos.etiqueta')}>
           <div className="flex flex-wrap items-center justify-between gap-3 px-5 py-3.5">
             <h2 className="flex items-center gap-2.5 text-[15px] font-bold">
               <History size={18} aria-hidden="true" className="text-acento" />
-              Últimos eventos de seguridad
+              {t('inicio.eventos.titulo')}
             </h2>
             <button
               type="button"
               onClick={() => irA('bitacora')}
               className={boton('neutro')}
             >
-              Ver bitácora
+              {t('inicio.eventos.verBitacora')}
             </button>
           </div>
           {listaEventos}
         </section>
       )}
 
-      <p className="text-[14px] text-suave">
-        Todavía no está el dashboard con las lecturas de los PLC.
-      </p>
+      <p className="text-[14px] text-suave">{t('inicio.sinDashboard')}</p>
     </MarcoPanel>
   )
 }

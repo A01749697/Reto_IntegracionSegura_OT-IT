@@ -52,6 +52,10 @@ describe('diccionarios', () => {
       'camino.zonas.it.nombre',
       'idioma.es',
       'idioma.en',
+      'estado.tabla.plc',
+      'estado.tabla.variable',
+      'bitacora.columnas.ip',
+      'datos.no',
     ])
     expect(iguales.filter((clave) => !permitidas.has(clave))).toEqual([])
   })

@@ -1,29 +1,8 @@
+import i18n from '../idioma/i18n'
+import { es } from '../idioma/es'
 import type { EventoBitacora } from './apiBitacora'
 
-export const DESCRIPCIONES: Record<string, string> = {
-  entrada_correcta: 'Inició sesión',
-  entrada_fallida: 'Intento de entrada con datos incorrectos',
-  entrada_bloqueada: 'Intento de entrada con la cuenta bloqueada',
-  cuenta_bloqueada: 'Cuenta bloqueada por demasiados intentos',
-  entrada_pendiente: 'Intentó entrar con una cuenta pendiente de aprobación',
-  entrada_rechazada: 'Intentó entrar con una cuenta rechazada',
-  cuenta_solicitada: 'Pidió una cuenta nueva',
-  solicitud_repetida: 'Pidió una cuenta con un correo que ya existe',
-  reinicio_solicitado: 'Pidió cambiar su contraseña',
-  reinicio_fallido: 'Usó un enlace de recuperación inválido o caducado',
-  contrasena_restablecida: 'Cambió su contraseña con el enlace del correo',
-  sesion_cerrada: 'Cerró sesión',
-  cuenta_aprobada: 'Cuenta aprobada',
-  cuenta_rechazada: 'Cuenta rechazada',
-  cuenta_desbloqueada: 'Cuenta desbloqueada',
-  rol_cambiado: 'Cuenta promovida a administrador',
-  contrasena_cambiada: 'Cambió su contraseña desde Mi cuenta',
-  cambio_contrasena_fallido:
-    'Intentó cambiar su contraseña con la actual incorrecta',
-  bitacora_exportada: 'Descargó la bitácora en CSV',
-  datos_cuentas_consultadas: 'Consultó la tabla de cuentas en Datos',
-  datos_bitacora_consultada: 'Consultó la tabla de bitácora en Datos',
-}
+type TipoConocido = keyof typeof es.eventos.tipos
 
 export const ALERTAS = new Set([
   'entrada_fallida',
@@ -38,7 +17,15 @@ export const ALERTAS = new Set([
 
 export const esAlerta = (tipo: string) => ALERTAS.has(tipo)
 
-export function describir(evento: EventoBitacora) {
-  const texto = DESCRIPCIONES[evento.tipo] ?? evento.tipo
-  return evento.actorCorreo ? `${texto} por ${evento.actorCorreo}` : texto
+const esConocido = (tipo: string): tipo is TipoConocido =>
+  Object.hasOwn(es.eventos.tipos, tipo)
+
+// Un tipo que el panel todavia no conoce se muestra tal cual llega.
+export function describir(evento: EventoBitacora): string {
+  const texto = esConocido(evento.tipo)
+    ? i18n.t(`eventos.tipos.${evento.tipo}`)
+    : evento.tipo
+  return evento.actorCorreo
+    ? i18n.t('eventos.por', { texto, actor: evento.actorCorreo })
+    : texto
 }

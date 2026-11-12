@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import FranjaZonas from '../comun/FranjaZonas'
 import type { Usuario } from '../login/apiPanel'
 import BotonTema from '../tema/BotonTema'
@@ -8,18 +9,21 @@ export type Seccion =
 
 type Props = {
   usuario: Usuario
-  actual: Seccion
+  // null cuando la direccion no es de ninguna pantalla
+  actual: Seccion | null
   irA: (seccion: Seccion) => void
   cerrarSesion: () => Promise<boolean>
 }
 
-const SECCIONES: { seccion: Seccion; texto: string; soloAdmin: boolean }[] = [
-  { seccion: 'inicio', texto: 'Inicio', soloAdmin: false },
-  { seccion: 'cuentas', texto: 'Cuentas', soloAdmin: true },
-  { seccion: 'bitacora', texto: 'Bitácora', soloAdmin: true },
-  { seccion: 'datos', texto: 'Datos', soloAdmin: true },
-  { seccion: 'estado', texto: 'Estado', soloAdmin: false },
-  { seccion: 'cuenta', texto: 'Mi cuenta', soloAdmin: false },
+type Pestana = Exclude<Seccion, 'ayuda'>
+
+const SECCIONES: { seccion: Pestana; soloAdmin: boolean }[] = [
+  { seccion: 'inicio', soloAdmin: false },
+  { seccion: 'cuentas', soloAdmin: true },
+  { seccion: 'bitacora', soloAdmin: true },
+  { seccion: 'datos', soloAdmin: true },
+  { seccion: 'estado', soloAdmin: false },
+  { seccion: 'cuenta', soloAdmin: false },
 ]
 
 // A la izquierda el nombre del panel y las pestañas; a la derecha el tema y el menú de la persona.
@@ -30,6 +34,7 @@ export default function EncabezadoPanel({
   irA,
   cerrarSesion,
 }: Props) {
+  const { t } = useTranslation()
   const esAdmin = usuario.rol === 'administrador'
 
   return (
@@ -37,15 +42,15 @@ export default function EncabezadoPanel({
       <FranjaZonas />
       <div className="flex flex-wrap items-center gap-x-8 px-4 sm:px-6 xl:flex-nowrap">
         <span className="py-3 text-base font-bold tracking-tight whitespace-nowrap">
-          Panel Reto OT-IT
+          {t('comun.marca')}
         </span>
 
         <nav
-          aria-label="Secciones"
+          aria-label={t('encabezado.secciones')}
           className="order-last -mx-4 -mb-px flex w-[calc(100%+2rem)] overflow-x-auto overflow-y-hidden px-4 [scrollbar-width:none] sm:-mx-6 sm:w-[calc(100%+3rem)] sm:px-6 xl:order-none xl:mx-0 xl:w-auto xl:flex-1 xl:px-0 [&::-webkit-scrollbar]:hidden"
         >
           {SECCIONES.filter((s) => !s.soloAdmin || esAdmin).map(
-            ({ seccion, texto }) => {
+            ({ seccion }) => {
               const activa = seccion === actual
               return (
                 <button
@@ -59,7 +64,7 @@ export default function EncabezadoPanel({
                       : 'border-transparent font-medium text-suave hover:text-texto'
                   }`}
                 >
-                  {texto}
+                  {t(`encabezado.pestanas.${seccion}`)}
                 </button>
               )
             },
