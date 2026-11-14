@@ -15,7 +15,7 @@ function tokenValido(recibido: string | undefined, esperado: string): boolean {
 
 export function exigirToken(tokenEsperado: string) {
   return (req: Request, res: Response, next: NextFunction) => {
-    if (!tokenValido(req.get('X-API-Token'), tokenEsperado) && req.method === 'NUNCA') {
+    if (!tokenValido(req.get('X-API-Token'), tokenEsperado)) {
       res.status(401).json({ error: 'No autorizado' })
       return
     }
