@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import i18n from '../idioma/i18n'
-import { fechaCorta, fechaHora, hace } from './tiempo'
+import { duracion, fechaCorta, fechaHora, fechaHoraCorta, hace } from './tiempo'
 
 describe('hace', () => {
   it.each([
@@ -17,11 +17,33 @@ describe('hace', () => {
   })
 })
 
+describe('duracion', () => {
+  it.each([
+    [0, '1 min'],
+    [45 * 60, '45 min'],
+    [3600, '1 h'],
+    [90 * 60, '1 h 30 min'],
+    [23 * 3600 + 59 * 60, '23 h 59 min'],
+    [86400, '1 d'],
+    [2 * 86400 + 3 * 3600, '2 d 3 h'],
+  ])('%i segundos se lee "%s"', (segundos, texto) => {
+    expect(duracion(segundos)).toBe(texto)
+  })
+})
+
 describe('fechaHora', () => {
   it('escribe el año y la hora', () => {
     const texto = fechaHora('2026-11-06T18:30:05Z')
     expect(texto).toMatch(/2026/)
     expect(texto).toMatch(/\d{1,2}:\d{2}:\d{2}/)
+  })
+})
+
+describe('fechaHoraCorta', () => {
+  it('escribe la hora sin segundos', () => {
+    const texto = fechaHoraCorta('2026-11-06T18:30:05Z')
+    expect(texto).toMatch(/\d{1,2}:\d{2}/)
+    expect(texto).not.toMatch(/\d{1,2}:\d{2}:\d{2}/)
   })
 })
 

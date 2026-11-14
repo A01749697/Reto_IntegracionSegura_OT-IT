@@ -273,6 +273,50 @@ export const en: Diccionario<typeof es> = {
       lectura: 'Reading',
       llego: 'Arrived',
     },
+    historial: {
+      titulo: 'Availability history',
+      subtitulo: 'Readings arriving in the cloud',
+      periodo: 'Period',
+      ventanas: {
+        '24h': 'Last 24 h',
+        '7d': 'Last 7 days',
+      },
+      cargando: 'Loading the history...',
+      error: 'Could not load the history.',
+      sinHistoria:
+        'There are no readings yet to calculate availability. It will appear once the agent starts sending data.',
+      porcentaje: 'Availability',
+      interrupciones: 'Interruptions',
+      mayorCorte: 'Longest gap',
+      ninguna: 'None',
+      inicioEje: {
+        '24h': '24 h ago',
+        '7d': '7 days ago',
+      },
+      ahora: 'Now',
+      grafica:
+        'Availability. {{periodo}}: {{porcentaje}} %, {{interrupciones}}.',
+      sinPorcentaje:
+        'Availability. {{periodo}}: there are no readings to calculate it yet.',
+      interrupciones_one: '{{count}} interruption',
+      interrupciones_other: '{{count}} interruptions',
+      lecturas_one: '{{count}} reading',
+      lecturas_other: '{{count}} readings',
+      leyenda: {
+        con_datos: 'Readings arrived',
+        sin_datos: 'No readings',
+        sin_historial: 'Before the first reading',
+        en_curso: 'Current slot',
+      },
+      cortes: {
+        titulo: 'Recent interruptions',
+        ninguno: 'There were no interruptions in this period.',
+        enCurso: 'Ongoing',
+        desdeHasta: '{{desde}} to {{hasta}}',
+        duro: 'Duration: {{tiempo}}',
+      },
+      nota: 'Each bar is a {{tramo}} slot. It counts as available if at least one reading arrived in that slot. It measures data arriving in the cloud, not whether the server was up.',
+    },
   },
   cuentas: {
     titulo: 'Accounts',

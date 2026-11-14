@@ -12,6 +12,14 @@ export function fechaHora(iso: string): string {
   })
 }
 
+// fecha y hora sin segundos, para listas donde la precisión es de minutos
+export function fechaHoraCorta(iso: string): string {
+  return new Date(iso).toLocaleString(region(), {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
+}
+
 export function fechaCorta(iso: string): string {
   return new Date(iso).toLocaleDateString(region(), {
     day: 'numeric',
@@ -27,4 +35,16 @@ export function hace(segundos: number): string {
   const horas = Math.floor(minutos / 60)
   if (horas < 24) return i18n.t('tiempo.horas', { n: horas })
   return i18n.t('tiempo.dias', { n: Math.floor(horas / 24) })
+}
+
+// Un tramo de tiempo, como "45 min", "1 h 30 min" o "2 d 3 h". Las abreviaturas son iguales en los dos idiomas.
+export function duracion(segundos: number): string {
+  const minutos = Math.max(1, Math.round(segundos / 60))
+  if (minutos < 60) return `${minutos} min`
+  const horas = Math.floor(minutos / 60)
+  const resto = minutos % 60
+  if (horas < 24) return resto === 0 ? `${horas} h` : `${horas} h ${resto} min`
+  const dias = Math.floor(horas / 24)
+  const horasResto = horas % 24
+  return horasResto === 0 ? `${dias} d` : `${dias} d ${horasResto} h`
 }

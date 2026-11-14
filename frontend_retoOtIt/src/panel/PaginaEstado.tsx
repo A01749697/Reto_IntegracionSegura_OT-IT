@@ -4,12 +4,22 @@ import type { TFunction } from 'i18next'
 import type { ComponentType } from 'react'
 import { AlertCircle, CheckCircle, Database, Pulse, Server } from 'reicon-react'
 import { boton, TARJETA } from '../comun/estilos'
-import type { EstadoDatos, EstadoSistema, ResultadoEstado } from './apiSistema'
+import type {
+  EstadoDatos,
+  EstadoSistema,
+  ResultadoDisponibilidad,
+  ResultadoEstado,
+  VentanaDisponibilidad,
+} from './apiSistema'
+import HistorialDisponibilidad from './HistorialDisponibilidad'
 import MarcoPanel from './MarcoPanel'
 import { fechaHora, hace } from './tiempo'
 
 type Props = {
   obtener: () => Promise<ResultadoEstado>
+  obtenerDisponibilidad: (
+    ventana: VentanaDisponibilidad,
+  ) => Promise<ResultadoDisponibilidad>
   sesionCaducada: () => void
 }
 
@@ -83,7 +93,11 @@ const tonoDe = (parte: 'ok' | 'falla'): Tono =>
 
 type Carga = { version: number; estado: EstadoSistema | null }
 
-export default function PaginaEstado({ obtener, sesionCaducada }: Props) {
+export default function PaginaEstado({
+  obtener,
+  obtenerDisponibilidad,
+  sesionCaducada,
+}: Props) {
   const { t } = useTranslation()
   const [version, setVersion] = useState(0)
   const [carga, setCarga] = useState<Carga | null>(null)
@@ -164,6 +178,12 @@ export default function PaginaEstado({ obtener, sesionCaducada }: Props) {
               Icono={Pulse}
             />
           </div>
+
+          <HistorialDisponibilidad
+            obtener={obtenerDisponibilidad}
+            sesionCaducada={sesionCaducada}
+            recarga={version}
+          />
 
           {estado.variables.length === 0 ? (
             <p className="text-[14px] text-suave">{t('estado.sinVariables')}</p>

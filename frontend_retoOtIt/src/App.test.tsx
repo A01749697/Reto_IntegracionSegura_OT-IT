@@ -40,6 +40,7 @@ vi.mock('./panel/apiDatos', () => ({
 
 vi.mock('./panel/apiSistema', () => ({
   obtenerEstado: vi.fn(),
+  obtenerDisponibilidad: vi.fn(),
 }))
 
 const usuario: api.Usuario = {
@@ -58,6 +59,10 @@ beforeEach(() => {
   vi.mocked(api.obtenerSesion).mockResolvedValue(null)
   // el inicio pide estas tres cosas al abrirse
   vi.mocked(sistema.obtenerEstado).mockResolvedValue({
+    ok: false,
+    motivo: 'fallo',
+  })
+  vi.mocked(sistema.obtenerDisponibilidad).mockResolvedValue({
     ok: false,
     motivo: 'fallo',
   })
