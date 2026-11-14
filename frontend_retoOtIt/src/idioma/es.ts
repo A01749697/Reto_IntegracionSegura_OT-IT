@@ -269,6 +269,50 @@ export const es = {
       lectura: 'Lectura',
       llego: 'Llegó',
     },
+    historial: {
+      titulo: 'Historial de disponibilidad',
+      subtitulo: 'Llegada de lecturas a la nube',
+      periodo: 'Periodo',
+      ventanas: {
+        '24h': 'Últimas 24 h',
+        '7d': 'Últimos 7 días',
+      },
+      cargando: 'Cargando el historial...',
+      error: 'No se pudo cargar el historial.',
+      sinHistoria:
+        'Todavía no hay lecturas para calcular la disponibilidad. Aparecerá cuando el agente empiece a mandar datos.',
+      porcentaje: 'Disponibilidad',
+      interrupciones: 'Interrupciones',
+      mayorCorte: 'Mayor corte',
+      ninguna: 'Ninguna',
+      inicioEje: {
+        '24h': 'Hace 24 h',
+        '7d': 'Hace 7 días',
+      },
+      ahora: 'Ahora',
+      grafica:
+        'Disponibilidad. {{periodo}}: {{porcentaje}} %, {{interrupciones}}.',
+      sinPorcentaje:
+        'Disponibilidad. {{periodo}}: todavía no hay lecturas para calcularla.',
+      interrupciones_one: '{{count}} interrupción',
+      interrupciones_other: '{{count}} interrupciones',
+      lecturas_one: '{{count}} lectura',
+      lecturas_other: '{{count}} lecturas',
+      leyenda: {
+        con_datos: 'Llegaron lecturas',
+        sin_datos: 'Sin lecturas',
+        sin_historial: 'Antes de la primera lectura',
+        en_curso: 'Tramo en curso',
+      },
+      cortes: {
+        titulo: 'Interrupciones recientes',
+        ninguno: 'No hubo interrupciones en este periodo.',
+        enCurso: 'En curso',
+        desdeHasta: '{{desde}} a {{hasta}}',
+        duro: 'Duración: {{tiempo}}',
+      },
+      nota: 'Cada barra es un tramo de {{tramo}}. Cuenta como disponible si llegó al menos una lectura en ese tramo. Mide la llegada de datos a la nube, no si el servidor estuvo encendido.',
+    },
   },
   cuentas: {
     titulo: 'Cuentas',

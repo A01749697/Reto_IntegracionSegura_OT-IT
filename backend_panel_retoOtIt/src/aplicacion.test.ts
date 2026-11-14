@@ -93,6 +93,11 @@ function prepararApp() {
   const sistema = {
     comprobarBasePanel: vi.fn().mockResolvedValue(undefined),
     obtenerEstadoLecturas: vi.fn().mockResolvedValue([]),
+    obtenerActividadLecturas: vi.fn().mockResolvedValue({
+      ahora: new Date('2026-11-12T12:07:00.000Z'),
+      primera: new Date('2026-11-12T11:00:00.000Z'),
+      cubetas: [{ inicio: new Date('2026-11-12T11:00:00.000Z'), lecturas: 3 }],
+    }),
   }
   const correo = {
     remitente: 'panel@ejemplo.com',
@@ -1363,6 +1368,76 @@ describe('API del panel', { timeout: 20000 }, () => {
 
       expect(respuesta.status).toBe(200)
       expect(respuesta.body.baseDatosPanel).toBe('falla')
+    })
+
+    describe('disponibilidad', () => {
+      it('sin sesión responde 401', async () => {
+        const { app, sistema } = prepararApp()
+        const respuesta = await consultar(
+          app,
+          '/sistema/disponibilidad?ventana=24h',
+        )
+        expect(respuesta.status).toBe(401)
+        expect(sistema.obtenerActividadLecturas).not.toHaveBeenCalled()
+      })
+
+      it('con sesión entrega las cubetas y el resumen', async () => {
+        const { app, sesion, sistema } = prepararApp()
+        sesion.buscarSesionActiva.mockResolvedValue(sesionUsuario)
+
+        const respuesta = await consultar(
+          app,
+          '/sistema/disponibilidad?ventana=24h',
+        ).set('Cookie', COOKIE)
+
+        expect(respuesta.status).toBe(200)
+        expect(respuesta.headers['cache-control']).toBe('no-store')
+        expect(sistema.obtenerActividadLecturas).toHaveBeenCalledWith(
+          seguridad.sistema.disponibilidad['24h'].cubetaSegundos,
+          seguridad.sistema.disponibilidad['24h'].cantidad,
+        )
+        expect(respuesta.body.ventana).toBe('24h')
+        expect(respuesta.body.ok).toBeUndefined()
+        expect(respuesta.body.cubetas).toHaveLength(
+          seguridad.sistema.disponibilidad['24h'].cantidad,
+        )
+        expect(respuesta.body.resumen).toMatchObject({
+          cubetasConDatos: 1,
+        })
+        expect(Array.isArray(respuesta.body.cortes)).toBe(true)
+      })
+
+      it.each([
+        ['', 'sin ventana'],
+        ['?ventana=30d', 'ventana que no existe'],
+        ['?ventana=24h&otra=1', 'parámetro de más'],
+      ])('%s (%s) responde 400', async (consultaTexto) => {
+        const { app, sesion, sistema } = prepararApp()
+        sesion.buscarSesionActiva.mockResolvedValue(sesionUsuario)
+
+        const respuesta = await consultar(
+          app,
+          `/sistema/disponibilidad${consultaTexto}`,
+        ).set('Cookie', COOKIE)
+
+        expect(respuesta.status).toBe(400)
+        expect(sistema.obtenerActividadLecturas).not.toHaveBeenCalled()
+      })
+
+      it('si la base falla responde 500 sin detalles', async () => {
+        const { app, sesion, sistema } = prepararApp()
+        sesion.buscarSesionActiva.mockResolvedValue(sesionUsuario)
+        sistema.obtenerActividadLecturas.mockRejectedValue(new Error('secreto'))
+        vi.spyOn(console, 'error').mockImplementation(() => {})
+
+        const respuesta = await consultar(
+          app,
+          '/sistema/disponibilidad?ventana=24h',
+        ).set('Cookie', COOKIE)
+
+        expect(respuesta.status).toBe(500)
+        expect(JSON.stringify(respuesta.body)).not.toContain('secreto')
+      })
     })
   })
 

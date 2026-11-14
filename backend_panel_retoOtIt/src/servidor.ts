@@ -93,6 +93,12 @@ function iniciar() {
     sistema: {
       comprobarBasePanel: () => comprobarConexion(poolPanel),
       obtenerEstadoLecturas: () => lecturas.obtenerEstadoLecturas(poolLectura),
+      obtenerActividadLecturas: (cubetaSegundos, cantidad) =>
+        lecturas.obtenerActividadLecturas(
+          poolLectura,
+          cubetaSegundos,
+          cantidad,
+        ),
     },
     correo: {
       remitente: entorno.correoRemitente,

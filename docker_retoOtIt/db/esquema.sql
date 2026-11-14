@@ -58,6 +58,10 @@ CREATE TABLE IF NOT EXISTS public.lecturas (
 CREATE INDEX IF NOT EXISTS lecturas_variable_ts_idx
   ON public.lecturas (variable, ts);
 
+-- Para el historial de disponibilidad del panel: cuenta las lecturas por hora de llegada.
+CREATE INDEX IF NOT EXISTS lecturas_recibido_idx
+  ON public.lecturas (recibido_en);
+
 -- Permisos ------------------------------------------------------------------
 
 GRANT INSERT ON TABLE public.lecturas TO reto_insercion;

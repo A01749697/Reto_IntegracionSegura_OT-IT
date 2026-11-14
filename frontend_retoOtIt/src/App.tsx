@@ -22,7 +22,7 @@ import {
 import { exportarBitacora, listarBitacora } from './panel/apiBitacora'
 import { cambiarContrasena } from './panel/apiCuenta'
 import { leerDatos, listarTablas } from './panel/apiDatos'
-import { obtenerEstado } from './panel/apiSistema'
+import { obtenerDisponibilidad, obtenerEstado } from './panel/apiSistema'
 import EncabezadoPanel, { type Seccion } from './panel/EncabezadoPanel'
 import PaginaAdministracion from './panel/PaginaAdministracion'
 import PaginaAyuda from './panel/PaginaAyuda'
@@ -204,7 +204,11 @@ function Contenido() {
     )
   } else if (seccion === 'estado') {
     contenido = (
-      <PaginaEstado obtener={obtenerEstado} sesionCaducada={alCaducarSesion} />
+      <PaginaEstado
+        obtener={obtenerEstado}
+        obtenerDisponibilidad={obtenerDisponibilidad}
+        sesionCaducada={alCaducarSesion}
+      />
     )
   } else if (seccion === 'ayuda') {
     contenido = <PaginaAyuda esAdmin={esAdmin} />

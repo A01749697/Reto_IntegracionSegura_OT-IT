@@ -1,5 +1,13 @@
 import { seguridad } from '../configuracion/seguridad'
-import type { EstadoVariable } from '../repositorios/lecturas.repositorio'
+import { validarConsultaDisponibilidad } from '../esquemas/sistema.esquema'
+import type {
+  ActividadLecturas,
+  EstadoVariable,
+} from '../repositorios/lecturas.repositorio'
+import {
+  calcularDisponibilidad,
+  type Disponibilidad,
+} from '../utilidades/disponibilidad'
 
 type Parte = 'ok' | 'falla'
 export type Datos = 'al_dia' | 'retrasado' | 'sin_datos' | 'desconocido'
@@ -12,9 +20,16 @@ export type EstadoSistema = {
   variables: EstadoVariable[]
 }
 
+export type ResultadoDisponibilidad =
+  { ok: true; disponibilidad: Disponibilidad } | { ok: false; error: string }
+
 type Dependencias = {
   comprobarBasePanel: () => Promise<void>
   obtenerEstadoLecturas: () => Promise<EstadoVariable[]>
+  obtenerActividadLecturas: (
+    cubetaSegundos: number,
+    cantidad: number,
+  ) => Promise<ActividadLecturas>
 }
 
 function avisarFalla(nombre: string, razon: unknown) {
@@ -25,6 +40,7 @@ function avisarFalla(nombre: string, razon: unknown) {
 export function crearServicioSistema({
   comprobarBasePanel,
   obtenerEstadoLecturas,
+  obtenerActividadLecturas,
 }: Dependencias) {
   return {
     async estado(): Promise<EstadoSistema> {
@@ -59,6 +75,27 @@ export function crearServicioSistema({
         baseDatosLecturas: lecturas.status === 'fulfilled' ? 'ok' : 'falla',
         datos,
         variables,
+      }
+    },
+
+    // Primero se validan los filtros y, solo si son válidos, se consulta la base.
+    // Si la base falla, el error sube y la API responde 500 (no se inventa un historial).
+    async disponibilidad(consulta: unknown): Promise<ResultadoDisponibilidad> {
+      const validacion = validarConsultaDisponibilidad(consulta)
+      if (!validacion.ok) return validacion
+
+      const { cubetaSegundos, cantidad } =
+        seguridad.sistema.disponibilidad[validacion.ventana]
+      const actividad = await obtenerActividadLecturas(cubetaSegundos, cantidad)
+      return {
+        ok: true,
+        disponibilidad: calcularDisponibilidad({
+          ventana: validacion.ventana,
+          cubetaSegundos,
+          cantidad,
+          maximoCortes: seguridad.sistema.maximoCortes,
+          actividad,
+        }),
       }
     },
   }
