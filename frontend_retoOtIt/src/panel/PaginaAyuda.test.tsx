@@ -29,6 +29,7 @@ describe('PaginaAyuda', () => {
       'Bitácora',
       'Datos',
       'Estado',
+      'Gemelo',
       'Mi cuenta',
     ])
   })

@@ -6,6 +6,7 @@ const COLORES = {
   principal: 'border-acento bg-acento text-sobre hover:brightness-110',
   contorno: 'border-acento text-acento hover:bg-acento/10',
   peligro: 'border-linea text-alerta hover:border-alerta',
+  alerta: 'border-alerta bg-alerta text-sobre hover:brightness-110',
   neutro: 'border-linea text-texto hover:border-acento',
 }
 

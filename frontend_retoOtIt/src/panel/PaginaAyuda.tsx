@@ -8,6 +8,43 @@ type Props = {
 
 // En el mismo orden que las pestañas del encabezado.
 const PESTANAS = [
+<<<<<<< HEAD
+  { nombre: 'Inicio', texto: 'Tu saludo y tu rol.', soloAdmin: false },
+  {
+    nombre: 'Cuentas',
+    texto:
+      'Aprobar o rechazar solicitudes, desactivar, reactivar, desbloquear y hacer administrador.',
+    soloAdmin: true,
+  },
+  {
+    nombre: 'Bitácora',
+    texto: 'Los accesos, bloqueos y cambios de rol. Se puede descargar en CSV.',
+    soloAdmin: true,
+  },
+  {
+    nombre: 'Datos',
+    texto:
+      'Las tablas de cuentas y bitácora, solo para leer. Cada consulta queda anotada.',
+    soloAdmin: true,
+  },
+  {
+    nombre: 'Estado',
+    texto: 'Si la API, las bases de datos y la llegada de datos están al día.',
+    soloAdmin: false,
+  },
+  {
+    nombre: 'Gemelo',
+    texto:
+      'La celda clasificadora en 3D. Sigue las lecturas que llegan o corre una simulación.',
+    soloAdmin: false,
+  },
+  {
+    nombre: 'Mi cuenta',
+    texto: 'Tus datos y el cambio de tu contraseña.',
+    soloAdmin: false,
+  },
+]
+=======
   { clave: 'inicio', soloAdmin: false },
   { clave: 'cuentas', soloAdmin: true },
   { clave: 'bitacora', soloAdmin: true },
@@ -15,6 +52,7 @@ const PESTANAS = [
   { clave: 'estado', soloAdmin: false },
   { clave: 'cuenta', soloAdmin: false },
 ] as const
+>>>>>>> 8f6a37cd975fbc94ecaf5bca923178802838cd64
 
 const PREGUNTAS = ['bloqueo', 'olvido', 'sesion'] as const
 
