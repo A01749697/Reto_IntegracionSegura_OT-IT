@@ -19,6 +19,11 @@ function crearDependenciasFalsas(variables: EstadoVariable[] = []) {
   return {
     comprobarBasePanel: vi.fn().mockResolvedValue(undefined),
     obtenerEstadoLecturas: vi.fn().mockResolvedValue(variables),
+    obtenerActividadLecturas: vi.fn().mockResolvedValue({
+      ahora: new Date('2026-11-12T12:07:00.000Z'),
+      primera: new Date('2026-11-01T00:00:00.000Z'),
+      cubetas: [],
+    }),
   }
 }
 
@@ -90,6 +95,47 @@ describe('servicio de sistema', () => {
     })
     expect(aviso).toHaveBeenCalledWith(
       'Falla al comprobar la base de lecturas:',
+      'caida',
+    )
+  })
+})
+
+describe('servicio de sistema, disponibilidad', () => {
+  it('con una ventana válida pide a la base el tamaño y la cantidad de cubetas', async () => {
+    const dependencias = crearDependenciasFalsas()
+    const servicio = crearServicioSistema(dependencias)
+
+    const resultado = await servicio.disponibilidad({ ventana: '7d' })
+
+    expect(dependencias.obtenerActividadLecturas).toHaveBeenCalledWith(
+      seguridad.sistema.disponibilidad['7d'].cubetaSegundos,
+      seguridad.sistema.disponibilidad['7d'].cantidad,
+    )
+    expect(resultado.ok).toBe(true)
+    if (resultado.ok) {
+      expect(resultado.disponibilidad.ventana).toBe('7d')
+      expect(resultado.disponibilidad.cubetas).toHaveLength(
+        seguridad.sistema.disponibilidad['7d'].cantidad,
+      )
+    }
+  })
+
+  it('una ventana inválida se rechaza sin consultar la base', async () => {
+    const dependencias = crearDependenciasFalsas()
+    const servicio = crearServicioSistema(dependencias)
+
+    const resultado = await servicio.disponibilidad({ ventana: '30d' })
+
+    expect(resultado).toEqual({ ok: false, error: 'ventana debe ser 24h o 7d' })
+    expect(dependencias.obtenerActividadLecturas).not.toHaveBeenCalled()
+  })
+
+  it('si la base falla el error sube y no se inventa un historial', async () => {
+    const dependencias = crearDependenciasFalsas()
+    dependencias.obtenerActividadLecturas.mockRejectedValue(new Error('caida'))
+    const servicio = crearServicioSistema(dependencias)
+
+    await expect(servicio.disponibilidad({ ventana: '24h' })).rejects.toThrow(
       'caida',
     )
   })

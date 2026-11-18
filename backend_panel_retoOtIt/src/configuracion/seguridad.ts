@@ -30,6 +30,14 @@ export const seguridad = {
   sistema: {
     // pasado este tiempo sin lecturas nuevas, el estado dice "retrasado"
     lecturaRetrasadaSegundos: 5 * 60,
+    // historial de disponibilidad: la ventana se parte en cubetas del mismo tamaño
+    // (24 h = 96 cubetas de 15 min, 7 días = 84 cubetas de 2 h)
+    disponibilidad: {
+      '24h': { cubetaSegundos: 15 * 60, cantidad: 96 },
+      '7d': { cubetaSegundos: 2 * 60 * 60, cantidad: 84 },
+    },
+    // cuántas interrupciones se listan (las más recientes primero)
+    maximoCortes: 10,
   },
   bitacora: {
     porDefecto: 50,

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 import * as lecturas from './gemelo/apiLecturas'
@@ -41,6 +41,7 @@ vi.mock('./panel/apiDatos', () => ({
 
 vi.mock('./panel/apiSistema', () => ({
   obtenerEstado: vi.fn(),
+  obtenerDisponibilidad: vi.fn(),
 }))
 
 vi.mock('./gemelo/apiLecturas', () => ({
@@ -66,6 +67,10 @@ beforeEach(() => {
   vi.mocked(api.obtenerSesion).mockResolvedValue(null)
   // el inicio pide estas tres cosas al abrirse
   vi.mocked(sistema.obtenerEstado).mockResolvedValue({
+    ok: false,
+    motivo: 'fallo',
+  })
+  vi.mocked(sistema.obtenerDisponibilidad).mockResolvedValue({
     ok: false,
     motivo: 'fallo',
   })
@@ -471,5 +476,183 @@ describe('App con sesión', () => {
       await screen.findByRole('button', { name: 'Desbloquear a Ana Lopez' }),
     )
     await waitFor(() => expect(admin.desbloquearCuenta).toHaveBeenCalledWith(7))
+  })
+})
+
+describe('App, direcciones', () => {
+  const conSesion = (quien = usuario) =>
+    vi.mocked(api.obtenerSesion).mockResolvedValue(quien)
+
+  it('cada pestaña cambia la dirección', async () => {
+    conSesion()
+    vi.mocked(sistema.obtenerEstado).mockResolvedValue({
+      ok: false,
+      motivo: 'fallo',
+    })
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Inicio' })
+    expect(window.location.hash).toBe('')
+    irA('Estado')
+    await screen.findByRole('heading', { name: 'Estado del sistema' })
+    expect(window.location.hash).toBe('#/estado')
+    irA('Inicio')
+    await screen.findByRole('heading', { name: 'Inicio' })
+    expect(window.location.pathname + window.location.hash).toBe('/')
+  })
+
+  it('abrir una dirección lleva directo a su pantalla', async () => {
+    conSesion()
+    window.history.replaceState(null, '', '/#/mi-cuenta')
+    render(<App />)
+    expect(
+      await screen.findByRole('heading', { name: 'Mi cuenta' }),
+    ).toBeInTheDocument()
+  })
+
+  it('el botón Atrás del navegador regresa a la pantalla anterior', async () => {
+    conSesion()
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Inicio' })
+    irA('Estado')
+    await screen.findByRole('heading', { name: 'Estado del sistema' })
+    // lo que hace el navegador al pulsar Atrás
+    act(() => {
+      window.history.replaceState(null, '', '/')
+      window.dispatchEvent(new PopStateEvent('popstate'))
+    })
+    expect(
+      await screen.findByRole('heading', { name: 'Inicio' }),
+    ).toBeInTheDocument()
+  })
+
+  it('una dirección que no existe muestra la página 404 y deja volver', async () => {
+    conSesion()
+    window.history.replaceState(null, '', '/#/no-existe')
+    render(<App />)
+    expect(
+      await screen.findByRole('heading', { name: 'Página no encontrada' }),
+    ).toBeInTheDocument()
+    // el encabezado sigue ahí, sin ninguna pestaña marcada
+    expect(screen.getByRole('button', { name: 'Estado' })).not.toHaveAttribute(
+      'aria-current',
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Ir al inicio' }))
+    expect(
+      await screen.findByRole('heading', { name: 'Inicio' }),
+    ).toBeInTheDocument()
+    expect(window.location.hash).toBe('')
+  })
+
+  it('sin sesión también hay página 404, sin datos del panel', async () => {
+    window.history.replaceState(null, '', '/#/no-existe')
+    render(<App />)
+    expect(
+      await screen.findByRole('heading', { name: 'Página no encontrada' }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('navigation')).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: 'Ir al inicio' }))
+    expect(
+      await screen.findByRole('heading', { name: TITULO_LANDING }),
+    ).toBeInTheDocument()
+  })
+
+  it('sin sesión, una dirección del panel pide entrar y luego llega a ella', async () => {
+    vi.mocked(api.entrar).mockResolvedValue({ ok: true, usuario })
+    vi.mocked(sistema.obtenerEstado).mockResolvedValue({
+      ok: false,
+      motivo: 'fallo',
+    })
+    window.history.replaceState(null, '', '/#/estado')
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Entrar al panel' })
+    fireEvent.change(screen.getByLabelText('Correo'), {
+      target: { value: 'eduardo@ejemplo.com' },
+    })
+    fireEvent.change(screen.getByLabelText('Contraseña'), {
+      target: { value: 'una-clave-larga' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
+    expect(
+      await screen.findByRole('heading', { name: 'Estado del sistema' }),
+    ).toBeInTheDocument()
+    expect(window.location.hash).toBe('#/estado')
+  })
+
+  it('las direcciones de entrar y crear cuenta abren su formulario', async () => {
+    window.history.replaceState(null, '', '/#/crear-cuenta')
+    render(<App />)
+    expect(
+      await screen.findByRole('heading', { name: 'Crear cuenta' }),
+    ).toBeInTheDocument()
+  })
+
+  it('Iniciar sesión en la portada cambia la dirección', async () => {
+    render(<App />)
+    await screen.findByRole('heading', { name: TITULO_LANDING })
+    fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
+    await screen.findByRole('heading', { name: 'Entrar al panel' })
+    expect(window.location.hash).toBe('#/entrar')
+  })
+
+  it('al entrar desde el login la dirección queda en la raíz', async () => {
+    vi.mocked(api.entrar).mockResolvedValue({ ok: true, usuario })
+    window.history.replaceState(null, '', '/#/entrar')
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Entrar al panel' })
+    fireEvent.change(screen.getByLabelText('Correo'), {
+      target: { value: 'eduardo@ejemplo.com' },
+    })
+    fireEvent.change(screen.getByLabelText('Contraseña'), {
+      target: { value: 'una-clave-larga' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Iniciar sesión' }))
+    await screen.findByRole('heading', { name: 'Inicio' })
+    expect(window.location.hash).toBe('')
+  })
+
+  it('una dirección de administrador no deja pasar a un usuario normal', async () => {
+    conSesion({ ...usuario, rol: 'usuario' })
+    window.history.replaceState(null, '', '/#/cuentas')
+    render(<App />)
+    expect(
+      await screen.findByRole('heading', { name: 'Inicio' }),
+    ).toBeInTheDocument()
+    expect(admin.listarCuentas).not.toHaveBeenCalled()
+  })
+
+  it('cuando la sesión caduca la dirección pasa al login', async () => {
+    conSesion()
+    vi.mocked(sistema.obtenerEstado)
+      .mockResolvedValueOnce({ ok: false, motivo: 'fallo' })
+      .mockResolvedValue({ ok: false, motivo: 'sesion' })
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Inicio' })
+    irA('Estado')
+    await screen.findByRole('heading', { name: 'Entrar al panel' })
+    expect(window.location.hash).toBe('#/entrar')
+  })
+})
+
+describe('App en inglés', () => {
+  it('el panel completo cambia de idioma desde el menú', async () => {
+    vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Inicio' })
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Menú de Eduardo Serrano' }),
+    )
+    fireEvent.click(screen.getByRole('menuitem', { name: /^Idioma/ }))
+    expect(
+      await screen.findByRole('heading', { name: 'Home' }),
+    ).toBeInTheDocument()
+    for (const pestana of ['Accounts', 'Log', 'Data', 'Status', 'My account']) {
+      expect(screen.getByRole('button', { name: pestana })).toBeInTheDocument()
+    }
+    expect(screen.getByText('Pending accounts')).toBeInTheDocument()
+    expect(screen.queryByText('Cuentas pendientes')).not.toBeInTheDocument()
+    irA('Status')
+    expect(
+      await screen.findByRole('heading', { name: 'System status' }),
+    ).toBeInTheDocument()
   })
 })

@@ -10,5 +10,6 @@ export function crearRutasSistema({ controlador, exigirSesion }: Dependencias) {
   const rutas = Router()
   rutas.use(exigirSesion)
   rutas.get('/estado', controlador.estado)
+  rutas.get('/disponibilidad', controlador.disponibilidad)
   return rutas
 }

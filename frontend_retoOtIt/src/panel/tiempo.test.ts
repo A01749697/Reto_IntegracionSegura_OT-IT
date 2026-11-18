@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { fechaHora, hace } from './tiempo'
+import i18n from '../idioma/i18n'
+import { duracion, fechaCorta, fechaHora, fechaHoraCorta, hace } from './tiempo'
 
 describe('hace', () => {
   it.each([
@@ -16,10 +17,46 @@ describe('hace', () => {
   })
 })
 
+describe('duracion', () => {
+  it.each([
+    [0, '1 min'],
+    [45 * 60, '45 min'],
+    [3600, '1 h'],
+    [90 * 60, '1 h 30 min'],
+    [23 * 3600 + 59 * 60, '23 h 59 min'],
+    [86400, '1 d'],
+    [2 * 86400 + 3 * 3600, '2 d 3 h'],
+  ])('%i segundos se lee "%s"', (segundos, texto) => {
+    expect(duracion(segundos)).toBe(texto)
+  })
+})
+
 describe('fechaHora', () => {
   it('escribe el año y la hora', () => {
     const texto = fechaHora('2026-11-06T18:30:05Z')
     expect(texto).toMatch(/2026/)
     expect(texto).toMatch(/\d{1,2}:\d{2}:\d{2}/)
+  })
+})
+
+describe('fechaHoraCorta', () => {
+  it('escribe la hora sin segundos', () => {
+    const texto = fechaHoraCorta('2026-11-06T18:30:05Z')
+    expect(texto).toMatch(/\d{1,2}:\d{2}/)
+    expect(texto).not.toMatch(/\d{1,2}:\d{2}:\d{2}/)
+  })
+})
+
+describe('tiempo en inglés', () => {
+  it('escribe el tiempo pasado y la fecha a la manera inglesa', async () => {
+    await i18n.changeLanguage('en')
+    expect(hace(59)).toBe('59 s ago')
+    expect(hace(3600)).toBe('1 h ago')
+    expect(fechaHora('2026-11-06T18:30:05Z')).toMatch(/Nov/)
+    expect(fechaCorta('2026-11-06T18:30:05Z')).toMatch(/Nov \d{1,2}, 2026/)
+  })
+
+  it('en español la fecha corta lleva el mes en español', () => {
+    expect(fechaCorta('2026-11-06T18:30:05Z')).toMatch(/nov/)
   })
 })

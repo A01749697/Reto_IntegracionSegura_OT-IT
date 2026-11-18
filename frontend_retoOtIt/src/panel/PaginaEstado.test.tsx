@@ -1,6 +1,11 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { EstadoSistema, ResultadoEstado } from './apiSistema'
+import type {
+  Disponibilidad,
+  EstadoSistema,
+  ResultadoDisponibilidad,
+  ResultadoEstado,
+} from './apiSistema'
 import PaginaEstado from './PaginaEstado'
 
 const estadoBase: EstadoSistema = {
@@ -24,9 +29,41 @@ const estadoBase: EstadoSistema = {
   ],
 }
 
-function preparar(respuesta: ResultadoEstado) {
+const historialBase: Disponibilidad = {
+  ventana: '24h',
+  cubetaSegundos: 900,
+  hasta: '2026-11-12T12:07:00.000Z',
+  cubetas: [
+    { inicio: '2026-11-12T11:30:00.000Z', lecturas: 4, estado: 'con_datos' },
+    { inicio: '2026-11-12T11:45:00.000Z', lecturas: 0, estado: 'sin_datos' },
+    { inicio: '2026-11-12T12:00:00.000Z', lecturas: 0, estado: 'en_curso' },
+  ],
+  resumen: {
+    porcentaje: 50,
+    cubetasEvaluadas: 2,
+    cubetasConDatos: 1,
+    interrupciones: 1,
+    mayorCorteSegundos: 900,
+  },
+  cortes: [
+    {
+      desde: '2026-11-12T11:45:00.000Z',
+      hasta: '2026-11-12T12:07:00.000Z',
+      enCurso: true,
+    },
+  ],
+}
+
+function preparar(
+  respuesta: ResultadoEstado,
+  historial: ResultadoDisponibilidad = {
+    ok: true,
+    disponibilidad: historialBase,
+  },
+) {
   const props = {
     obtener: vi.fn().mockResolvedValue(respuesta),
+    obtenerDisponibilidad: vi.fn().mockResolvedValue(historial),
     sesionCaducada: vi.fn(),
   }
   render(<PaginaEstado {...props} />)
@@ -103,6 +140,33 @@ describe('PaginaEstado', () => {
   it('avisa a la app cuando la sesión caducó', async () => {
     const props = preparar({ ok: false, motivo: 'sesion' })
     await waitFor(() => expect(props.sesionCaducada).toHaveBeenCalledTimes(1))
+  })
+
+  it('muestra el historial de disponibilidad debajo de las tarjetas', async () => {
+    const props = preparar({ ok: true, estado: estadoBase })
+    expect(
+      await screen.findByRole('heading', {
+        name: 'Historial de disponibilidad',
+      }),
+    ).toBeInTheDocument()
+    expect(props.obtenerDisponibilidad).toHaveBeenCalledWith('24h')
+  })
+
+  it('Actualizar también vuelve a pedir el historial', async () => {
+    const props = preparar({ ok: true, estado: estadoBase })
+    await screen.findByText('50 %')
+    fireEvent.click(screen.getByRole('button', { name: 'Actualizar' }))
+    await waitFor(() =>
+      expect(props.obtenerDisponibilidad).toHaveBeenCalledTimes(2),
+    )
+  })
+
+  it('si falla el historial el resto del estado sigue visible', async () => {
+    preparar({ ok: true, estado: estadoBase }, { ok: false, motivo: 'fallo' })
+    expect(await screen.findByText('API del panel')).toBeInTheDocument()
+    expect(
+      await screen.findByText('No se pudo cargar el historial.'),
+    ).toBeInTheDocument()
   })
 })
 

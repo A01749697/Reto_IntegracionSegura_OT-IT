@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { TARJETA } from '../comun/estilos'
 import MarcoPanel from './MarcoPanel'
 
@@ -7,6 +8,7 @@ type Props = {
 
 // En el mismo orden que las pestañas del encabezado.
 const PESTANAS = [
+<<<<<<< HEAD
   { nombre: 'Inicio', texto: 'Tu saludo y tu rol.', soloAdmin: false },
   {
     nombre: 'Cuentas',
@@ -42,55 +44,54 @@ const PESTANAS = [
     soloAdmin: false,
   },
 ]
+=======
+  { clave: 'inicio', soloAdmin: false },
+  { clave: 'cuentas', soloAdmin: true },
+  { clave: 'bitacora', soloAdmin: true },
+  { clave: 'datos', soloAdmin: true },
+  { clave: 'estado', soloAdmin: false },
+  { clave: 'cuenta', soloAdmin: false },
+] as const
+>>>>>>> 8f6a37cd975fbc94ecaf5bca923178802838cd64
 
-const PREGUNTAS = [
-  {
-    pregunta: 'Mi cuenta se bloqueó',
-    respuesta:
-      'Después de 3 contraseñas incorrectas seguidas la cuenta se bloquea 15 minutos. Pasado ese tiempo puedes volver a intentar, o puedes pedirle a un administrador que la desbloquee.',
-  },
-  {
-    pregunta: 'Olvidé mi contraseña',
-    respuesta:
-      'En «Entrar al panel» pulsa «¿Olvidaste tu contraseña?», escribe tu correo y recibirás un enlace que sirve 10 minutos.',
-  },
-  {
-    pregunta: 'Mi sesión se cerró sola',
-    respuesta:
-      'La sesión se cierra después de 30 minutos sin usar el panel y, en todo caso, a las 8 horas. Solo hay que entrar de nuevo.',
-  },
-]
-
-function Lista({ elementos }: { elementos: typeof PESTANAS }) {
-  return (
-    <ul className="flex flex-col gap-2.5">
-      {elementos.map(({ nombre, texto }) => (
-        <li key={nombre} className="text-[13.5px] leading-snug">
-          <span className="font-bold">{nombre}</span>
-          <span className="text-suave"> · {texto}</span>
-        </li>
-      ))}
-    </ul>
-  )
-}
+const PREGUNTAS = ['bloqueo', 'olvido', 'sesion'] as const
 
 // Respuestas cortas a lo que más se pregunta. Se llega desde el menú de la cuenta.
 export default function PaginaAyuda({ esAdmin }: Props) {
+  const { t } = useTranslation()
   return (
-    <MarcoPanel titulo="Ayuda">
+    <MarcoPanel titulo={t('ayuda.titulo')}>
       <section className={`${TARJETA} p-5`}>
-        <h2 className="mb-3 text-[15px] font-bold">Qué hay en cada pestaña</h2>
-        <Lista elementos={PESTANAS.filter((p) => esAdmin || !p.soloAdmin)} />
+        <h2 className="mb-3 text-[15px] font-bold">
+          {t('ayuda.pestanasTitulo')}
+        </h2>
+        <ul className="flex flex-col gap-2.5">
+          {PESTANAS.filter((p) => esAdmin || !p.soloAdmin).map(({ clave }) => (
+            <li key={clave} className="text-[13.5px] leading-snug">
+              <span className="font-bold">
+                {t(`encabezado.pestanas.${clave}`)}
+              </span>
+              <span className="text-suave">
+                {' '}
+                · {t(`ayuda.pestanas.${clave}`)}
+              </span>
+            </li>
+          ))}
+        </ul>
       </section>
 
       <section className={`${TARJETA} p-5`}>
-        <h2 className="mb-3 text-[15px] font-bold">Preguntas frecuentes</h2>
+        <h2 className="mb-3 text-[15px] font-bold">
+          {t('ayuda.preguntasTitulo')}
+        </h2>
         <dl className="flex flex-col gap-4">
-          {PREGUNTAS.map(({ pregunta, respuesta }) => (
-            <div key={pregunta}>
-              <dt className="text-[13.5px] font-bold">{pregunta}</dt>
+          {PREGUNTAS.map((clave) => (
+            <div key={clave}>
+              <dt className="text-[13.5px] font-bold">
+                {t(`ayuda.preguntas.${clave}.pregunta`)}
+              </dt>
               <dd className="mt-1 text-[13.5px] leading-snug text-suave">
-                {respuesta}
+                {t(`ayuda.preguntas.${clave}.respuesta`)}
               </dd>
             </div>
           ))}

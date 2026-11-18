@@ -97,3 +97,45 @@ export async function obtenerEstadoLecturas(
     segundosDesdeRecibida: Math.max(0, Math.round(Number(fila.segundos))),
   }))
 }
+
+export type ActividadCubeta = { inicio: Date; lecturas: number }
+
+export type ActividadLecturas = {
+  ahora: Date
+  primera: Date | null
+  cubetas: ActividadCubeta[]
+}
+
+type FilaReferencia = { ahora: Date; primera: Date | null }
+
+// Cuántas lecturas llegaron a la nube en cada tramo de tiempo (por la hora de llegada, "recibido_en").
+// Cada tramo dura "cubetaSegundos" y se piden los últimos "cantidad", contando el que está en curso.
+// Solo regresa los tramos donde llegó algo; quien llama completa los vacíos.
+// Con el índice lecturas_recibido_idx (ver esquema.sql) las dos consultas son rápidas.
+export async function obtenerActividadLecturas(
+  pool: Pool,
+  cubetaSegundos: number,
+  cantidad: number,
+): Promise<ActividadLecturas> {
+  const referencia = await pool.query<FilaReferencia>(
+    'SELECT now() AS ahora, min(recibido_en) AS primera FROM lecturas',
+  )
+  const fila = referencia.rows[0]
+  if (!fila) throw new Error('La base no devolvió la hora actual')
+  const { ahora, primera } = fila
+
+  // La hora de la base se pasa de vuelta para que las dos consultas hablen del mismo instante.
+  const resultado = await pool.query<ActividadCubeta>(
+    `SELECT to_timestamp(floor(extract(epoch FROM recibido_en) / $1::double precision) * $1::double precision) AS inicio,
+            count(*)::int AS lecturas
+     FROM lecturas
+     WHERE recibido_en >= to_timestamp(
+       (floor(extract(epoch FROM $3::timestamptz) / $1::double precision) - $2::double precision + 1) * $1::double precision
+     )
+       AND recibido_en <= $3::timestamptz
+     GROUP BY 1
+     ORDER BY 1`,
+    [cubetaSegundos, cantidad, ahora.toISOString()],
+  )
+  return { ahora, primera, cubetas: resultado.rows }
+}

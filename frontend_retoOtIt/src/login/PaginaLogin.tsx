@@ -1,4 +1,5 @@
 import { useState, type FormEvent, type ReactNode } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   AlertCircle,
   ArrowUp,
@@ -13,14 +14,10 @@ import {
 import CaminoZonas from '../comun/CaminoZonas'
 import { avisoClases, boton } from '../comun/estilos'
 import FranjaZonas from '../comun/FranjaZonas'
+import SelectorIdioma from '../idioma/SelectorIdioma'
 import BotonTema from '../tema/BotonTema'
 import CampoTexto from './CampoTexto'
-import type {
-  MotivoEntrar,
-  ResultadoEntrar,
-  ResultadoSimple,
-  Usuario,
-} from './apiPanel'
+import type { ResultadoEntrar, ResultadoSimple, Usuario } from './apiPanel'
 
 export type DatosCuenta = { nombre: string; correo: string; clave: string }
 
@@ -43,45 +40,10 @@ type Vista = 'login' | 'olvido' | 'crear' | 'restablecer'
 
 const LARGO_MINIMO_CLAVE = 12
 
-const MENSAJES_ENTRAR: Record<MotivoEntrar, string> = {
-  credenciales: 'Correo o contraseña incorrectos.',
-  pendiente: 'Tu cuenta todavía está pendiente de aprobación.',
-  rechazada: 'Tu cuenta no fue aprobada.',
-  bloqueada:
-    'Demasiados intentos fallidos. Espera unos minutos e inténtalo de nuevo.',
-  limite: 'Demasiados intentos desde esta red. Espera unos minutos.',
-  invalido: 'Revisa que el correo y la contraseña estén bien escritos.',
-  fallo: 'No se pudo conectar con el servidor. Inténtalo más tarde.',
-}
-
-const MENSAJES_SIMPLES = {
-  limite: 'Demasiadas peticiones desde esta red. Espera unos minutos.',
-  fallo: 'No se pudo completar. Inténtalo más tarde.',
-}
-
 const BOTON_PRINCIPAL = `${boton('principal', 'grande')} w-full`
 const BOTON_SECUNDARIO = `${boton('contorno', 'grande')} w-full`
 const ENLACE =
   'cursor-pointer rounded px-1 py-3 text-[13px] font-medium text-acento underline underline-offset-[3px] hover:brightness-125 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-acento'
-
-const ENCABEZADOS: Record<Vista, { titulo: string; subtitulo: string }> = {
-  login: {
-    titulo: 'Entrar al panel',
-    subtitulo: 'Supervisa la comunicación segura entre la planta y la nube.',
-  },
-  olvido: {
-    titulo: 'Recuperar contraseña',
-    subtitulo: 'Te ayudamos a volver a entrar.',
-  },
-  crear: {
-    titulo: 'Crear cuenta',
-    subtitulo: 'Solicita acceso al panel del reto.',
-  },
-  restablecer: {
-    titulo: 'Contraseña nueva',
-    subtitulo: 'Escribe la contraseña nueva de tu cuenta.',
-  },
-}
 
 function Aviso({
   tipo,
@@ -133,12 +95,13 @@ function VistaLogin({
   const [cargando, setCargando] = useState(false)
   const [aviso, setAviso] = useState('')
   const [mayusculas, setMayusculas] = useState(false)
+  const { t } = useTranslation()
 
   async function enviar(e: FormEvent) {
     e.preventDefault()
     if (cargando) return
     if (!correo.trim() || !clave) {
-      setAviso('Escribe tu correo y tu contraseña.')
+      setAviso(t('login.errores.escribeCorreoYClave'))
       return
     }
     setCargando(true)
@@ -153,7 +116,7 @@ function VistaLogin({
       setAviso('')
       alIniciarSesion?.(resultado.usuario)
     } else {
-      setAviso(MENSAJES_ENTRAR[resultado.motivo])
+      setAviso(t(`login.errores.entrar.${resultado.motivo}`))
     }
   }
 
@@ -166,31 +129,31 @@ function VistaLogin({
         onSubmit={enviar}
         noValidate
         className="flex flex-col gap-[26px]"
-        aria-label="Iniciar sesión"
+        aria-label={t('login.formularios.iniciarSesion')}
       >
         {aviso && <Aviso tipo="error">{aviso}</Aviso>}
 
         <CampoTexto
           id="correo"
-          etiqueta="Correo"
+          etiqueta={t('login.campos.correo')}
           Icono={Envelope}
           valor={correo}
           alCambiar={setCorreo}
           type="email"
           autoComplete="username"
-          placeholder="correo@ejemplo.com"
+          placeholder={t('login.pistas.correo')}
         />
 
         <div className="flex flex-col gap-2">
           <CampoTexto
             id="clave"
-            etiqueta="Contraseña"
+            etiqueta={t('login.campos.clave')}
             Icono={Lock}
             valor={clave}
             alCambiar={setClave}
             type={verClave ? 'text' : 'password'}
             autoComplete="current-password"
-            placeholder="Tu contraseña"
+            placeholder={t('login.pistas.tuClave')}
             onKeyUp={detectarMayusculas}
             onKeyDown={detectarMayusculas}
             onBlur={() => setMayusculas(false)}
@@ -198,7 +161,9 @@ function VistaLogin({
               <button
                 type="button"
                 aria-label={
-                  verClave ? 'Ocultar contraseña' : 'Mostrar contraseña'
+                  verClave
+                    ? t('login.acciones.ocultarClave')
+                    : t('login.acciones.mostrarClave')
                 }
                 aria-pressed={verClave}
                 onClick={() => setVerClave((v) => !v)}
@@ -218,12 +183,12 @@ function VistaLogin({
               className="flex items-center gap-2 text-[13px] font-medium text-ok"
             >
               <ArrowUp size={16} aria-hidden="true" />
-              Bloq Mayús está activado
+              {t('login.avisos.bloqMayus')}
             </p>
           )}
           <div className="-mt-1 flex justify-end">
             <button type="button" className={ENLACE} onClick={irOlvido}>
-              ¿Olvidaste tu contraseña?
+              {t('login.acciones.olvidaste')}
             </button>
           </div>
         </div>
@@ -232,23 +197,25 @@ function VistaLogin({
           {cargando ? (
             <>
               <Cargando />
-              <span>Verificando...</span>
+              <span>{t('login.acciones.verificando')}</span>
             </>
           ) : (
-            <span>Iniciar sesión</span>
+            <span>{t('login.acciones.iniciarSesion')}</span>
           )}
         </button>
       </form>
 
       <div className="flex items-center gap-3">
         <div className="h-px grow bg-linea" />
-        <span className="text-[13px] text-suave">¿Aún no tienes cuenta?</span>
+        <span className="text-[13px] text-suave">
+          {t('login.acciones.sinCuenta')}
+        </span>
         <div className="h-px grow bg-linea" />
       </div>
 
       <button type="button" className={BOTON_SECUNDARIO} onClick={irCrear}>
         <UserAdd size={20} aria-hidden="true" />
-        <span>Crear cuenta</span>
+        <span>{t('login.acciones.crearCuenta')}</span>
       </button>
     </div>
   )
@@ -262,13 +229,14 @@ function VistaOlvido({
   const [enviado, setEnviado] = useState(false)
   const [error, setError] = useState('')
   const [cargando, setCargando] = useState(false)
+  const { t } = useTranslation()
 
   async function enviar(e: FormEvent) {
     e.preventDefault()
     if (cargando) return
     setEnviado(false)
     if (!correo.trim()) {
-      setError('Escribe tu correo.')
+      setError(t('login.errores.escribeCorreo'))
       return
     }
     setError('')
@@ -286,8 +254,8 @@ function VistaOlvido({
     } else {
       setError(
         resultado.motivo === 'invalido'
-          ? 'Escribe un correo válido.'
-          : MENSAJES_SIMPLES[resultado.motivo],
+          ? t('login.errores.correoInvalido')
+          : t(`login.errores.simples.${resultado.motivo}`),
       )
     }
   }
@@ -295,39 +263,33 @@ function VistaOlvido({
   return (
     <div className="flex flex-col gap-[26px]">
       <p className="text-[14px] leading-normal text-suave">
-        Escribe tu correo. Si la cuenta existe, te enviaremos las instrucciones
-        para crear una contraseña nueva.
+        {t('login.avisos.olvidoIntro')}
       </p>
       {error && <Aviso tipo="error">{error}</Aviso>}
-      {enviado && (
-        <Aviso tipo="exito">
-          Listo. Revisa tu correo en unos minutos, también la carpeta de spam.
-          Si no llega, avisa a un integrante del equipo.
-        </Aviso>
-      )}
+      {enviado && <Aviso tipo="exito">{t('login.avisos.olvidoEnviado')}</Aviso>}
       <form
         onSubmit={enviar}
         noValidate
         className="flex flex-col gap-[26px]"
-        aria-label="Recuperar contraseña"
+        aria-label={t('login.formularios.recuperar')}
       >
         <CampoTexto
           id="olvido-correo"
-          etiqueta="Correo"
+          etiqueta={t('login.campos.correo')}
           Icono={Envelope}
           valor={correo}
           alCambiar={setCorreo}
           type="email"
           autoComplete="username"
-          placeholder="correo@ejemplo.com"
+          placeholder={t('login.pistas.correo')}
         />
         <button type="submit" className={BOTON_PRINCIPAL} disabled={cargando}>
-          Enviar instrucciones
+          {t('login.acciones.enviarInstrucciones')}
         </button>
       </form>
       <div className="flex justify-center">
         <button type="button" className={ENLACE} onClick={irLogin}>
-          Volver a iniciar sesión
+          {t('login.acciones.volverALogin')}
         </button>
       </div>
     </div>
@@ -345,23 +307,22 @@ function VistaCrear({
   const [error, setError] = useState('')
   const [enviado, setEnviado] = useState(false)
   const [cargando, setCargando] = useState(false)
+  const { t } = useTranslation()
 
   async function enviar(e: FormEvent) {
     e.preventDefault()
     if (cargando) return
     setEnviado(false)
     if (!nombre.trim() || !correo.trim() || !clave || !clave2) {
-      setError('Completa todos los campos.')
+      setError(t('login.errores.completaTodo'))
       return
     }
     if (clave.length < LARGO_MINIMO_CLAVE) {
-      setError(
-        `La contraseña debe tener al menos ${LARGO_MINIMO_CLAVE} caracteres.`,
-      )
+      setError(t('login.errores.claveCorta', { minimo: LARGO_MINIMO_CLAVE }))
       return
     }
     if (clave !== clave2) {
-      setError('Las contraseñas no coinciden.')
+      setError(t('login.errores.noCoinciden'))
       return
     }
     setError('')
@@ -386,78 +347,73 @@ function VistaCrear({
     } else if (resultado.motivo === 'invalido') {
       setError(
         resultado.mensaje
-          ? `No se pudo crear la cuenta: ${resultado.mensaje}.`
-          : 'Revisa los datos que escribiste.',
+          ? t('login.errores.crearConMensaje', { mensaje: resultado.mensaje })
+          : t('login.errores.revisaDatos'),
       )
     } else {
-      setError(MENSAJES_SIMPLES[resultado.motivo])
+      setError(t(`login.errores.simples.${resultado.motivo}`))
     }
   }
 
   return (
     <div className="flex flex-col gap-[26px]">
       <p className="text-[14px] leading-normal text-suave">
-        Llena tus datos. Un administrador del equipo revisará tu solicitud antes
-        de activar la cuenta.
+        {t('login.avisos.crearIntro')}
       </p>
       {error && <Aviso tipo="error">{error}</Aviso>}
-      {enviado && (
-        <Aviso tipo="exito">
-          Solicitud enviada. Podrás entrar cuando un administrador la apruebe.
-        </Aviso>
-      )}
+      {enviado && <Aviso tipo="exito">{t('login.avisos.crearEnviada')}</Aviso>}
       <form
         onSubmit={enviar}
         noValidate
         className="flex flex-col gap-[22px]"
-        aria-label="Crear cuenta"
+        aria-label={t('login.formularios.crear')}
       >
         <CampoTexto
           id="crear-nombre"
-          etiqueta="Nombre completo"
+          etiqueta={t('login.campos.nombre')}
           Icono={User}
           valor={nombre}
           alCambiar={setNombre}
           autoComplete="name"
-          placeholder="Nombre y apellido"
+          placeholder={t('login.pistas.nombre')}
         />
         <CampoTexto
           id="crear-correo"
-          etiqueta="Correo"
+          etiqueta={t('login.campos.correo')}
           Icono={Envelope}
           valor={correo}
           alCambiar={setCorreo}
           type="email"
           autoComplete="email"
-          placeholder="correo@ejemplo.com"
+          placeholder={t('login.pistas.correo')}
         />
         <CampoTexto
           id="crear-clave"
-          etiqueta="Contraseña"
+          etiqueta={t('login.campos.clave')}
           Icono={Lock}
           valor={clave}
           alCambiar={setClave}
           type="password"
           autoComplete="new-password"
-          placeholder={`Mínimo ${LARGO_MINIMO_CLAVE} caracteres`}
+          placeholder={t('login.pistas.minimo', { minimo: LARGO_MINIMO_CLAVE })}
         />
         <CampoTexto
           id="crear-clave2"
-          etiqueta="Repite la contraseña"
+          etiqueta={t('login.campos.repiteClave')}
           Icono={Lock}
           valor={clave2}
           alCambiar={setClave2}
           type="password"
           autoComplete="new-password"
-          placeholder="Escríbela otra vez"
+          placeholder={t('login.pistas.repite')}
         />
         <button type="submit" className={BOTON_PRINCIPAL} disabled={cargando}>
-          Enviar solicitud
+          {t('login.acciones.enviarSolicitud')}
         </button>
       </form>
       <div className="flex justify-center">
         <button type="button" className={ENLACE} onClick={irLogin}>
-          Ya tengo cuenta, volver a iniciar sesión
+          {t('login.acciones.yaTengoCuenta')}
         </button>
       </div>
     </div>
@@ -477,22 +433,21 @@ function VistaRestablecer({
   const [error, setError] = useState('')
   const [listo, setListo] = useState(false)
   const [cargando, setCargando] = useState(false)
+  const { t } = useTranslation()
 
   async function enviar(e: FormEvent) {
     e.preventDefault()
     if (cargando) return
     if (!clave || !clave2) {
-      setError('Completa los dos campos.')
+      setError(t('login.errores.completaDos'))
       return
     }
     if (clave.length < LARGO_MINIMO_CLAVE) {
-      setError(
-        `La contraseña debe tener al menos ${LARGO_MINIMO_CLAVE} caracteres.`,
-      )
+      setError(t('login.errores.claveCorta', { minimo: LARGO_MINIMO_CLAVE }))
       return
     }
     if (clave !== clave2) {
-      setError('Las contraseñas no coinciden.')
+      setError(t('login.errores.noCoinciden'))
       return
     }
     setError('')
@@ -507,22 +462,18 @@ function VistaRestablecer({
     if (resultado.ok) {
       setListo(true)
     } else if (resultado.motivo === 'invalido') {
-      setError(
-        'El enlace no es válido o ya caducó. Pide uno nuevo desde "¿Olvidaste tu contraseña?".',
-      )
+      setError(t('login.errores.enlaceInvalido'))
     } else {
-      setError(MENSAJES_SIMPLES[resultado.motivo])
+      setError(t(`login.errores.simples.${resultado.motivo}`))
     }
   }
 
   if (listo) {
     return (
       <div className="flex flex-col gap-[26px]">
-        <Aviso tipo="exito">
-          Tu contraseña se cambió. Ya puedes iniciar sesión.
-        </Aviso>
+        <Aviso tipo="exito">{t('login.avisos.claveCambiada')}</Aviso>
         <button type="button" className={BOTON_PRINCIPAL} onClick={irLogin}>
-          Ir a iniciar sesión
+          {t('login.acciones.irALogin')}
         </button>
       </div>
     )
@@ -535,35 +486,35 @@ function VistaRestablecer({
         onSubmit={enviar}
         noValidate
         className="flex flex-col gap-[22px]"
-        aria-label="Restablecer contraseña"
+        aria-label={t('login.formularios.restablecer')}
       >
         <CampoTexto
           id="restablecer-clave"
-          etiqueta="Contraseña nueva"
+          etiqueta={t('login.campos.claveNueva')}
           Icono={Lock}
           valor={clave}
           alCambiar={setClave}
           type="password"
           autoComplete="new-password"
-          placeholder={`Mínimo ${LARGO_MINIMO_CLAVE} caracteres`}
+          placeholder={t('login.pistas.minimo', { minimo: LARGO_MINIMO_CLAVE })}
         />
         <CampoTexto
           id="restablecer-clave2"
-          etiqueta="Repite la contraseña nueva"
+          etiqueta={t('login.campos.repiteClaveNueva')}
           Icono={Lock}
           valor={clave2}
           alCambiar={setClave2}
           type="password"
           autoComplete="new-password"
-          placeholder="Escríbela otra vez"
+          placeholder={t('login.pistas.repite')}
         />
         <button type="submit" className={BOTON_PRINCIPAL} disabled={cargando}>
-          Cambiar contraseña
+          {t('login.acciones.cambiarClave')}
         </button>
       </form>
       <div className="flex justify-center">
         <button type="button" className={ENLACE} onClick={irLogin}>
-          Volver a iniciar sesión
+          {t('login.acciones.volverALogin')}
         </button>
       </div>
     </div>
@@ -583,7 +534,7 @@ export default function PaginaLogin({
   const [vista, setVista] = useState<Vista>(
     tokenInicial ? 'restablecer' : (vistaInicial ?? 'login'),
   )
-  const { titulo, subtitulo } = ENCABEZADOS[vista]
+  const { t } = useTranslation()
   const marca = 'text-base font-bold tracking-tight'
 
   return (
@@ -594,23 +545,28 @@ export default function PaginaLogin({
           <button
             type="button"
             onClick={alVolver}
-            aria-label="Panel Reto OT-IT, ir al inicio"
+            aria-label={t('login.irAlInicio')}
             className={`${marca} cursor-pointer rounded focus-visible:ring-[3px] focus-visible:ring-acento/45 focus-visible:outline-none`}
           >
-            Panel Reto OT-IT
+            {t('comun.marca')}
           </button>
         ) : (
-          <span className={marca}>Panel Reto OT-IT</span>
+          <span className={marca}>{t('comun.marca')}</span>
         )}
-        <BotonTema />
+        <div className="flex items-center gap-2.5">
+          <SelectorIdioma />
+          <BotonTema />
+        </div>
       </header>
 
       <main className="mx-auto flex w-full max-w-[460px] flex-1 flex-col gap-8 px-4 pt-6 pb-12 sm:px-0">
         <div>
           <h1 className="text-[28px] leading-tight font-bold tracking-tight">
-            {titulo}
+            {t(`login.encabezados.${vista}.titulo`)}
           </h1>
-          <p className="mt-2 text-[13.5px] text-suave">{subtitulo}</p>
+          <p className="mt-2 text-[13.5px] text-suave">
+            {t(`login.encabezados.${vista}.subtitulo`)}
+          </p>
         </div>
 
         {vista === 'login' && (
