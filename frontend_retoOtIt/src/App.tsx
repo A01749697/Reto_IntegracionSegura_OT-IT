@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import FondoOnda from './comun/FondoOnda'
+import { obtenerUltimasLecturas } from './gemelo/apiLecturas'
+import PaginaGemelo from './gemelo/PaginaGemelo'
 import PaginaLanding from './landing/PaginaLanding'
 import {
   cerrarSesion,
@@ -154,6 +156,13 @@ function Contenido() {
   } else if (seccion === 'estado') {
     contenido = (
       <PaginaEstado obtener={obtenerEstado} sesionCaducada={alCaducarSesion} />
+    )
+  } else if (seccion === 'gemelo') {
+    contenido = (
+      <PaginaGemelo
+        obtenerLecturas={obtenerUltimasLecturas}
+        sesionCaducada={alCaducarSesion}
+      />
     )
   } else if (seccion === 'ayuda') {
     contenido = <PaginaAyuda esAdmin={esAdmin} />

@@ -31,6 +31,12 @@ const PESTANAS = [
     soloAdmin: false,
   },
   {
+    nombre: 'Gemelo',
+    texto:
+      'La celda clasificadora en 3D. Sigue las lecturas que llegan o corre una simulación.',
+    soloAdmin: false,
+  },
+  {
     nombre: 'Mi cuenta',
     texto: 'Tus datos y el cambio de tu contraseña.',
     soloAdmin: false,

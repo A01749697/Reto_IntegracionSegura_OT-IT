@@ -4,7 +4,14 @@ import BotonTema from '../tema/BotonTema'
 import MenuUsuario from './MenuUsuario'
 
 export type Seccion =
-  'inicio' | 'cuentas' | 'bitacora' | 'datos' | 'estado' | 'cuenta' | 'ayuda'
+  | 'inicio'
+  | 'cuentas'
+  | 'bitacora'
+  | 'datos'
+  | 'estado'
+  | 'gemelo'
+  | 'cuenta'
+  | 'ayuda'
 
 type Props = {
   usuario: Usuario
@@ -19,6 +26,7 @@ const SECCIONES: { seccion: Seccion; texto: string; soloAdmin: boolean }[] = [
   { seccion: 'bitacora', texto: 'Bitácora', soloAdmin: true },
   { seccion: 'datos', texto: 'Datos', soloAdmin: true },
   { seccion: 'estado', texto: 'Estado', soloAdmin: false },
+  { seccion: 'gemelo', texto: 'Gemelo', soloAdmin: false },
   { seccion: 'cuenta', texto: 'Mi cuenta', soloAdmin: false },
 ]
 

@@ -1,6 +1,7 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
+import * as lecturas from './gemelo/apiLecturas'
 import * as api from './login/apiPanel'
 import * as admin from './panel/apiAdministracion'
 import * as bitacora from './panel/apiBitacora'
@@ -41,6 +42,13 @@ vi.mock('./panel/apiDatos', () => ({
 vi.mock('./panel/apiSistema', () => ({
   obtenerEstado: vi.fn(),
 }))
+
+vi.mock('./gemelo/apiLecturas', () => ({
+  obtenerUltimasLecturas: vi.fn(),
+}))
+
+// jsdom no tiene WebGL
+vi.mock('./gemelo/VistaCelda', () => ({ default: () => null }))
 
 const usuario: api.Usuario = {
   id: 2,
@@ -370,6 +378,36 @@ describe('App con sesión', () => {
     render(<App />)
     await screen.findByRole('heading', { name: 'Inicio' })
     irA('Estado')
+    expect(await screen.findByLabelText('Correo')).toBeInTheDocument()
+  })
+
+  it('abre el gemelo digital aunque no sea administrador', async () => {
+    vi.mocked(api.obtenerSesion).mockResolvedValue({
+      ...usuario,
+      rol: 'usuario',
+    })
+    vi.mocked(lecturas.obtenerUltimasLecturas).mockResolvedValue({
+      ok: true,
+      lecturas: [],
+    })
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Inicio' })
+    irA('Gemelo')
+    expect(
+      await screen.findByRole('heading', { name: 'Gemelo digital' }),
+    ).toBeInTheDocument()
+    expect(await screen.findByText('Sin lecturas todavía')).toBeInTheDocument()
+  })
+
+  it('manda al login si la sesión caduca en el gemelo', async () => {
+    vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
+    vi.mocked(lecturas.obtenerUltimasLecturas).mockResolvedValue({
+      ok: false,
+      motivo: 'sesion',
+    })
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Inicio' })
+    irA('Gemelo')
     expect(await screen.findByLabelText('Correo')).toBeInTheDocument()
   })
 
