@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import FondoOnda from './comun/FondoOnda'
-<<<<<<< HEAD
 import { obtenerUltimasLecturas } from './gemelo/apiLecturas'
 import PaginaGemelo from './gemelo/PaginaGemelo'
-=======
 import FranjaZonas from './comun/FranjaZonas'
->>>>>>> 8f6a37cd975fbc94ecaf5bca923178802838cd64
 import PaginaLanding from './landing/PaginaLanding'
 import {
   cerrarSesion,

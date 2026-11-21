@@ -22,16 +22,6 @@ type Props = {
   cerrarSesion: () => Promise<boolean>
 }
 
-<<<<<<< HEAD
-const SECCIONES: { seccion: Seccion; texto: string; soloAdmin: boolean }[] = [
-  { seccion: 'inicio', texto: 'Inicio', soloAdmin: false },
-  { seccion: 'cuentas', texto: 'Cuentas', soloAdmin: true },
-  { seccion: 'bitacora', texto: 'Bitácora', soloAdmin: true },
-  { seccion: 'datos', texto: 'Datos', soloAdmin: true },
-  { seccion: 'estado', texto: 'Estado', soloAdmin: false },
-  { seccion: 'gemelo', texto: 'Gemelo', soloAdmin: false },
-  { seccion: 'cuenta', texto: 'Mi cuenta', soloAdmin: false },
-=======
 type Pestana = Exclude<Seccion, 'ayuda'>
 
 const SECCIONES: { seccion: Pestana; soloAdmin: boolean }[] = [
@@ -40,8 +30,8 @@ const SECCIONES: { seccion: Pestana; soloAdmin: boolean }[] = [
   { seccion: 'bitacora', soloAdmin: true },
   { seccion: 'datos', soloAdmin: true },
   { seccion: 'estado', soloAdmin: false },
+  { seccion: 'gemelo', soloAdmin: false },
   { seccion: 'cuenta', soloAdmin: false },
->>>>>>> 8f6a37cd975fbc94ecaf5bca923178802838cd64
 ]
 
 // A la izquierda el nombre del panel y las pestañas; a la derecha el tema y el menú de la persona.
