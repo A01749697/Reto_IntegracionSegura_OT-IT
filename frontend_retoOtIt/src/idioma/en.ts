@@ -179,6 +179,7 @@ export const en: Diccionario<typeof es> = {
       bitacora: 'Log',
       datos: 'Data',
       estado: 'Status',
+      gemelo: 'Digital twin',
       cuenta: 'My account',
     },
   },
@@ -509,6 +510,7 @@ export const en: Diccionario<typeof es> = {
       datos: 'The accounts and log tables, read only. Every query is noted.',
       estado:
         'Whether the API, the databases and the data arrival are up to date.',
+      gemelo: 'The 3D sorting cell. It follows the readings as they arrive or runs a simulation.',
       cuenta: 'Your details and changing your password.',
     },
     preguntasTitulo: 'Frequently asked questions',

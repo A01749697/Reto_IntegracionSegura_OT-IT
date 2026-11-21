@@ -175,6 +175,7 @@ export const es = {
       bitacora: 'Bitácora',
       datos: 'Datos',
       estado: 'Estado',
+      gemelo: 'Gemelo',
       cuenta: 'Mi cuenta',
     },
   },
@@ -507,6 +508,7 @@ export const es = {
         'Las tablas de cuentas y bitácora, solo para leer. Cada consulta queda anotada.',
       estado:
         'Si la API, las bases de datos y la llegada de datos están al día.',
+      gemelo: 'La celda clasificadora en 3D. Sigue las lecturas que llegan o corre una simulación.',
       cuenta: 'Tus datos y el cambio de tu contraseña.',
     },
     preguntasTitulo: 'Preguntas frecuentes',
