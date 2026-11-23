@@ -38,6 +38,8 @@ export const seguridad = {
     },
     // cuántas interrupciones se listan (las más recientes primero)
     maximoCortes: 10,
+    // cuánto se espera a que responda la API receptora antes de darla por caída
+    esperaSondaMs: 3000,
   },
   bitacora: {
     porDefecto: 50,

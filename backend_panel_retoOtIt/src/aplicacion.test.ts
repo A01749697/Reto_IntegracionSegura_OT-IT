@@ -98,6 +98,25 @@ function prepararApp() {
       primera: new Date('2026-11-12T11:00:00.000Z'),
       cubetas: [{ inicio: new Date('2026-11-12T11:00:00.000Z'), lecturas: 3 }],
     }),
+    obtenerTamanosBase: vi
+      .fn()
+      .mockResolvedValue({ totalBytes: 9000000, lecturasBytes: 4000000 }),
+    leerDisco: vi
+      .fn()
+      .mockResolvedValue({ totalBytes: 8000000000, usadoBytes: 3000000000 }),
+    leerMemoria: vi.fn().mockResolvedValue({
+      totalBytes: 2000000000,
+      disponibleBytes: 900000000,
+      swapTotalBytes: 1000000000,
+      swapUsadoBytes: 0,
+    }),
+    leerCpu: vi
+      .fn()
+      .mockReturnValue({ nucleos: 1, carga1: 0.2, carga5: 0.1, carga15: 0.1 }),
+    leerVencimientoCertificado: vi
+      .fn()
+      .mockResolvedValue(new Date('2026-12-18T00:00:00.000Z')),
+    comprobarApiReceptora: vi.fn().mockResolvedValue(undefined),
   }
   const correo = {
     remitente: 'panel@ejemplo.com',
@@ -1318,6 +1337,49 @@ describe('API del panel', { timeout: 20000 }, () => {
       const { app } = prepararApp()
       const respuesta = await consultar(app, '/sistema/estado')
       expect(respuesta.status).toBe(401)
+    })
+
+    it('sin sesión, el estado del servidor responde 401', async () => {
+      const { app, sistema } = prepararApp()
+      const respuesta = await consultar(app, '/sistema/servidor')
+      expect(respuesta.status).toBe(401)
+      expect(sistema.leerDisco).not.toHaveBeenCalled()
+    })
+
+    it('un usuario común no ve el estado del servidor (403)', async () => {
+      const { app, sesion, sistema } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionUsuario)
+      const respuesta = await consultar(app, '/sistema/servidor').set(
+        'Cookie',
+        COOKIE,
+      )
+      expect(respuesta.status).toBe(403)
+      expect(sistema.leerDisco).not.toHaveBeenCalled()
+      expect(sistema.comprobarApiReceptora).not.toHaveBeenCalled()
+    })
+
+    it('un administrador recibe el estado del servidor', async () => {
+      const { app, sesion } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionAdministrador)
+      const respuesta = await consultar(app, '/sistema/servidor').set(
+        'Cookie',
+        COOKIE,
+      )
+      expect(respuesta.status).toBe(200)
+      expect(respuesta.headers['cache-control']).toBe('no-store')
+      expect(respuesta.body.disco).toEqual({
+        totalBytes: 8000000000,
+        usadoBytes: 3000000000,
+      })
+      expect(respuesta.body.baseDatos).toEqual({
+        totalBytes: 9000000,
+        lecturasBytes: 4000000,
+      })
+      expect(respuesta.body.servicios).toEqual({
+        baseDatosPanel: 'ok',
+        baseDatosLecturas: 'ok',
+        apiReceptora: 'ok',
+      })
     })
 
     it('cualquier usuario con sesión recibe el estado', async () => {

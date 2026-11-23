@@ -1,6 +1,7 @@
-// Etiquetas ancladas a puntos de la escena. Cada cuadro se acomodan para no taparse
+// Etiquetas ancladas a puntos de la escena (el texto sale del idioma activo al crearlas). Cada cuadro se acomodan para no taparse
 // entre ellas ni quedar debajo de los paneles de la página.
 import * as THREE from 'three'
+import i18n from '../idioma/i18n'
 import {
   ALTURA_MESA,
   BANDA_X1,
@@ -17,8 +18,34 @@ import {
 import { alturaPinza, type Planta } from './planta'
 import type { SenalDigital, Senales } from './senales'
 
+export type ClaveEtiqueta =
+  | 'almacen'
+  | 'alimentador'
+  | 'sensorPieza'
+  | 'marcador'
+  | 'banda'
+  | 'portico'
+  | 'carriles'
+  | 'cajas'
+  | 'tarima'
+  | 'plc'
+  | 'electrovalvulas'
+  | 'torreta'
+  | 'botonera'
+  | 'gabinete'
+  | 'pantalla'
+  | 'ls1'
+  | 'ls2'
+  | 'sensorMetal'
+  | 'sujecion'
+  | 'sc2'
+  | 'ls3'
+  | 'ls4'
+  | 'si2'
+  | 'pinza'
+
 type Definicion = {
-  texto: string
+  clave: ClaveEtiqueta // el texto está en los diccionarios de idioma (gemelo.escena.etiquetas)
   punto: P3 | (() => P3)
   senal?: SenalDigital // se resalta cuando la señal esta encendida
   detalle?: boolean // solo se ve con la camara cerca
@@ -54,84 +81,84 @@ const seEnciman = (a: Rect, b: Rect) =>
 function definiciones(planta: Planta): Definicion[] {
   const yLs = Y_PIEZA - 0.06
   return [
-    { texto: 'Almacén de piezas', punto: [X_ALMACEN, Y_BANDA + 0.43, Z_BANDA] },
+    { clave: 'almacen', punto: [X_ALMACEN, Y_BANDA + 0.43, Z_BANDA] },
     {
-      texto: 'Alimentador (PD-1)',
+      clave: 'alimentador',
       punto: [-0.86, Y_PIEZA + 0.07, Z_BANDA],
       senal: 'yA',
     },
     {
-      texto: 'Sensor de pieza (SC-1)',
+      clave: 'sensorPieza',
       punto: [X_IDENTIFICACION, 0.44, Z_BANDA],
       senal: 'sc1',
     },
-    { texto: 'Marcador (PS)', punto: [X_MARCADO, 0.6, Z_BANDA], senal: 'yC' },
+    { clave: 'marcador', punto: [X_MARCADO, 0.6, Z_BANDA], senal: 'yC' },
     {
-      texto: 'Banda y motor',
+      clave: 'banda',
       punto: [BANDA_X1, 0.26, Z_BANDA - 0.25],
       senal: 'motorBanda',
     },
-    { texto: 'Pórtico', punto: [0.93, 0.66, Z_PORTICO] },
-    { texto: 'Carriles', punto: [0.86, 0.2, -0.05] },
-    { texto: 'Cajas', punto: [0.86, 0.12, 0.3] },
-    { texto: 'Tarima de producto', punto: [1.57, -0.62, 0.35] },
-    { texto: 'PLC', punto: [-0.66, 0.34, -0.33] },
-    { texto: 'Electroválvulas', punto: [-0.18, 0.21, -0.4] },
-    { texto: 'Torreta', punto: [-0.93, 0.55, -0.41] },
-    { texto: 'Botonera y paro de emergencia', punto: [-0.7, 0.14, 0.34] },
-    { texto: 'Gabinete eléctrico', punto: [-1.62, 1.25, -0.77] },
-    { texto: 'Pantalla del operador', punto: [-1.5, 0.62, 0.82] },
+    { clave: 'portico', punto: [0.93, 0.66, Z_PORTICO] },
+    { clave: 'carriles', punto: [0.86, 0.2, -0.05] },
+    { clave: 'cajas', punto: [0.86, 0.12, 0.3] },
+    { clave: 'tarima', punto: [1.57, -0.62, 0.35] },
+    { clave: 'plc', punto: [-0.66, 0.34, -0.33] },
+    { clave: 'electrovalvulas', punto: [-0.18, 0.21, -0.4] },
+    { clave: 'torreta', punto: [-0.93, 0.55, -0.41] },
+    { clave: 'botonera', punto: [-0.7, 0.14, 0.34] },
+    { clave: 'gabinete', punto: [-1.62, 1.25, -0.77] },
+    { clave: 'pantalla', punto: [-1.5, 0.62, 0.82] },
     // las de detalle van al final: las principales escogen lugar primero
     {
-      texto: 'LS-1',
+      clave: 'ls1',
       punto: [-0.706, yLs, Z_BANDA + 0.075],
       senal: 'ls1',
       detalle: true,
     },
     {
-      texto: 'LS-2',
+      clave: 'ls2',
       punto: [-0.541, yLs, Z_BANDA + 0.075],
       senal: 'ls2',
       detalle: true,
     },
     {
-      texto: 'Sensor de metal (SI-1)',
+      clave: 'sensorMetal',
       punto: [X_IDENTIFICACION, Y_PIEZA - 0.04, Z_BANDA - 0.13],
       senal: 'si1',
       detalle: true,
     },
     {
-      texto: 'Sujeción (PD-2)',
+      clave: 'sujecion',
       punto: [X_MARCADO, Y_PIEZA + 0.06, Z_BANDA - 0.2],
       senal: 'yB',
       detalle: true,
     },
     {
-      texto: 'SC-2',
+      clave: 'sc2',
       punto: [X_MARCADO - 0.05, Y_PIEZA - 0.03, Z_BANDA + 0.13],
       senal: 'sc2',
       detalle: true,
     },
     {
-      texto: 'LS-3',
+      clave: 'ls3',
       punto: [X_MARCADO + 0.06, Y_PIEZA - 0.07, Z_BANDA - 0.09],
       senal: 'ls3',
       detalle: true,
     },
     {
-      texto: 'LS-4 tope',
+      clave: 'ls4',
       punto: [X_TOMA + 0.06, Y_PIEZA + 0.09, Z_BANDA],
       senal: 'ls4',
       detalle: true,
     },
     {
-      texto: 'SI-2',
+      clave: 'si2',
       punto: [X_TOMA - 0.1, 0.65, Z_PORTICO + 0.065],
       senal: 'si2',
       detalle: true,
     },
     {
-      texto: 'Pinza',
+      clave: 'pinza',
       punto: () => [
         planta.carro.x + 0.04,
         alturaPinza(planta) + 0.01,
@@ -153,7 +180,7 @@ export function crearEtiquetas(capa: HTMLElement, planta: Planta) {
   const etiquetas = definiciones(planta).map((definicion) => {
     const caja = document.createElement('div')
     caja.className = CLASE_ETIQUETA
-    caja.textContent = definicion.texto
+    caja.textContent = i18n.t(`gemelo.escena.etiquetas.${definicion.clave}`)
     capa.appendChild(caja)
     const linea = document.createElementNS(SVG, 'path')
     linea.setAttribute('class', CLASE_LINEA)

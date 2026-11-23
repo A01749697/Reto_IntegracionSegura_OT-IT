@@ -14,6 +14,10 @@ export type Entorno = {
   urlPublica: string
   correoRemitente: string
   regionAws: string
+  // dónde preguntar si la API receptora está viva (dentro de la red de Docker)
+  urlApiReceptora: string
+  // archivo del certificado público de nginx, montado en solo lectura
+  rutaCertificado: string
   baseDatosLectura: ConexionBaseDatos
   baseDatosPanel: ConexionBaseDatos
 }
@@ -41,6 +45,21 @@ function leerUrlPublica(variables: NodeJS.ProcessEnv): string {
   return url.origin
 }
 
+// Solo se acepta http o https. Se devuelve el origen, sin diagonal final.
+function leerUrlApiReceptora(variables: NodeJS.ProcessEnv): string {
+  const texto = variables.URL_API_RECEPTORA ?? 'http://api-ingest:3001'
+  let url: URL
+  try {
+    url = new URL(texto)
+  } catch {
+    throw new Error('URL_API_RECEPTORA no es una dirección válida')
+  }
+  if (url.protocol !== 'http:' && url.protocol !== 'https:') {
+    throw new Error('URL_API_RECEPTORA debe empezar con http:// o https://')
+  }
+  return url.origin
+}
+
 function leerCorreoRemitente(variables: NodeJS.ProcessEnv): string {
   const correo = leerObligatoria(variables, 'CORREO_REMITENTE')
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(correo)) {
@@ -64,6 +83,8 @@ export function leerEntorno(
     urlPublica: leerUrlPublica(variables),
     correoRemitente: leerCorreoRemitente(variables),
     regionAws: variables.AWS_REGION ?? 'us-east-2',
+    urlApiReceptora: leerUrlApiReceptora(variables),
+    rutaCertificado: variables.RUTA_CERTIFICADO || '/certs-servidor/reto.crt',
     baseDatosLectura: {
       host,
       puerto: 5432,

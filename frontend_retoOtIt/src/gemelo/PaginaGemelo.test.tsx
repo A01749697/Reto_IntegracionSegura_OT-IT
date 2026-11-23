@@ -1,5 +1,6 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import i18n from '../idioma/i18n'
 import type { ResultadoLecturas, UltimaLectura } from './apiLecturas'
 import PaginaGemelo from './PaginaGemelo'
 
@@ -203,5 +204,44 @@ describe('PaginaGemelo, vista y secuencia', () => {
     expect(screen.getByText('Alimentador atrás')).toBeInTheDocument()
     expect(screen.getByText('Sin pieza')).toBeInTheDocument()
     expect(screen.getByText('6.00 bar')).toBeInTheDocument()
+  })
+})
+
+describe('PaginaGemelo en inglés', () => {
+  it('muestra la pantalla, las señales y los pasos en inglés', async () => {
+    await i18n.changeLanguage('en')
+    preparar(lecturasDeAhora())
+
+    expect(
+      screen.getByRole('heading', { name: 'Digital twin' }),
+    ).toBeInTheDocument()
+    expect(await screen.findByText('Live data')).toBeInTheDocument()
+    expect(screen.getByText('Running')).toBeInTheDocument()
+    expect(screen.getByText('Retracted')).toBeInTheDocument()
+    expect(screen.getByText('Yes')).toBeInTheDocument()
+    expect(screen.getByText(/Last reading:/)).toBeInTheDocument()
+    expect(screen.getByText('Feeder retracted')).toBeInTheDocument()
+    expect(screen.getByText('Idle')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Gantry' })).toBeInTheDocument()
+
+    const pasos = screen.getByRole('list', { name: 'Process sequence' })
+    expect(pasos.textContent).toBe(
+      '1Feed2Identify3Clamp and mark4Move to pick-up5Pick6Sort7Pack',
+    )
+  })
+
+  it('en simulación los mandos y el texto de ayuda salen en inglés', async () => {
+    await i18n.changeLanguage('en')
+    preparar(lecturasDeAhora())
+    fireEvent.click(screen.getByRole('button', { name: 'Simulation' }))
+
+    expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Emergency stop' }),
+    ).toBeInTheDocument()
+    expect(screen.getByText('Simulated data')).toBeInTheDocument()
+    expect(
+      screen.getByText('The cell is idle. Press Start to begin.'),
+    ).toBeInTheDocument()
   })
 })

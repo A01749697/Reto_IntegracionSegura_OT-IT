@@ -24,7 +24,11 @@ import {
 import { exportarBitacora, listarBitacora } from './panel/apiBitacora'
 import { cambiarContrasena } from './panel/apiCuenta'
 import { leerDatos, listarTablas } from './panel/apiDatos'
-import { obtenerDisponibilidad, obtenerEstado } from './panel/apiSistema'
+import {
+  obtenerDisponibilidad,
+  obtenerEstado,
+  obtenerServidor,
+} from './panel/apiSistema'
 import EncabezadoPanel, { type Seccion } from './panel/EncabezadoPanel'
 import PaginaAdministracion from './panel/PaginaAdministracion'
 import PaginaAyuda from './panel/PaginaAyuda'
@@ -209,6 +213,7 @@ function Contenido() {
       <PaginaEstado
         obtener={obtenerEstado}
         obtenerDisponibilidad={obtenerDisponibilidad}
+        obtenerServidor={esAdmin ? obtenerServidor : undefined}
         sesionCaducada={alCaducarSesion}
       />
     )

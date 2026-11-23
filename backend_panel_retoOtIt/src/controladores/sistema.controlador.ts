@@ -7,6 +7,10 @@ export function crearControladorSistema(servicio: ServicioSistema) {
       res.json(await servicio.estado())
     },
 
+    async recursos(_req: Request, res: Response) {
+      res.json(await servicio.recursos())
+    },
+
     async disponibilidad(req: Request, res: Response) {
       const resultado = await servicio.disponibilidad(req.query)
       if (!resultado.ok) {

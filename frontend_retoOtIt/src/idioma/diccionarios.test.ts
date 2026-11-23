@@ -56,6 +56,15 @@ describe('diccionarios', () => {
       'estado.tabla.variable',
       'bitacora.columnas.ip',
       'datos.no',
+      'estado.servidor.cpu.valor',
+      'gemelo.lecturas.no',
+      'gemelo.valores.material',
+      'gemelo.escena.etiquetas.plc',
+      'gemelo.escena.etiquetas.ls1',
+      'gemelo.escena.etiquetas.ls2',
+      'gemelo.escena.etiquetas.ls3',
+      'gemelo.escena.etiquetas.sc2',
+      'gemelo.escena.etiquetas.si2',
     ])
     expect(iguales.filter((clave) => !permitidas.has(clave))).toEqual([])
   })

@@ -1,6 +1,7 @@
 // Lo que controla la celda: tablero trasero con el PLC y las electroválvulas,
 // la unidad de aire, las mangueras, la torreta y la botonera.
 import * as THREE from 'three'
+import i18n from '../idioma/i18n'
 import { CADENA, type Piston } from './celda'
 import type { Mando } from './gemelo'
 import {
@@ -66,7 +67,7 @@ function plc(E: Grupo, m: Materiales) {
     g.fillStyle = '#e6eef3'
     g.font = '600 24px Arial'
     g.textAlign = 'center'
-    g.fillText('CELDA CLASIFICADORA', 166, 30)
+    g.fillText(i18n.t('gemelo.escena.placa'), 166, 30)
   })
   placa.position.set(-0.35, 0.425, zf + 0.047)
   E.add(placa)
