@@ -2,13 +2,16 @@
 import { SESv2Client, SendEmailCommand } from '@aws-sdk/client-sesv2'
 import { crearAplicacion } from './aplicacion'
 import { leerEntorno } from './configuracion/entorno'
+import { seguridad } from './configuracion/seguridad'
 import * as bitacora from './repositorios/bitacora.repositorio'
 import { comprobarConexion, crearPool } from './repositorios/conexion'
 import * as datos from './repositorios/datos.repositorio'
 import * as enlaces from './repositorios/enlaces.repositorio'
 import * as lecturas from './repositorios/lecturas.repositorio'
 import * as sesiones from './repositorios/sesiones.repositorio'
+import * as sistema from './repositorios/sistema.repositorio'
 import * as usuarios from './repositorios/usuarios.repositorio'
+import * as sondas from './utilidades/sondas'
 
 function iniciar() {
   const entorno = leerEntorno()
@@ -98,6 +101,17 @@ function iniciar() {
           poolLectura,
           cubetaSegundos,
           cantidad,
+        ),
+      obtenerTamanosBase: () => sistema.obtenerTamanosBase(poolLectura),
+      leerDisco: () => sondas.leerDisco(),
+      leerMemoria: () => sondas.leerMemoria(),
+      leerCpu: sondas.leerCpu,
+      leerVencimientoCertificado: () =>
+        sondas.leerVencimientoCertificado(entorno.rutaCertificado),
+      comprobarApiReceptora: () =>
+        sondas.comprobarApiReceptora(
+          entorno.urlApiReceptora,
+          seguridad.sistema.esperaSondaMs,
         ),
     },
     correo: {

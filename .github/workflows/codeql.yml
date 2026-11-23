@@ -14,6 +14,9 @@ permissions:
 jobs:
   analizar:
     name: Analizar el codigo (CodeQL)
+    # En un repositorio privado hace falta GitHub Code Security (de pago): ahi se omite.
+    # Con el repositorio publico corre sin costo.
+    if: ${{ !github.event.repository.private }}
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     permissions:

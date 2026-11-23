@@ -89,43 +89,44 @@ export type SenalDigital = {
 
 export type Tono = 'ok' | 'acento' | 'aviso' | 'alerta'
 
-export type FilaSenal = { clave: SenalDigital; nombre: string; tono: Tono }
+export type FilaSenal = { clave: SenalDigital; tono: Tono }
 
 export const SALIDAS: FilaSenal[] = [
-  { clave: 'yA', nombre: 'Alimentador empuja', tono: 'acento' },
-  { clave: 'yB', nombre: 'Sujeción cierra', tono: 'acento' },
-  { clave: 'yC', nombre: 'Marcador baja', tono: 'acento' },
-  { clave: 'motorBanda', nombre: 'Motor de la banda', tono: 'acento' },
-  { clave: 'yZ', nombre: 'Pórtico baja', tono: 'acento' },
-  { clave: 'yG', nombre: 'Pinza cierra', tono: 'acento' },
-  { clave: 'torreVerde', nombre: 'Torreta verde', tono: 'ok' },
-  { clave: 'torreAmarilla', nombre: 'Torreta amarilla', tono: 'aviso' },
-  { clave: 'torreRoja', nombre: 'Torreta roja', tono: 'alerta' },
+  { clave: 'yA', tono: 'acento' },
+  { clave: 'yB', tono: 'acento' },
+  { clave: 'yC', tono: 'acento' },
+  { clave: 'motorBanda', tono: 'acento' },
+  { clave: 'yZ', tono: 'acento' },
+  { clave: 'yG', tono: 'acento' },
+  { clave: 'torreVerde', tono: 'ok' },
+  { clave: 'torreAmarilla', tono: 'aviso' },
+  { clave: 'torreRoja', tono: 'alerta' },
 ]
 
 export const ENTRADAS: FilaSenal[] = [
-  { clave: 'ls1', nombre: 'Alimentador atrás', tono: 'ok' },
-  { clave: 'ls2', nombre: 'Alimentador adelante', tono: 'ok' },
-  { clave: 'sc1', nombre: 'Hay pieza', tono: 'ok' },
-  { clave: 'si1', nombre: 'La pieza es metal', tono: 'ok' },
-  { clave: 'sc2', nombre: 'Pieza en marcado', tono: 'ok' },
-  { clave: 'b0', nombre: 'Sujeción abierta', tono: 'ok' },
-  { clave: 'ls3', nombre: 'Pieza sujeta', tono: 'ok' },
-  { clave: 'c1', nombre: 'Marcador abajo', tono: 'ok' },
-  { clave: 'ls4', nombre: 'Pieza en el tope', tono: 'ok' },
-  { clave: 'si2', nombre: 'Carro en la toma', tono: 'ok' },
-  { clave: 'z0', nombre: 'Eje Z arriba', tono: 'ok' },
-  { clave: 'z1', nombre: 'Eje Z abajo', tono: 'ok' },
-  { clave: 'xOk', nombre: 'Carro en posición', tono: 'ok' },
-  { clave: 'emergencia', nombre: 'Paro de emergencia', tono: 'alerta' },
+  { clave: 'ls1', tono: 'ok' },
+  { clave: 'ls2', tono: 'ok' },
+  { clave: 'sc1', tono: 'ok' },
+  { clave: 'si1', tono: 'ok' },
+  { clave: 'sc2', tono: 'ok' },
+  { clave: 'b0', tono: 'ok' },
+  { clave: 'ls3', tono: 'ok' },
+  { clave: 'c1', tono: 'ok' },
+  { clave: 'ls4', tono: 'ok' },
+  { clave: 'si2', tono: 'ok' },
+  { clave: 'z0', tono: 'ok' },
+  { clave: 'z1', tono: 'ok' },
+  { clave: 'xOk', tono: 'ok' },
+  { clave: 'emergencia', tono: 'alerta' },
 ]
 
-export const PASOS = [
-  'Alimentar',
-  'Identificar',
-  'Sujetar y marcar',
-  'Llevar a toma',
-  'Tomar',
-  'Clasificar',
-  'Empacar',
-]
+// Los nombres de los pasos están en los diccionarios de idioma (gemelo.pasos).
+export const CLAVES_PASOS = [
+  'alimentar',
+  'identificar',
+  'sujetarMarcar',
+  'llevarToma',
+  'tomar',
+  'clasificar',
+  'empacar',
+] as const

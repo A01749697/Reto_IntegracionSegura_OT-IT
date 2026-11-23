@@ -70,6 +70,9 @@ services:
       URL_PUBLICA: ${URL_PUBLICA:?falta URL_PUBLICA}
       CORREO_REMITENTE: ${CORREO_REMITENTE:?falta CORREO_REMITENTE}
       AWS_REGION: ${AWS_REGION:-us-east-2}
+    volumes:
+      # Solo lectura. Para ver cuántos días le quedan al certificado de nginx (el certificado es público).
+      - /etc/ssl/certs:/certs-servidor:ro
     ports:
       - "127.0.0.1:3002:3002"
     read_only: true

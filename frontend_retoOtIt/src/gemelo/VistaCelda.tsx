@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 import { crearEscena, type Escena } from './escena'
 import type { Gemelo, Mando } from './gemelo'
 import type { Vista } from './vistas'
@@ -24,6 +25,7 @@ function hayWebGL(): boolean {
 }
 
 // El lienzo 3D de la celda. Se carga aparte porque three.js pesa bastante.
+// Los textos dentro de la escena se escriben al crearla: al cambiar de idioma, PaginaGemelo la vuelve a crear con key.
 export default function VistaCelda({
   gemelo,
   vista,
@@ -32,6 +34,7 @@ export default function VistaCelda({
   alRefrescar,
   alPulsar,
 }: Props) {
+  const { t } = useTranslation()
   const lienzo = useRef<HTMLCanvasElement>(null)
   const capa = useRef<HTMLDivElement>(null)
   const escena = useRef<Escena | null>(null)
@@ -72,7 +75,7 @@ export default function VistaCelda({
         role="alert"
         className="flex h-full items-center justify-center px-6 text-center text-[14px] text-white"
       >
-        Este navegador no pudo abrir la vista 3D.
+        {t('gemelo.sinWebGL')}
       </p>
     )
   }
@@ -81,7 +84,7 @@ export default function VistaCelda({
     <>
       <canvas
         ref={lienzo}
-        aria-label="Vista 3D de la celda clasificadora"
+        aria-label={t('gemelo.vista3d')}
         className="absolute inset-0 block h-full w-full touch-none"
       />
       <div

@@ -58,7 +58,7 @@ export type Dependencias = {
   lecturas: De<typeof crearServicioLecturas>
   bitacora: De<typeof crearServicioBitacora>
   datos: Omit<De<typeof crearServicioDatos>, 'registrarEvento'>
-  sistema: De<typeof crearServicioSistema>
+  sistema: Omit<De<typeof crearServicioSistema>, 'ahora'>
   correo: Omit<De<typeof crearServicioCorreo>, 'urlPublica'>
   ahora?: () => number
 }
@@ -112,7 +112,7 @@ export function crearAplicacion({
     ...datos,
     registrarEvento: servicioBitacora.registrar,
   })
-  const servicioSistema = crearServicioSistema(sistema)
+  const servicioSistema = crearServicioSistema({ ...sistema, ahora })
 
   const sesionExigida = exigirSesion({
     nombreCookie: seguridad.sesion.nombreCookie,

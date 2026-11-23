@@ -191,4 +191,34 @@ describe('PaginaEstado, detalles de las tarjetas', () => {
       await screen.findByText('Aún no llega ninguna lectura'),
     ).toBeInTheDocument()
   })
+
+  it('sin la función del servidor no muestra esa sección', async () => {
+    preparar({ ok: true, estado: estadoBase })
+    await screen.findByText('API del panel')
+    expect(
+      screen.queryByRole('heading', { name: 'Servidor en la nube' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('con la función del servidor la muestra y la recarga con Actualizar', async () => {
+    const obtenerServidor = vi
+      .fn()
+      .mockResolvedValue({ ok: false, motivo: 'fallo' })
+    const props = {
+      obtener: vi.fn().mockResolvedValue({ ok: true, estado: estadoBase }),
+      obtenerDisponibilidad: vi
+        .fn()
+        .mockResolvedValue({ ok: true, disponibilidad: historialBase }),
+      obtenerServidor,
+      sesionCaducada: vi.fn(),
+    }
+    render(<PaginaEstado {...props} />)
+    expect(
+      await screen.findByRole('heading', { name: 'Servidor en la nube' }),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(obtenerServidor).toHaveBeenCalledTimes(1))
+
+    fireEvent.click(screen.getByRole('button', { name: 'Actualizar' }))
+    await waitFor(() => expect(obtenerServidor).toHaveBeenCalledTimes(2))
+  })
 })

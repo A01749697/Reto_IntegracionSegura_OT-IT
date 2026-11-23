@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { obtenerDisponibilidad, obtenerEstado } from './apiSistema'
+import {
+  obtenerDisponibilidad,
+  obtenerEstado,
+  obtenerServidor,
+} from './apiSistema'
 
 function responder(estado: number, cuerpo?: unknown) {
   vi.stubGlobal(
@@ -139,5 +143,63 @@ describe('obtenerDisponibilidad', () => {
       ok: false,
       motivo: 'fallo',
     })
+  })
+})
+
+const recursos = {
+  generadoEn: '2026-11-22T12:00:00.000Z',
+  disco: { totalBytes: 8000000000, usadoBytes: 3000000000 },
+  memoria: {
+    totalBytes: 2000000000,
+    disponibleBytes: 900000000,
+    swapTotalBytes: 1000000000,
+    swapUsadoBytes: 0,
+  },
+  cpu: { nucleos: 1, carga1: 0.2, carga5: 0.1, carga15: 0.1 },
+  baseDatos: { totalBytes: 9000000, lecturasBytes: 4000000 },
+  certificado: { venceEn: '2026-12-18T12:00:00.000Z', diasRestantes: 26 },
+  servicios: {
+    baseDatosPanel: 'ok',
+    baseDatosLecturas: 'ok',
+    apiReceptora: 'ok',
+  },
+}
+
+describe('obtenerServidor', () => {
+  it('pide el estado del servidor y lo entrega', async () => {
+    responder(200, recursos)
+    expect(await obtenerServidor()).toEqual({ ok: true, recursos })
+    expect(fetch).toHaveBeenCalledWith(
+      '/api/panel/sistema/servidor',
+      expect.objectContaining({ method: 'GET' }),
+    )
+  })
+
+  it('acepta mediciones en null', async () => {
+    const parcial = { ...recursos, disco: null, certificado: null, cpu: null }
+    responder(200, parcial)
+    expect(await obtenerServidor()).toEqual({ ok: true, recursos: parcial })
+  })
+
+  it('el 401 se toma como sesión caducada', async () => {
+    responder(401, { error: 'x' })
+    expect(await obtenerServidor()).toEqual({ ok: false, motivo: 'sesion' })
+  })
+
+  it('el 403 (no es administrador) se toma como fallo', async () => {
+    responder(403, { error: 'Prohibido' })
+    expect(await obtenerServidor()).toEqual({ ok: false, motivo: 'fallo' })
+  })
+
+  it('una respuesta con otra forma se toma como fallo', async () => {
+    responder(200, { ...recursos, servicios: { baseDatosPanel: 'ok' } })
+    expect(await obtenerServidor()).toEqual({ ok: false, motivo: 'fallo' })
+    responder(200, { ...recursos, disco: { totalBytes: 'mucho' } })
+    expect(await obtenerServidor()).toEqual({ ok: false, motivo: 'fallo' })
+  })
+
+  it('si la red falla, regresa fallo', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('sin red')))
+    expect(await obtenerServidor()).toEqual({ ok: false, motivo: 'fallo' })
   })
 })

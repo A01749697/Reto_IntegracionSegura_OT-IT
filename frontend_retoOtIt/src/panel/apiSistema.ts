@@ -168,3 +168,81 @@ export async function obtenerDisponibilidad(
     return { ok: false, motivo: 'fallo' }
   }
 }
+
+export type RecursosServidor = {
+  generadoEn: string
+  disco: { totalBytes: number; usadoBytes: number } | null
+  memoria: {
+    totalBytes: number
+    disponibleBytes: number
+    swapTotalBytes: number
+    swapUsadoBytes: number
+  } | null
+  cpu: {
+    nucleos: number
+    carga1: number
+    carga5: number
+    carga15: number
+  } | null
+  baseDatos: { totalBytes: number; lecturasBytes: number } | null
+  certificado: { venceEn: string; diasRestantes: number } | null
+  servicios: {
+    baseDatosPanel: Parte
+    baseDatosLecturas: Parte
+    apiReceptora: Parte
+  }
+}
+
+export type ResultadoServidor =
+  | { ok: true; recursos: RecursosServidor }
+  | { ok: false; motivo: 'sesion' | 'fallo' }
+
+// Cada medición puede venir en null si el servidor no la pudo leer.
+function esMedicion(
+  valor: unknown,
+  campos: readonly string[],
+  textos: readonly string[] = [],
+): boolean {
+  if (valor === null) return true
+  if (!esObjeto(valor)) return false
+  return (
+    campos.every(
+      (c) => typeof valor[c] === 'number' && Number.isFinite(valor[c]),
+    ) && textos.every((c) => typeof valor[c] === 'string')
+  )
+}
+
+function esRecursos(valor: unknown): valor is RecursosServidor {
+  if (!esObjeto(valor)) return false
+  const s = valor.servicios
+  return (
+    typeof valor.generadoEn === 'string' &&
+    esMedicion(valor.disco, ['totalBytes', 'usadoBytes']) &&
+    esMedicion(valor.memoria, [
+      'totalBytes',
+      'disponibleBytes',
+      'swapTotalBytes',
+      'swapUsadoBytes',
+    ]) &&
+    esMedicion(valor.cpu, ['nucleos', 'carga1', 'carga5', 'carga15']) &&
+    esMedicion(valor.baseDatos, ['totalBytes', 'lecturasBytes']) &&
+    esMedicion(valor.certificado, ['diasRestantes'], ['venceEn']) &&
+    esObjeto(s) &&
+    esParte(s.baseDatosPanel) &&
+    esParte(s.baseDatosLecturas) &&
+    esParte(s.apiReceptora)
+  )
+}
+
+// Solo administradores: cualquier otro usuario recibe 403 y se toma como fallo.
+export async function obtenerServidor(): Promise<ResultadoServidor> {
+  try {
+    const { estado, datos } = await llamar('GET', '/sistema/servidor')
+    if (estado === 401) return { ok: false, motivo: 'sesion' }
+    if (estado !== 200 || !esRecursos(datos))
+      return { ok: false, motivo: 'fallo' }
+    return { ok: true, recursos: datos }
+  } catch {
+    return { ok: false, motivo: 'fallo' }
+  }
+}

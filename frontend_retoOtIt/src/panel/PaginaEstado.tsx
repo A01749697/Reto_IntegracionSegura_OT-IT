@@ -9,10 +9,12 @@ import type {
   EstadoSistema,
   ResultadoDisponibilidad,
   ResultadoEstado,
+  ResultadoServidor,
   VentanaDisponibilidad,
 } from './apiSistema'
 import HistorialDisponibilidad from './HistorialDisponibilidad'
 import MarcoPanel from './MarcoPanel'
+import SeccionServidor from './SeccionServidor'
 import { fechaHora, hace } from './tiempo'
 
 type Props = {
@@ -20,6 +22,8 @@ type Props = {
   obtenerDisponibilidad: (
     ventana: VentanaDisponibilidad,
   ) => Promise<ResultadoDisponibilidad>
+  // Solo se pasa cuando la persona es administradora: es lo que muestra la sección del servidor.
+  obtenerServidor?: () => Promise<ResultadoServidor>
   sesionCaducada: () => void
 }
 
@@ -96,6 +100,7 @@ type Carga = { version: number; estado: EstadoSistema | null }
 export default function PaginaEstado({
   obtener,
   obtenerDisponibilidad,
+  obtenerServidor,
   sesionCaducada,
 }: Props) {
   const { t } = useTranslation()
@@ -178,6 +183,14 @@ export default function PaginaEstado({
               Icono={Pulse}
             />
           </div>
+
+          {obtenerServidor && (
+            <SeccionServidor
+              obtener={obtenerServidor}
+              sesionCaducada={sesionCaducada}
+              recarga={version}
+            />
+          )}
 
           <HistorialDisponibilidad
             obtener={obtenerDisponibilidad}

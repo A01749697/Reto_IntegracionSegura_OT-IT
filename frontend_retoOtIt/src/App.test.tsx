@@ -42,6 +42,7 @@ vi.mock('./panel/apiDatos', () => ({
 vi.mock('./panel/apiSistema', () => ({
   obtenerEstado: vi.fn(),
   obtenerDisponibilidad: vi.fn(),
+  obtenerServidor: vi.fn(),
 }))
 
 vi.mock('./gemelo/apiLecturas', () => ({
@@ -372,6 +373,57 @@ describe('App con sesión', () => {
     expect(
       await screen.findByRole('heading', { name: 'Estado del sistema' }),
     ).toBeInTheDocument()
+  })
+
+  it('el administrador ve la sección del servidor en Estado', async () => {
+    vi.mocked(api.obtenerSesion).mockResolvedValue(usuario)
+    vi.mocked(sistema.obtenerEstado).mockResolvedValue({
+      ok: true,
+      estado: {
+        api: 'ok',
+        baseDatosPanel: 'ok',
+        baseDatosLecturas: 'ok',
+        datos: 'sin_datos',
+        variables: [],
+      },
+    })
+    vi.mocked(sistema.obtenerServidor).mockResolvedValue({
+      ok: false,
+      motivo: 'fallo',
+    })
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Inicio' })
+    irA('Estado')
+    expect(
+      await screen.findByRole('heading', { name: 'Servidor en la nube' }),
+    ).toBeInTheDocument()
+    expect(sistema.obtenerServidor).toHaveBeenCalled()
+  })
+
+  it('quien no es administrador no ve la sección del servidor', async () => {
+    vi.mocked(api.obtenerSesion).mockResolvedValue({
+      ...usuario,
+      rol: 'usuario',
+    })
+    vi.mocked(sistema.obtenerEstado).mockResolvedValue({
+      ok: true,
+      estado: {
+        api: 'ok',
+        baseDatosPanel: 'ok',
+        baseDatosLecturas: 'ok',
+        datos: 'sin_datos',
+        variables: [],
+      },
+    })
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Inicio' })
+    irA('Estado')
+    await screen.findByRole('heading', { name: 'Estado del sistema' })
+    await screen.findByText('API del panel')
+    expect(
+      screen.queryByRole('heading', { name: 'Servidor en la nube' }),
+    ).not.toBeInTheDocument()
+    expect(sistema.obtenerServidor).not.toHaveBeenCalled()
   })
 
   it('manda al login si la sesión caduca en el estado', async () => {

@@ -24,6 +24,26 @@ function crearDependenciasFalsas(variables: EstadoVariable[] = []) {
       primera: new Date('2026-11-01T00:00:00.000Z'),
       cubetas: [],
     }),
+    obtenerTamanosBase: vi
+      .fn()
+      .mockResolvedValue({ totalBytes: 9000000, lecturasBytes: 4000000 }),
+    leerDisco: vi
+      .fn()
+      .mockResolvedValue({ totalBytes: 8000000000, usadoBytes: 3000000000 }),
+    leerMemoria: vi.fn().mockResolvedValue({
+      totalBytes: 2000000000,
+      disponibleBytes: 900000000,
+      swapTotalBytes: 1000000000,
+      swapUsadoBytes: 0,
+    }),
+    leerCpu: vi
+      .fn()
+      .mockReturnValue({ nucleos: 1, carga1: 0.2, carga5: 0.1, carga15: 0.1 }),
+    leerVencimientoCertificado: vi
+      .fn()
+      .mockResolvedValue(new Date('2026-12-18T12:00:00.000Z')),
+    comprobarApiReceptora: vi.fn().mockResolvedValue(undefined),
+    ahora: () => new Date('2026-11-22T12:00:00.000Z').getTime(),
   }
 }
 
@@ -138,5 +158,92 @@ describe('servicio de sistema, disponibilidad', () => {
     await expect(servicio.disponibilidad({ ventana: '24h' })).rejects.toThrow(
       'caida',
     )
+  })
+
+  describe('recursos del servidor', () => {
+    it('todo bien: entrega las mediciones y los días del certificado', async () => {
+      const servicio = crearServicioSistema(crearDependenciasFalsas())
+
+      const recursos = await servicio.recursos()
+
+      expect(recursos.generadoEn).toBe('2026-11-22T12:00:00.000Z')
+      expect(recursos.disco).toEqual({
+        totalBytes: 8000000000,
+        usadoBytes: 3000000000,
+      })
+      expect(recursos.cpu?.nucleos).toBe(1)
+      expect(recursos.baseDatos?.lecturasBytes).toBe(4000000)
+      expect(recursos.certificado).toEqual({
+        venceEn: '2026-12-18T12:00:00.000Z',
+        diasRestantes: 26,
+      })
+      expect(recursos.servicios).toEqual({
+        baseDatosPanel: 'ok',
+        baseDatosLecturas: 'ok',
+        apiReceptora: 'ok',
+      })
+    })
+
+    it('si una medición falla, solo esa queda en null y se avisa', async () => {
+      const error = vi.spyOn(console, 'error').mockImplementation(() => {})
+      const dependencias = crearDependenciasFalsas()
+      dependencias.leerDisco.mockRejectedValue(new Error('sin permiso'))
+      dependencias.leerVencimientoCertificado.mockRejectedValue(
+        new Error('no existe'),
+      )
+      const servicio = crearServicioSistema(dependencias)
+
+      const recursos = await servicio.recursos()
+
+      expect(recursos.disco).toBeNull()
+      expect(recursos.certificado).toBeNull()
+      expect(recursos.memoria).not.toBeNull()
+      expect(recursos.cpu).not.toBeNull()
+      expect(error).toHaveBeenCalledWith(
+        'Falla al comprobar el disco:',
+        'sin permiso',
+      )
+    })
+
+    it('si la API receptora no responde, lo dice y lo demás sigue', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const dependencias = crearDependenciasFalsas()
+      dependencias.comprobarApiReceptora.mockRejectedValue(new Error('timeout'))
+      const servicio = crearServicioSistema(dependencias)
+
+      const recursos = await servicio.recursos()
+
+      expect(recursos.servicios.apiReceptora).toBe('falla')
+      expect(recursos.servicios.baseDatosPanel).toBe('ok')
+      expect(recursos.disco).not.toBeNull()
+    })
+
+    it('si falla la base del panel o la de lecturas, marca cuál', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const dependencias = crearDependenciasFalsas()
+      dependencias.comprobarBasePanel.mockRejectedValue(new Error('caída'))
+      dependencias.obtenerTamanosBase.mockRejectedValue(new Error('caída'))
+      const servicio = crearServicioSistema(dependencias)
+
+      const recursos = await servicio.recursos()
+
+      expect(recursos.servicios.baseDatosPanel).toBe('falla')
+      expect(recursos.servicios.baseDatosLecturas).toBe('falla')
+      expect(recursos.baseDatos).toBeNull()
+    })
+
+    it('si leer el procesador lanza un error, no tira el resto', async () => {
+      vi.spyOn(console, 'error').mockImplementation(() => {})
+      const dependencias = crearDependenciasFalsas()
+      dependencias.leerCpu.mockImplementation(() => {
+        throw new Error('no disponible')
+      })
+      const servicio = crearServicioSistema(dependencias)
+
+      const recursos = await servicio.recursos()
+
+      expect(recursos.cpu).toBeNull()
+      expect(recursos.memoria).not.toBeNull()
+    })
   })
 })

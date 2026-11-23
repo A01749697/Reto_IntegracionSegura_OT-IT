@@ -15,6 +15,8 @@ describe('leerEntorno', () => {
     expect(entorno.regionAws).toBe('us-east-2')
     expect(entorno.urlPublica).toBe('https://18.119.219.73')
     expect(entorno.correoRemitente).toBe('panel@ejemplo.com')
+    expect(entorno.urlApiReceptora).toBe('http://api-ingest:3001')
+    expect(entorno.rutaCertificado).toBe('/certs-servidor/reto.crt')
     expect(entorno.baseDatosLectura).toMatchObject({
       host: 'db',
       usuario: 'reto_lectura',
@@ -80,4 +82,23 @@ describe('leerEntorno', () => {
   it.each(['0', '70000', 'abc', '3.5', ''])('rechaza PUERTO %j', (PUERTO) => {
     expect(() => leerEntorno({ ...variablesValidas, PUERTO })).toThrow('PUERTO')
   })
+
+  it('respeta URL_API_RECEPTORA y RUTA_CERTIFICADO y deja solo el origen', () => {
+    const entorno = leerEntorno({
+      ...variablesValidas,
+      URL_API_RECEPTORA: 'http://otra-api:4000/algo/',
+      RUTA_CERTIFICADO: '/otro/sitio.crt',
+    })
+    expect(entorno.urlApiReceptora).toBe('http://otra-api:4000')
+    expect(entorno.rutaCertificado).toBe('/otro/sitio.crt')
+  })
+
+  it.each(['no es una url', 'ftp://ejemplo.com', 'file:///etc/passwd'])(
+    'rechaza URL_API_RECEPTORA %j',
+    (URL_API_RECEPTORA) => {
+      expect(() =>
+        leerEntorno({ ...variablesValidas, URL_API_RECEPTORA }),
+      ).toThrow('URL_API_RECEPTORA')
+    },
+  )
 })
