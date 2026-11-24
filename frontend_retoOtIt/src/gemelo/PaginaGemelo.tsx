@@ -1,29 +1,33 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
-import { boton, TARJETA } from '../comun/estilos'
+import { TARJETA } from '../comun/estilos'
 import Segmentos from '../comun/Segmentos'
 import MarcoPanel from '../panel/MarcoPanel'
 import { fechaHora } from '../panel/tiempo'
 import type { ResultadoLecturas } from './apiLecturas'
 import {
+  colorTorreta,
+  compararTorreta,
   estadoEnlace,
-  piezasNuevas,
+  latidoDetenido,
+  marchaPorTorreta,
   resumirLecturas,
+  vigilarLatido,
+  type VigiaLatido,
   type Enlace,
   type LecturasCelda,
 } from './enVivo'
 import {
   crearGemelo,
-  pedirCiclos,
   ponerModo,
+  ponerTorreta,
   ponerVelocidad,
-  pulsar,
   tomarInstantanea,
   type Instantanea,
-  type Mando,
   type Modo,
 } from './gemelo'
+import { ESTACIONES, ESTADOS_TORRETA, NODOS } from './nodos'
 import {
   CLAVES_PASOS,
   ENTRADAS,
@@ -41,7 +45,11 @@ type Props = {
   sesionCaducada: () => void
 }
 
-type Consulta = { enlace: Enlace; lecturas: LecturasCelda | null }
+type Consulta = {
+  enlace: Enlace
+  lecturas: LecturasCelda | null
+  latidoParado: number | null // segundos sin cambiar, si pasó el límite
+}
 
 const SEGUNDOS_ENTRE_CONSULTAS = 5
 
@@ -62,17 +70,30 @@ const FOCO: Record<Tono, string> = {
   alerta: 'bg-alerta',
 }
 
-// Lo que pasa en cada paso (del 1 al 6), dicho sin tecnicismos.
+// Lo que pasa en cada paso, dicho sin tecnicismos: del 1 al 4 los pistones, 5 y 6 la garra.
 const FRASES_PASO = [
   'alimentar',
   'identificar',
   'marcar',
-  'toma',
+  'soltar',
   'tomar',
   'clasificar',
 ] as const
 
 const MATERIAL = { al: 'al', pl: 'pl', '': 'ninguna' } as const
+
+type Torreta = 'verde' | 'roja'
+const TORRETAS: Torreta[] = ['verde', 'roja']
+
+const AVISO =
+  'rounded-md border border-alerta/50 bg-alerta/10 px-2.5 py-1.5 text-[12px] leading-snug text-alerta'
+
+function textoTorreta(valor: number | null, t: TFunction): string {
+  const color = colorTorreta(valor)
+  if (color === null) return t('gemelo.lecturas.sinDato')
+  if (color === 'otro') return t('gemelo.lecturas.torretaOtro', { valor })
+  return t(`gemelo.lecturas.torreta_${color}`)
+}
 
 const CHIP =
   'rounded-md border px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap'
@@ -80,40 +101,51 @@ const PANEL = `${TARJETA} mt-3 flex flex-col gap-4 p-4 lg:absolute lg:mt-0 lg:bg
 const SUBTITULO =
   'mb-2 text-[12px] font-bold tracking-wide text-suave uppercase'
 
+// Lo que hacen ahora los dos procesos. Pueden ir al mismo tiempo: los pistones preparan
+// la siguiente pieza mientras la garra clasifica la anterior.
 function frase(
   i: Instantanea,
   modo: Modo,
   enlace: Enlace,
   t: TFunction,
 ): string {
-  if (i.emergencia) return t('gemelo.frases.emergencia')
-  const paso = FRASES_PASO[i.paso - 1]
-  if (paso) return t(`gemelo.frases.${paso}`)
-  if (i.empacando) return t('gemelo.frases.empacando')
-  if (modo === 'simulacion') return t('gemelo.frases.reposoSimulacion')
-  if (enlace === 'en_vivo') return t('gemelo.frases.esperando')
+  const partes: string[] = []
+  const pistones = FRASES_PASO[i.paso - 1]
+  const garra = FRASES_PASO[i.pasoGarra - 1]
+  if (pistones) partes.push(t(`gemelo.frases.${pistones}`))
+  if (garra) partes.push(t(`gemelo.frases.${garra}`))
+  if (partes.length === 0 && i.empacando)
+    partes.push(t('gemelo.frases.empacando'))
+  if (partes.length > 0) return partes.join(' ')
+  if (i.marcha) return t('gemelo.frases.esperandoPieza')
+  if (modo === 'simulacion') return t('gemelo.frases.paroSimulacion')
+  if (enlace === 'en_vivo' || enlace === 'atrasado')
+    return t('gemelo.frases.paroTorreta')
   return t('gemelo.frases.sinLecturas')
 }
 
-function estadoCelda(i: Instantanea, modo: Modo, t: TFunction) {
-  if (i.emergencia)
-    return {
-      texto: t('gemelo.estadoCelda.emergencia'),
-      clases: 'border-alerta bg-alerta text-sobre',
-    }
-  if (i.paso > 0) {
-    const terminando = modo === 'simulacion' && !i.marcha
-    return {
-      texto: terminando
-        ? t('gemelo.estadoCelda.terminando')
-        : t('gemelo.estadoCelda.enCiclo'),
-      clases: 'border-ok/50 bg-ok/10 text-ok',
-    }
-  }
-  return {
-    texto: t('gemelo.estadoCelda.reposo'),
-    clases: 'border-linea text-suave',
-  }
+function chipTorreta(i: Instantanea, t: TFunction) {
+  return i.marcha
+    ? {
+        texto: t('gemelo.estadoCelda.marcha'),
+        clases: 'border-ok/50 bg-ok/10 text-ok',
+      }
+    : {
+        texto: t('gemelo.estadoCelda.paro'),
+        clases: 'border-alerta/50 bg-alerta/10 text-alerta',
+      }
+}
+
+function chipGarra(i: Instantanea, t: TFunction) {
+  return i.pasoGarra > 0
+    ? {
+        texto: t('gemelo.estadoCelda.garraTrabajando'),
+        clases: 'border-acento/50 bg-acento/10 text-acento',
+      }
+    : {
+        texto: t('gemelo.estadoCelda.garraEspera'),
+        clases: 'border-linea text-suave',
+      }
 }
 
 function ListaSenales({
@@ -177,8 +209,6 @@ function Valores({
 function LecturasReales({ consulta }: { consulta: Consulta }) {
   const { t } = useTranslation()
   const { lecturas } = consulta
-  const siNo = (valor: number | null, si: string, no: string) =>
-    valor === null ? t('gemelo.lecturas.sinDato') : valor !== 0 ? si : no
 
   if (!lecturas || lecturas.ultima === null) {
     return (
@@ -192,56 +222,79 @@ function LecturasReales({ consulta }: { consulta: Consulta }) {
       </div>
     )
   }
+  const sinDato = t('gemelo.lecturas.sinDato')
+  const comparacion = compararTorreta(lecturas)
   return (
     <>
       <Valores
         titulo={t('gemelo.lecturas.titulo')}
         valores={[
+          [t('gemelo.lecturas.torreta'), textoTorreta(lecturas.torreta, t)],
           [
-            t('gemelo.lecturas.estacion'),
-            siNo(
-              lecturas.estacion,
-              t('gemelo.lecturas.enMarcha'),
-              t('gemelo.lecturas.detenida'),
-            ),
+            t('gemelo.lecturas.torretaReal'),
+            lecturas.torretaReal === null
+              ? t('gemelo.lecturas.torretaRealPendiente')
+              : textoTorreta(lecturas.torretaReal, t),
           ],
           [
-            t('gemelo.lecturas.piston'),
-            siNo(
-              lecturas.piston,
-              t('gemelo.lecturas.afuera'),
-              t('gemelo.lecturas.atras'),
-            ),
-          ],
-          [
-            t('gemelo.lecturas.piezaPresente'),
-            siNo(
-              lecturas.presencia,
-              t('gemelo.lecturas.si'),
-              t('gemelo.lecturas.no'),
-            ),
-          ],
-          [
-            t('gemelo.lecturas.piezasContadas'),
-            lecturas.contador === null
-              ? t('gemelo.lecturas.sinDato')
-              : String(lecturas.contador),
+            t('gemelo.lecturas.latido'),
+            lecturas.latido === null ? sinDato : String(lecturas.latido),
           ],
         ]}
       />
+      {consulta.latidoParado !== null && (
+        <p role="alert" className={AVISO}>
+          {t('gemelo.lecturas.alertaLatido', {
+            segundos: consulta.latidoParado,
+          })}
+        </p>
+      )}
+      {comparacion === 'luces' && (
+        <p role="alert" className={AVISO}>
+          {t('gemelo.lecturas.alertaLuces')}
+        </p>
+      )}
+      {comparacion === 'distinta' && (
+        <p role="alert" className={AVISO}>
+          {t('gemelo.lecturas.alertaDistinta', {
+            real: textoTorreta(lecturas.torretaReal, t),
+            tablero: textoTorreta(lecturas.torreta, t),
+          })}
+        </p>
+      )}
+      <div className="flex flex-col gap-1.5">
+        {ESTACIONES.map((estacion) => {
+          const nodos = lecturas.estaciones[estacion]
+          return (
+            <details key={estacion} className="text-[12.5px]">
+              <summary className="cursor-pointer text-suave">
+                {t(`gemelo.lecturas.estaciones.${estacion}`)} ·{' '}
+                {t('gemelo.lecturas.nodos', { count: nodos.length })}
+              </summary>
+              <dl className="mt-1 flex max-h-40 flex-col gap-0.5 overflow-y-auto pl-2">
+                {nodos.map(({ nodo, valor }) => (
+                  <div key={nodo} className="flex justify-between gap-3">
+                    <dt className="truncate text-suave">{nodo}</dt>
+                    <dd className="font-bold tabular-nums">{valor}</dd>
+                  </div>
+                ))}
+              </dl>
+            </details>
+          )
+        })}
+      </div>
       <p className="text-[12px] leading-snug text-suave">
         {t('gemelo.lecturas.ultima', { fecha: fechaHora(lecturas.ultima) })}
+      </p>
+      <p className="text-[11px] leading-snug text-suave">
+        {t('gemelo.lecturas.nodoTorreta', {
+          nodo: NODOS.torreta.nodo,
+          ...ESTADOS_TORRETA,
+        })}
       </p>
     </>
   )
 }
-
-const MANDOS: { mando: Mando; clases: string }[] = [
-  { mando: 'marcha', clases: boton('contorno') },
-  { mando: 'paro', clases: boton('neutro') },
-  { mando: 'emergencia', clases: `${boton('alerta')} col-span-2` },
-  { mando: 'restablecer', clases: `${boton('neutro')} col-span-2` },
-]
 
 export default function PaginaGemelo({
   obtenerLecturas,
@@ -254,35 +307,46 @@ export default function PaginaGemelo({
   const [consulta, setConsulta] = useState<Consulta>({
     enlace: 'conectando',
     lecturas: null,
+    latidoParado: null,
   })
   const [vista, setVista] = useState<Vista>('General')
   const [conEtiquetas, setConEtiquetas] = useState(true)
   const [velocidad, setVelocidad] = useState(1)
+  const [torretaSimulada, setTorretaSimulada] = useState<Torreta>('verde')
   const marco = useRef<HTMLDivElement>(null)
-  const contadorAnterior = useRef<number | null>(null)
 
   // En vivo se consulta la nube cada pocos segundos.
   useEffect(() => {
     if (modo !== 'vivo') return
     let vigente = true
+    let vigia: VigiaLatido | null = null
     const consultar = () =>
       obtenerLecturas().then((resultado) => {
         if (!vigente) return
         if (!resultado.ok) {
           if (resultado.motivo === 'sesion') sesionCaducada()
-          else setConsulta({ enlace: 'sin_conexion', lecturas: null })
+          else
+            setConsulta({
+              enlace: 'sin_conexion',
+              lecturas: null,
+              latidoParado: null,
+            })
           return
         }
+        const ahora = Date.now()
         const lecturas = resumirLecturas(resultado.lecturas)
-        pedirCiclos(
+        vigia = vigilarLatido(vigia, lecturas.latido, ahora)
+        const latidoParado = latidoDetenido(vigia, ahora)
+        // la torreta decide si los pistones trabajan; si el S7-1516 dejó de latir,
+        // su estado ya no es confiable y el gemelo queda en paro
+        ponerTorreta(
           gemelo,
-          piezasNuevas(contadorAnterior.current, lecturas.contador),
+          marchaPorTorreta(lecturas) && latidoParado === null,
         )
-        if (lecturas.contador !== null)
-          contadorAnterior.current = lecturas.contador
         setConsulta({
-          enlace: estadoEnlace(lecturas, Date.now()),
+          enlace: estadoEnlace(lecturas, ahora),
           lecturas,
+          latidoParado,
         })
       })
     consultar()
@@ -297,10 +361,6 @@ export default function PaginaGemelo({
     () => setInstantanea(tomarInstantanea(gemelo)),
     [gemelo],
   )
-  const alPulsar = useCallback(
-    (mando: Mando) => pulsar(gemelo, mando),
-    [gemelo],
-  )
   // los paneles que flotan sobre la vista; las etiquetas no se ponen debajo
   const obstaculos = useCallback(
     () =>
@@ -312,14 +372,20 @@ export default function PaginaGemelo({
 
   function cambiarModo(nuevo: Modo) {
     ponerModo(gemelo, nuevo)
-    contadorAnterior.current = null
-    setConsulta({ enlace: 'conectando', lecturas: null })
+    setTorretaSimulada('verde')
+    setConsulta({ enlace: 'conectando', lecturas: null, latidoParado: null })
     setModo(nuevo)
+  }
+
+  function cambiarTorreta(torreta: Torreta) {
+    ponerTorreta(gemelo, torreta === 'verde')
+    setTorretaSimulada(torreta)
   }
 
   const i = instantanea
   const enVivo = modo === 'vivo'
-  const estado = estadoCelda(i, modo, t)
+  const torreta = chipTorreta(i, t)
+  const garra = chipGarra(i, t)
   const enlace = ENLACES[consulta.enlace]
 
   return (
@@ -334,7 +400,8 @@ export default function PaginaGemelo({
           valor={modo}
           alCambiar={cambiarModo}
         />
-        <span className={`${CHIP} ${estado.clases}`}>{estado.texto}</span>
+        <span className={`${CHIP} ${torreta.clases}`}>{torreta.texto}</span>
+        <span className={`${CHIP} ${garra.clases}`}>{garra.texto}</span>
         <span
           className={`${CHIP} ${enVivo ? enlace : 'border-linea text-suave'}`}
         >
@@ -352,7 +419,10 @@ export default function PaginaGemelo({
         className={`${TARJETA} flex overflow-x-auto`}
       >
         {CLAVES_PASOS.map((clave, indice) => {
-          const activo = indice === 6 ? i.empacando : i.paso === indice + 1
+          const activo =
+            indice === 6
+              ? i.empacando
+              : i.paso === indice + 1 || i.pasoGarra === indice + 1
           return (
             <li
               key={clave}
@@ -388,7 +458,6 @@ export default function PaginaGemelo({
               conEtiquetas={conEtiquetas}
               obstaculos={obstaculos}
               alRefrescar={refrescar}
-              alPulsar={alPulsar}
             />
           </Suspense>
         </div>
@@ -398,7 +467,7 @@ export default function PaginaGemelo({
           aria-label={
             enVivo
               ? t('gemelo.paneles.lecturasVista')
-              : t('gemelo.paneles.mandosVista')
+              : t('gemelo.paneles.torretaVista')
           }
           className={`${PANEL} lg:top-3 lg:left-3 lg:w-[236px]`}
         >
@@ -406,19 +475,19 @@ export default function PaginaGemelo({
             <LecturasReales consulta={consulta} />
           ) : (
             <div>
-              <h2 className={SUBTITULO}>{t('gemelo.mandos.titulo')}</h2>
-              <div className="grid grid-cols-2 gap-2">
-                {MANDOS.map(({ mando, clases }) => (
-                  <button
-                    key={mando}
-                    type="button"
-                    onClick={() => pulsar(gemelo, mando)}
-                    className={clases}
-                  >
-                    {t(`gemelo.mandos.${mando}`)}
-                  </button>
-                ))}
-              </div>
+              <h2 className={SUBTITULO}>{t('gemelo.torreta.titulo')}</h2>
+              <Segmentos
+                etiqueta={t('gemelo.torreta.titulo')}
+                opciones={TORRETAS.map((valor) => ({
+                  valor,
+                  texto: t(`gemelo.torreta.${valor}`),
+                }))}
+                valor={torretaSimulada}
+                alCambiar={cambiarTorreta}
+              />
+              <p className="mt-2 text-[12px] leading-snug text-suave">
+                {t('gemelo.torreta.nota')}
+              </p>
             </div>
           )}
 
@@ -482,7 +551,7 @@ export default function PaginaGemelo({
         >
           {enVivo && (
             <p className="text-[12px] leading-snug text-suave">
-              {t('gemelo.soloCuatro')}
+              {t('gemelo.notaEnVivo')}
             </p>
           )}
           <Valores
@@ -493,10 +562,14 @@ export default function PaginaGemelo({
                 t(`gemelo.material.${MATERIAL[i.material]}`),
               ],
               [
+                t('gemelo.valores.materialGarra'),
+                t(`gemelo.material.${MATERIAL[i.materialGarra]}`),
+              ],
+              [
                 t('gemelo.valores.destinoCarro'),
                 i.posX
                   ? t('gemelo.valores.carril', { n: i.posX })
-                  : t('gemelo.valores.toma'),
+                  : t('gemelo.valores.deposito'),
               ],
               [t('gemelo.valores.posicionCarro'), `${Math.round(i.posMm)} mm`],
               [t('gemelo.valores.piezasAl'), String(i.piezasAl)],

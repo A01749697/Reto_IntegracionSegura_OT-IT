@@ -14,9 +14,9 @@ describe('leerEntorno', () => {
     expect(entorno.baseDatos).toEqual({
       host: 'db',
       puerto: 5432,
-      usuario: 'reto_insercion',
+      usuario: 'app_insert',
       contrasena: base.DB_INGEST_PASSWORD,
-      nombre: 'reto',
+      nombre: 'historian',
     })
   })
 
@@ -51,5 +51,12 @@ describe('leerEntorno', () => {
     })
     expect(entorno.puerto).toBe(4000)
     expect(entorno.baseDatos.host).toBe('localhost')
+  })
+
+  it('acepta otro puerto para la base y rechaza uno inválido', () => {
+    expect(leerEntorno({ ...base, DB_PORT: '6543' }).baseDatos.puerto).toBe(
+      6543,
+    )
+    expect(() => leerEntorno({ ...base, DB_PORT: '0' })).toThrow('DB_PORT')
   })
 })

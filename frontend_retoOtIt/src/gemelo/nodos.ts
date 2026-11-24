@@ -1,0 +1,36 @@
+// Los nodos OPC UA del historian que el gemelo usa por su nombre.
+// Si el colector cambia algún nombre, solo se cambia aquí.
+// Todo lo demás que llegue de las tres estaciones se muestra tal cual en "Lecturas de la celda".
+//
+// plc es la estación como la entrega el panel (ver backend_panel_retoOtIt/src/configuracion/historian.ts):
+//   S7-300  = estación Amatrol (la garra)
+//   S7-1500 = tablero neumático (los pistones)
+//   S7-1200 = la que prende las luces de la torreta y manda eventos
+
+export type NodoConocido = { plc: string; nodo: string }
+
+export const NODOS = {
+  // estado de la torreta: un solo número que calcula el S7-1516 en el OB30 a partir de DB_Tablero.
+  // Dice lo que la torreta DEBERÍA mostrar, no lo que prende el S7-1200 (%Q6.0..%Q6.2).
+  torreta: { plc: 'S7-1500', nodo: 'TAB_TORRETA' },
+  // TORRETA_REAL: las luces que de verdad prende el S7-1200 (%QB6), en la misma escala que
+  // TAB_TORRETA; 0 = ninguna luz o más de una. Todavía no existe: llegará con el PUT de
+  // eventos del S7-1200 al S7-1516. Mientras no llegue, el panel no compara nada.
+  torretaReal: { plc: 'S7-1500', nodo: 'TORRETA_REAL' },
+  // grupo Sistema: "DB_Telemetria".LATIDO, sube 1 cada dos ejecuciones del OB30.
+  // No tiene ritmo fijo: se vigila que cambie, no cuánto.
+  latido: { plc: 'S7-1500', nodo: 'LATIDO' },
+} satisfies Record<string, NodoConocido>
+
+export type ClaveNodo = keyof typeof NODOS
+
+// Valores de TAB_TORRETA:
+//   1 verde    = MARCHA y no FALLA
+//   2 amarilla = reservado para el reset (todavía no se usa)
+//   3 roja     = cualquier otro caso: parado o en falla
+// Solo el verde es marcha de los pistones; cualquier otro valor (o ninguno) es paro.
+export const ESTADOS_TORRETA = { verde: 1, amarilla: 2, roja: 3 } as const
+
+// Las estaciones en el orden en que se muestran.
+export const ESTACIONES = ['S7-1200', 'S7-1500', 'S7-300'] as const
+export type Estacion = (typeof ESTACIONES)[number]

@@ -7,10 +7,10 @@ const TOKEN = 'a'.repeat(64)
 const AHORA = Date.parse('2026-10-28T16:00:00Z')
 
 const lecturaValida = {
-  ts: '2026-10-28T15:59:00Z',
-  plc: 'S7-1500',
-  variable: 'contador_piezas',
-  valor: 42,
+  estacion: '1500',
+  ts_plc: '2026-10-28T15:59:00Z',
+  nodo: 'TAB_CONTADOR',
+  valor: '42',
 }
 
 function prepararApp() {
@@ -79,8 +79,8 @@ describe('POST /api/ingest/lecturas: envíos válidos', () => {
     expect(guardarLecturas).toHaveBeenCalledTimes(1)
     const guardadas = guardarLecturas.mock.calls[0]?.[0]
     expect(guardadas).toHaveLength(1)
-    expect(guardadas?.[0]?.variable).toBe('contador_piezas')
-    expect(guardadas?.[0]?.ts).toEqual(new Date('2026-10-28T15:59:00Z'))
+    expect(guardadas?.[0]?.nodo).toBe('TAB_CONTADOR')
+    expect(guardadas?.[0]?.tsPlc).toEqual(new Date('2026-10-28T15:59:00Z'))
   })
 
   it('acepta 500 lecturas en un solo envío', async () => {
@@ -104,31 +104,31 @@ describe('POST /api/ingest/lecturas: envíos inválidos', () => {
       'un campo extra en una lectura',
       { lecturas: [{ ...lecturaValida, extra: 1 }] },
     ],
-    ['PLC no permitido', { lecturas: [{ ...lecturaValida, plc: 'S7-9999' }] }],
     [
-      'variable no permitida',
-      { lecturas: [{ ...lecturaValida, variable: 'otra' }] },
+      'estación no permitida',
+      { lecturas: [{ ...lecturaValida, estacion: '9999' }] },
     ],
     [
-      'valor que no es número',
-      { lecturas: [{ ...lecturaValida, valor: '42' }] },
+      'nodo con caracteres raros',
+      { lecturas: [{ ...lecturaValida, nodo: "X'; DROP TABLE--" }] },
     ],
+    ['valor que no es texto', { lecturas: [{ ...lecturaValida, valor: 42 }] }],
     [
       'fecha sin zona horaria',
-      { lecturas: [{ ...lecturaValida, ts: '2026-10-28T15:59:00' }] },
+      { lecturas: [{ ...lecturaValida, ts_plc: '2026-10-28T15:59:00' }] },
     ],
     [
       'fecha en el futuro lejano',
-      { lecturas: [{ ...lecturaValida, ts: '2026-10-28T16:30:00Z' }] },
+      { lecturas: [{ ...lecturaValida, ts_plc: '2026-10-28T16:30:00Z' }] },
     ],
     [
       'fecha de hace más de 7 días',
-      { lecturas: [{ ...lecturaValida, ts: '2026-10-20T16:00:00Z' }] },
+      { lecturas: [{ ...lecturaValida, ts_plc: '2026-10-20T16:00:00Z' }] },
     ],
     [
-      'una variable no permitida entre lecturas válidas',
+      'una estación no permitida entre lecturas válidas',
       {
-        lecturas: [lecturaValida, { ...lecturaValida, variable: 'otra' }],
+        lecturas: [lecturaValida, { ...lecturaValida, estacion: 'otra' }],
       },
     ],
   ]
@@ -153,9 +153,9 @@ describe('POST /api/ingest/lecturas: envíos inválidos', () => {
       .post('/api/ingest/lecturas')
       .set('X-API-Token', TOKEN)
       .send({
-        lecturas: [lecturaValida, { ...lecturaValida, variable: 'otra' }],
+        lecturas: [lecturaValida, { ...lecturaValida, estacion: 'otra' }],
       })
-    expect(respuesta.body.error).toBe('lecturas[1]: variable no permitida')
+    expect(respuesta.body.error).toBe('lecturas[1]: estacion no permitida')
   })
 
   it('responde 400 si el cuerpo no es JSON', async () => {
@@ -183,7 +183,7 @@ describe('POST /api/ingest/lecturas: envíos inválidos', () => {
     const respuesta = await request(app)
       .post('/api/ingest/lecturas')
       .set('X-API-Token', TOKEN)
-      .send({ lecturas: [{ ...lecturaValida, variable: 'x'.repeat(200_000) }] })
+      .send({ lecturas: [{ ...lecturaValida, nodo: 'x'.repeat(200_000) }] })
     expect(respuesta.status).toBe(413)
     expect(guardarLecturas).not.toHaveBeenCalled()
   })

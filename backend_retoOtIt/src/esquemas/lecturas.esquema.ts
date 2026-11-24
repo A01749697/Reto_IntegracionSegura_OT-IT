@@ -1,32 +1,56 @@
 // Reglas del JSON que manda el agente de IT. Todo lo que no cumpla se rechaza.
+// Cada lectura es una fila del historian: { estacion, ts_plc, nodo, valor }.
 import {
+  ESTACIONES,
+  FORMATO_NODO,
+  FORMATO_VALOR,
   MAXIMO_LECTURAS_POR_ENVIO,
-  PLC_PERMITIDOS,
-  VALOR_ABSOLUTO_MAXIMO,
-  VARIABLES_PERMITIDAS,
   VENTANA_FUTURO_MS,
   VENTANA_PASADO_MS,
+  type Estacion,
 } from '../configuracion/reglas'
 
 export type Lectura = {
-  ts: Date
-  plc: string
-  variable: string
-  valor: number
+  estacion: Estacion
+  tsPlc: Date | null
+  nodo: string
+  valor: string
 }
 
 export type ResultadoValidacion =
   { ok: true; lecturas: Lectura[] } | { ok: false; error: string }
 
-const CAMPOS = ['ts', 'plc', 'variable', 'valor']
-const FORMATO_TS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/
+const CAMPOS = ['estacion', 'ts_plc', 'nodo', 'valor']
+const FORMATO_TS = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?Z$/
 
 function esObjeto(x: unknown): x is Record<string, unknown> {
   return typeof x === 'object' && x !== null && !Array.isArray(x)
 }
 
-function estaEnLista(lista: readonly string[], x: unknown): x is string {
-  return typeof x === 'string' && lista.includes(x)
+function esEstacion(x: unknown): x is Estacion {
+  return typeof x === 'string' && (ESTACIONES as string[]).includes(x)
+}
+
+// ts_plc puede venir vacío (null), como en la tabla. Si viene, debe ser una fecha UTC real y reciente.
+function validarFecha(ts: unknown, ahora: number): Date | null | string {
+  if (ts === null) return null
+  if (typeof ts !== 'string' || !FORMATO_TS.test(ts)) {
+    return 'ts_plc debe ser null o una fecha ISO en UTC, por ejemplo 2026-10-28T16:00:00Z'
+  }
+  const fecha = new Date(ts)
+  const instante = fecha.getTime()
+  if (Number.isNaN(instante)) return 'ts_plc no es una fecha válida'
+  // JavaScript convierte solo un 31 de noviembre en 1 de diciembre; aquí se rechaza.
+  if (fecha.toISOString().slice(0, 19) !== ts.slice(0, 19)) {
+    return 'ts_plc no es una fecha válida'
+  }
+  if (
+    instante < ahora - VENTANA_PASADO_MS ||
+    instante > ahora + VENTANA_FUTURO_MS
+  ) {
+    return 'ts_plc fuera del rango permitido'
+  }
+  return fecha
 }
 
 // Devuelve la lectura ya limpia, o un texto que explica qué está mal.
@@ -38,41 +62,21 @@ function validarLectura(lectura: unknown, ahora: number): Lectura | string {
     claves.length !== CAMPOS.length ||
     !claves.every((c) => CAMPOS.includes(c))
   ) {
-    return 'debe tener exactamente los campos ts, plc, variable y valor'
+    return 'debe tener exactamente los campos estacion, ts_plc, nodo y valor'
   }
 
-  const { ts, plc, variable, valor } = lectura
+  const { estacion, ts_plc, nodo, valor } = lectura
 
-  if (!estaEnLista(PLC_PERMITIDOS, plc)) return 'plc no permitido'
-  if (!estaEnLista(VARIABLES_PERMITIDAS, variable))
-    return 'variable no permitida'
+  if (!esEstacion(estacion)) return 'estacion no permitida'
+  if (typeof nodo !== 'string' || !FORMATO_NODO.test(nodo))
+    return 'nodo no válido'
+  if (typeof valor !== 'string' || !FORMATO_VALOR.test(valor))
+    return 'valor debe ser texto corto, por ejemplo True, 4 o 0.0'
 
-  if (
-    typeof valor !== 'number' ||
-    !Number.isFinite(valor) ||
-    Math.abs(valor) > VALOR_ABSOLUTO_MAXIMO
-  ) {
-    return 'valor debe ser un número finito'
-  }
+  const tsPlc = validarFecha(ts_plc, ahora)
+  if (typeof tsPlc === 'string') return tsPlc
 
-  if (typeof ts !== 'string' || !FORMATO_TS.test(ts)) {
-    return 'ts debe ser una fecha ISO en UTC, por ejemplo 2026-10-28T16:00:00Z'
-  }
-  const fecha = new Date(ts)
-  const instante = fecha.getTime()
-  if (Number.isNaN(instante)) return 'ts no es una fecha válida'
-  // JavaScript convierte solo un 31 de noviembre en 1 de diciembre; aquí se rechaza.
-  if (fecha.toISOString().slice(0, 19) !== ts.slice(0, 19)) {
-    return 'ts no es una fecha válida'
-  }
-  if (
-    instante < ahora - VENTANA_PASADO_MS ||
-    instante > ahora + VENTANA_FUTURO_MS
-  ) {
-    return 'ts fuera del rango permitido'
-  }
-
-  return { ts: fecha, plc, variable, valor }
+  return { estacion, tsPlc, nodo, valor }
 }
 
 export function validarCuerpo(

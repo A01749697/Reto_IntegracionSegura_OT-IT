@@ -1,9 +1,9 @@
 // Lo que controla la celda: tablero trasero con el PLC y las electroválvulas,
-// la unidad de aire, las mangueras, la torreta y la botonera.
+// la unidad de aire, las mangueras y la torreta (verde = marcha, roja = paro).
+// No hay botonera: la marcha y el paro de los pistones los da la torreta.
 import * as THREE from 'three'
 import i18n from '../idioma/i18n'
 import { CADENA, type Piston } from './celda'
-import type { Mando } from './gemelo'
 import {
   alta,
   basico,
@@ -326,68 +326,10 @@ function torreta(E: Grupo, m: Materiales) {
   }
   const luces = {
     verde: luz(0x2fd36b, 0),
-    amarilla: luz(0xf5b81c, 1),
-    roja: luz(0xf2392f, 2),
+    roja: luz(0xf2392f, 1),
   }
-  cil(0.03, 0.012, m.negro, x, 0.498, z, 'y', E, 28, 0.02)
+  cil(0.03, 0.012, m.negro, x, 0.444, z, 'y', E, 28, 0.02)
   return luces
-}
-
-// Botonera: marcha, paro, restablecer y el hongo de emergencia. Se le puede hacer clic.
-function botonera(E: Grupo, m: Materiales) {
-  const b = new THREE.Group()
-  b.position.set(-0.7, 0.04, 0.34)
-  b.rotation.x = 0.4
-  E.add(b)
-  cajaR(0.2, 0.07, 0.12, m.grisClaro, -0.045, 0, 0, b, 0.008)
-  cajaR(0.095, 0.085, 0.12, m.amarillo, 0.115, 0.007, 0, b, 0.008)
-  const pulsables: THREE.Object3D[] = []
-  const boton = (x: number, color: number, mando: Mando) => {
-    cil(0.019, 0.006, m.acero, x, 0.038, 0, 'y', b, 24)
-    const luz = new THREE.MeshStandardMaterial({
-      color,
-      emissive: color,
-      emissiveIntensity: 0.05,
-      roughness: 0.35,
-    })
-    const tapa = cil(0.015, 0.014, luz, x, 0.046, 0, 'y', b, 24)
-    tapa.userData.mando = mando
-    pulsables.push(tapa)
-    return luz
-  }
-  const luces = {
-    marcha: boton(-0.105, 0x2fbf62, 'marcha'),
-    paro: boton(-0.045, 0xd8392f, 'paro'),
-    restablecer: boton(0.015, 0x2f7fd6, 'restablecer'),
-  }
-  cil(0.03, 0.006, m.negro, 0.115, 0.052, 0, 'y', b, 28)
-  cil(0.012, 0.016, m.negro, 0.115, 0.06, 0, 'y', b, 16)
-  const hongo = cil(
-    0.026,
-    0.018,
-    estandar(0xd0261c, { roughness: 0.4 }),
-    0.115,
-    0.076,
-    0,
-    'y',
-    b,
-    28,
-    0.021,
-  )
-  hongo.userData.mando = 'emergencia' satisfies Mando
-  pulsables.push(hongo)
-  manguera(
-    [
-      [-0.84, 0.03, 0.31],
-      [-0.9, 0.01, 0.2],
-      [-0.92, 0.01, -0.2],
-      [-0.8, 0.03, -0.43],
-    ],
-    0.005,
-    m.cable,
-    E,
-  )
-  return { pulsables, luces, hongo }
 }
 
 export function construirTablero(
@@ -406,7 +348,6 @@ export function construirTablero(
     valvulas: isla.map((v) => v.foco),
     aguja,
     torreta: torreta(E, m),
-    botonera: botonera(E, m),
   }
 }
 

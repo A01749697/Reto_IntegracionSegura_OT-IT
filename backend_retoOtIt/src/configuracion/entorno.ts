@@ -34,15 +34,21 @@ export function leerEntorno(
     throw new Error('PUERTO debe ser un número entre 1 y 65535')
   }
 
+  const puertoBase = Number(variables.DB_PORT ?? 5432)
+  if (!Number.isInteger(puertoBase) || puertoBase < 1 || puertoBase > 65535) {
+    throw new Error('DB_PORT debe ser un número entre 1 y 65535')
+  }
+
+  // Base "historian" (ver docker_retoOtIt/db/historian.sql). El rol app_insert solo puede hacer INSERT.
   return {
     puerto,
     tokenIngesta,
     baseDatos: {
       host: variables.DB_HOST ?? 'db',
-      puerto: 5432,
-      usuario: 'reto_insercion',
+      puerto: puertoBase,
+      usuario: 'app_insert',
       contrasena: leerObligatoria(variables, 'DB_INGEST_PASSWORD'),
-      nombre: 'reto',
+      nombre: 'historian',
     },
   }
 }

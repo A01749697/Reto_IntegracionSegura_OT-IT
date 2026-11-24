@@ -1,5 +1,6 @@
-// La máquina: bancada, banda, cilindros, almacén, sensores, pórtico, rampa, empaque y piezas.
-// Recorrido de una pieza: alimentador, banda, identificación, tope de toma, pórtico, carril y caja.
+// La máquina: bancada, guía, depósito, cilindros, almacén, sensores, pórtico, rampa, empaque y piezas.
+// Recorrido de una pieza: alimentador, guía inclinada (baja sola), identificación, tope del marcado,
+// caída al depósito, garra del pórtico, carril y caja.
 import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import {
@@ -18,22 +19,27 @@ import {
 } from './materiales'
 import {
   alturaCarril,
-  BANDA_X0,
-  BANDA_X1,
   CAJA_X,
   CAJAS_POR_TARIMA,
   CARRERA,
-  LARGO_BANDA,
+  GUIA_X0,
+  GUIA_X1,
   PARADAS_CARRO,
+  PENDIENTE_GUIA,
   RAMPA,
   TOTAL_PIEZAS,
   X_ALMACEN,
   X_IDENTIFICACION,
   X_MARCADO,
   X_TOMA,
-  Y_BANDA,
+  X_TOPE,
+  Y_DEPOSITO,
+  Y_GUIA,
   Y_PIEZA,
-  Z_BANDA,
+  Y_PIEZA_TOMA,
+  yGuia,
+  yPiezaEn,
+  Z_LINEA,
   Z_PORTICO,
 } from './medidas'
 import type { Tipo } from './planta'
@@ -50,7 +56,12 @@ export type Piston = {
 }
 
 export type SensorCelda =
-  'sc1' | 'si1' | 'sc2' | 'si2' | 'ls1' | 'ls2' | 'ls3' | 'ls4'
+  'sc1' | 'si1' | 'sc2' | 'si2' | 'si3' | 'ls1' | 'ls2' | 'ls3' | 'ls4'
+
+// Las estaciones quedaron mas altas que con la banda (la guia baja hacia el deposito).
+// Esto es cuanto subio cada una respecto a la altura de la banda anterior.
+const ALTURA_BANDA_ANTERIOR = 0.2
+const subida = (x: number) => yGuia(x) - ALTURA_BANDA_ANTERIOR
 
 // viga del portico y canal de la cadena portacables
 const Z_VIGA = Z_PORTICO + 0.065
@@ -123,118 +134,110 @@ function bancada(E: Grupo, m: Materiales) {
     0.6
 }
 
-// Banda de PVC verde con su motorreductor. Devuelve las poleas, que giran con la banda.
-function banda(E: Grupo, m: Materiales) {
-  const centro = (BANDA_X0 + BANDA_X1) / 2
-  const radio = 0.028
-  const yEje = Y_BANDA - radio - 0.002
-  const tapiz = estandar(0x7fd6a4, { map: m.tBanda, roughness: 0.8 })
-  caja(LARGO_BANDA, 0.004, 0.11, tapiz, centro, Y_BANDA - 0.002, Z_BANDA, E)
+// Guia por gravedad: plana bajo el almacen y luego inclinada hasta el deposito.
+function guia(E: Grupo, m: Materiales) {
+  const ancho = 0.07
+  // tramo plano, bajo el almacen y el alimentador
+  const xPlano = -0.8
   caja(
-    LARGO_BANDA,
+    GUIA_X0 - xPlano,
     0.004,
-    0.11,
-    estandar(0x1f4a35, { roughness: 0.85 }),
-    centro,
-    yEje - radio,
-    Z_BANDA,
-    E,
-  )
-  const rodillo = estandar(0x245a40, { roughness: 0.85 })
-  for (const x of [BANDA_X0, BANDA_X1]) {
-    cil(radio + 0.002, 0.11, rodillo, x, yEje, Z_BANDA, 'z', E, 28)
-    cil(0.008, 0.19, m.acero, x, yEje, Z_BANDA, 'z', E, 12)
-  }
-  for (const lado of [-1, 1]) {
-    const z = Z_BANDA + lado * 0.07
-    caja(LARGO_BANDA + 0.1, 0.05, 0.02, m.perfil, centro, Y_BANDA - 0.027, z, E)
-    for (const x of [-0.5, -0.09, 0.3]) {
-      const alto = Y_BANDA - 0.052
-      caja(0.03, alto, 0.02, m.perfilV, x, alto / 2, z, E)
-      caja(0.06, 0.006, 0.05, m.aluOsc, x, 0.003, z, E)
-    }
-  }
-  caja(
-    LARGO_BANDA - 0.08,
-    0.008,
-    0.1,
-    m.aluOsc,
-    centro,
-    Y_BANDA - 0.012,
-    Z_BANDA,
+    ancho,
+    m.alu,
+    (xPlano + GUIA_X0) / 2,
+    Y_GUIA - 0.002,
+    Z_LINEA,
     E,
   )
 
-  // motorreductor
-  const x = BANDA_X1
-  cajaR(0.075, 0.085, 0.075, m.azulMotor, x, yEje, Z_BANDA - 0.125, E, 0.008)
-  cil(0.039, 0.15, m.azulMotor, x, yEje, Z_BANDA - 0.235, 'z', E, 28)
-  for (let i = 0; i < 9; i++)
-    cil(
-      0.043,
-      0.004,
-      m.azulMotor,
-      x,
-      yEje,
-      Z_BANDA - 0.175 - i * 0.014,
-      'z',
-      E,
-      28,
-    )
-  cil(0.042, 0.035, m.negro, x, yEje, Z_BANDA - 0.327, 'z', E, 28)
-  cajaR(0.05, 0.03, 0.06, m.negro, x, yEje + 0.052, Z_BANDA - 0.23, E, 0.004)
-  caja(0.09, 0.012, 0.2, m.aluOsc, x, 0.006, Z_BANDA - 0.2, E)
-  for (const z of [Z_BANDA - 0.14, Z_BANDA - 0.27])
-    caja(0.02, yEje - 0.05, 0.02, m.aluOsc, x, (yEje - 0.05) / 2 + 0.01, z, E)
-  manguera(
-    [
-      [x, yEje + 0.07, Z_BANDA - 0.23],
-      [x - 0.06, yEje + 0.08, Z_BANDA - 0.3],
-      [x - 0.12, 0.06, -0.38],
-      [0.2, 0.02, -0.42],
-      [0.1, 0.1, -0.435],
-    ],
-    0.005,
-    m.cable,
-    E,
+  // tramo inclinado, con dos bordes bajos para que la pieza no se salga
+  const recorrido = GUIA_X1 - GUIA_X0
+  const largo = Math.hypot(recorrido, recorrido * PENDIENTE_GUIA)
+  const inclinada = new THREE.Group()
+  inclinada.position.set(
+    (GUIA_X0 + GUIA_X1) / 2,
+    (yGuia(GUIA_X0) + yGuia(GUIA_X1)) / 2 - 0.002,
+    Z_LINEA,
   )
-
-  const poleas: Grupo[] = []
-  for (const px of [BANDA_X0, BANDA_X1]) {
-    const polea = new THREE.Group()
-    polea.position.set(px, yEje, Z_BANDA + 0.098)
-    E.add(polea)
-    cil(0.024, 0.01, m.aluOsc, 0, 0, 0, 'z', polea, 24)
-    for (let i = 0; i < 3; i++) {
-      const a = i * 2.094
-      cil(
-        0.005,
-        0.012,
-        m.negro,
-        Math.cos(a) * 0.014,
-        Math.sin(a) * 0.014,
-        0,
-        'z',
-        polea,
-        10,
-      )
-    }
-    poleas.push(polea)
-  }
-  // tope mecanico en el punto de toma
-  caja(0.006, 0.05, 0.1, m.rojo, X_TOMA + 0.03, Y_BANDA + 0.027, Z_BANDA, E)
+  inclinada.rotation.z = -Math.atan(PENDIENTE_GUIA)
+  E.add(inclinada)
+  caja(largo, 0.004, ancho, m.alu, 0, 0, 0, inclinada)
+  caja(largo, 0.008, 0.06, m.aluOsc, 0, -0.008, 0, inclinada)
   for (const lado of [-1, 1])
     caja(
-      0.02,
+      largo,
       0.012,
-      0.03,
+      0.004,
       m.aluOsc,
-      X_TOMA + 0.036,
-      Y_BANDA + 0.008,
-      Z_BANDA + lado * 0.06,
+      0,
+      0.006,
+      lado * (ancho / 2 + 0.002),
+      inclinada,
+    )
+
+  // patas
+  for (const x of [-0.45, -0.15, 0.2]) {
+    const alto = yGuia(x) - 0.012
+    caja(0.025, alto, 0.025, m.perfilV, x, alto / 2, Z_LINEA - 0.05, E)
+    caja(0.05, 0.006, 0.05, m.aluOsc, x, 0.003, Z_LINEA - 0.05, E)
+    caja(0.025, 0.012, 0.06, m.aluOsc, x, alto - 0.004, Z_LINEA - 0.025, E)
+  }
+}
+
+// Deposito al final de la guia: la pieza cae aqui y la garra la toma desde arriba.
+function deposito(E: Grupo, m: Materiales) {
+  const fondo = Y_DEPOSITO
+  const pared = 0.07
+  // fondo y columna que lo sostiene
+  caja(0.09, 0.006, 0.08, m.aluOsc, X_TOMA - 0.01, fondo - 0.003, Z_LINEA, E)
+  caja(
+    0.04,
+    fondo - 0.006,
+    0.04,
+    m.perfilV,
+    X_TOMA,
+    (fondo - 0.006) / 2,
+    Z_LINEA,
+    E,
+  )
+  caja(0.08, 0.006, 0.08, m.aluOsc, X_TOMA, 0.003, Z_LINEA, E)
+  // pared del fondo, donde se recarga la pieza
+  caja(
+    0.006,
+    pared,
+    0.08,
+    m.rojo,
+    X_TOMA + 0.031,
+    fondo + pared / 2,
+    Z_LINEA,
+    E,
+  )
+  // paredes de los lados: van desde el final de la guia hasta el fondo
+  const desde = GUIA_X1 - 0.005
+  const hasta = X_TOMA + 0.034
+  for (const lado of [-1, 1])
+    caja(
+      hasta - desde,
+      pared,
+      0.004,
+      m.alu,
+      (desde + hasta) / 2,
+      fondo + pared / 2,
+      Z_LINEA + lado * 0.037,
       E,
     )
-  return poleas
+  // labio de entrada al final de la guia
+  const alto = yGuia(GUIA_X1) - fondo
+  caja(
+    0.012,
+    alto,
+    0.07,
+    m.aluOsc,
+    GUIA_X1 - 0.004,
+    fondo + alto / 2 - 0.004,
+    Z_LINEA,
+    E,
+  )
 }
 
 type OpcionesPiston = {
@@ -386,42 +389,67 @@ function pistones(E: Grupo, m: Materiales) {
     punta: 'pinza',
     diametro: 0.036,
   })
+  // tope del marcado: sale hacia arriba por la guia y detiene la pieza
+  const T = crearPiston(m, {
+    carrera: CARRERA.T,
+    salida: 0.02,
+    diametro: 0.022,
+    redondo: true,
+    detectores: 0,
+  })
 
   // PD-1 alimentador, con la leva que acciona LS-1 y LS-2
-  A.grupo.position.set(-0.74, Y_PIEZA, Z_BANDA)
+  A.grupo.position.set(-0.74, Y_PIEZA, Z_LINEA)
   E.add(A.grupo)
   caja(0.008, 0.008, 0.045, m.acero, 0.034, 0, 0.04, A.vastago)
   const altoSoporte = Y_PIEZA - 0.03
   for (const x of [-0.75, -0.945])
-    caja(0.02, altoSoporte, 0.05, m.aluOsc, x, altoSoporte / 2, Z_BANDA, E)
+    caja(0.02, altoSoporte, 0.05, m.aluOsc, x, altoSoporte / 2, Z_LINEA, E)
 
   // PD-2 sujecion
-  B.grupo.position.set(X_MARCADO, Y_PIEZA, Z_BANDA - 0.105)
+  const yMarcado = yPiezaEn(X_MARCADO)
+  const dM = subida(X_MARCADO)
+  const altoMarcado = yMarcado - 0.03
+  B.grupo.position.set(X_MARCADO, yMarcado, Z_LINEA - 0.105)
   B.grupo.rotation.y = -Math.PI / 2
   E.add(B.grupo)
-  for (const z of [Z_BANDA - 0.115, Z_BANDA - 0.205])
-    caja(0.05, altoSoporte, 0.02, m.aluOsc, X_MARCADO, altoSoporte / 2, z, E)
+  for (const z of [Z_LINEA - 0.115, Z_LINEA - 0.205])
+    caja(0.05, altoMarcado, 0.02, m.aluOsc, X_MARCADO, altoMarcado / 2, z, E)
+
+  // tope: el vastago sale hacia +y; afuera queda 3 cm sobre la guia
+  T.grupo.position.set(X_TOPE + 0.019, yGuia(X_TOPE) - 0.025, Z_LINEA)
+  T.grupo.rotation.z = Math.PI / 2
+  E.add(T.grupo)
 
   // PS marcador, con su bastidor y la mordaza fija
-  C.grupo.position.set(X_MARCADO, 0.415, Z_BANDA)
+  C.grupo.position.set(X_MARCADO, 0.415 + dM, Z_LINEA)
   C.grupo.rotation.z = -Math.PI / 2
   E.add(C.grupo)
   for (const lado of [-1, 1]) {
     const x = X_MARCADO + lado * 0.075
-    caja(0.03, 0.415, 0.03, m.perfilV, x, 0.2075, Z_BANDA - 0.16, E)
-    caja(0.06, 0.006, 0.05, m.aluOsc, x, 0.003, Z_BANDA - 0.16, E)
+    caja(
+      0.03,
+      0.415 + dM,
+      0.03,
+      m.perfilV,
+      x,
+      (0.415 + dM) / 2,
+      Z_LINEA - 0.16,
+      E,
+    )
+    caja(0.06, 0.006, 0.05, m.aluOsc, x, 0.003, Z_LINEA - 0.16, E)
   }
-  caja(0.18, 0.03, 0.03, m.perfil, X_MARCADO, 0.4, Z_BANDA - 0.16, E)
-  caja(0.06, 0.03, 0.21, m.perfil, X_MARCADO, 0.4, Z_BANDA - 0.045, E)
-  caja(0.064, 0.042, 0.012, m.acero, X_MARCADO, Y_PIEZA, Z_BANDA + 0.033, E)
+  caja(0.18, 0.03, 0.03, m.perfil, X_MARCADO, 0.4 + dM, Z_LINEA - 0.16, E)
+  caja(0.06, 0.03, 0.21, m.perfil, X_MARCADO, 0.4 + dM, Z_LINEA - 0.045, E)
+  caja(0.064, 0.042, 0.012, m.acero, X_MARCADO, yMarcado, Z_LINEA + 0.033, E)
   caja(
     0.064,
     0.006,
     0.05,
     m.aluOsc,
     X_MARCADO,
-    Y_BANDA + 0.004,
-    Z_BANDA + 0.058,
+    yGuia(X_MARCADO) + 0.004,
+    Z_LINEA + 0.058,
     E,
   )
   caja(
@@ -430,26 +458,26 @@ function pistones(E: Grupo, m: Materiales) {
     0.012,
     m.aluOsc,
     X_MARCADO,
-    Y_BANDA + 0.015,
-    Z_BANDA + 0.045,
+    yGuia(X_MARCADO) + 0.015,
+    Z_LINEA + 0.045,
     E,
   )
 
-  return { A, B, C, Z }
+  return { A, B, C, Z, T }
 }
 
 // Almacen de piezas por gravedad.
 function almacen(E: Grupo, m: Materiales) {
-  caja(0.225, 0.008, 0.09, m.alu, -0.6925, Y_BANDA - 0.004, Z_BANDA, E)
+  caja(0.225, 0.008, 0.09, m.alu, -0.6925, Y_GUIA - 0.004, Z_LINEA, E)
   for (const x of [-0.78, -0.62])
     caja(
       0.02,
-      Y_BANDA - 0.008,
+      Y_GUIA - 0.008,
       0.06,
       m.aluOsc,
       x,
-      (Y_BANDA - 0.008) / 2,
-      Z_BANDA,
+      (Y_GUIA - 0.008) / 2,
+      Z_LINEA,
       E,
     )
   for (const sx of [-1, 1]) {
@@ -460,8 +488,8 @@ function almacen(E: Grupo, m: Materiales) {
         0.008,
         m.alu,
         X_ALMACEN + sx * 0.031,
-        Y_BANDA + 0.055 + 0.165,
-        Z_BANDA + sz * 0.031,
+        Y_GUIA + 0.055 + 0.165,
+        Z_LINEA + sz * 0.031,
         E,
       )
     }
@@ -474,8 +502,8 @@ function almacen(E: Grupo, m: Materiales) {
         0.004,
         m.aluOsc,
         X_ALMACEN,
-        Y_BANDA + y,
-        Z_BANDA + s * 0.036,
+        Y_GUIA + y,
+        Z_LINEA + s * 0.036,
         E,
       )
       caja(
@@ -484,8 +512,8 @@ function almacen(E: Grupo, m: Materiales) {
         0.07,
         m.aluOsc,
         X_ALMACEN + s * 0.036,
-        Y_BANDA + y,
-        Z_BANDA,
+        Y_GUIA + y,
+        Z_LINEA,
         E,
       )
     }
@@ -497,18 +525,18 @@ function almacen(E: Grupo, m: Materiales) {
       0.006,
       m.aluOsc,
       X_ALMACEN,
-      Y_BANDA + 0.035,
-      Z_BANDA + sz * 0.04,
+      Y_GUIA + 0.035,
+      Z_LINEA + sz * 0.04,
       E,
     )
   caja(
     0.02,
-    Y_BANDA + 0.37,
+    Y_GUIA + 0.37,
     0.02,
     m.perfilV,
     X_ALMACEN,
-    (Y_BANDA + 0.37) / 2,
-    Z_BANDA - 0.06,
+    (Y_GUIA + 0.37) / 2,
+    Z_LINEA - 0.06,
     E,
   )
 }
@@ -551,45 +579,85 @@ function sensores(E: Grupo, m: Materiales): Record<SensorCelda, Led> {
 
   // identificacion: SC-1 mira hacia abajo y SI-1 mira de lado
   const xi = X_IDENTIFICACION
+  const dI = subida(xi)
+  const yI = yPiezaEn(xi)
   for (const sz of [-1, 1]) {
-    caja(0.03, 0.41, 0.03, m.perfilV, xi, 0.205, Z_BANDA + sz * 0.115, E)
-    caja(0.06, 0.006, 0.05, m.aluOsc, xi, 0.003, Z_BANDA + sz * 0.115, E)
+    caja(
+      0.03,
+      0.41 + dI,
+      0.03,
+      m.perfilV,
+      xi,
+      0.205 + dI / 2,
+      Z_LINEA + sz * 0.115,
+      E,
+    )
+    caja(0.06, 0.006, 0.05, m.aluOsc, xi, 0.003, Z_LINEA + sz * 0.115, E)
   }
-  caja(0.03, 0.03, 0.26, m.perfil, xi, 0.395, Z_BANDA, E)
-  cil(0.009, 0.075, m.azulSensor, xi, 0.325, Z_BANDA, 'y', E, 20)
-  cil(0.013, 0.006, m.negro, xi, 0.365, Z_BANDA, 'y', E, 6)
-  cil(0.013, 0.006, m.negro, xi, 0.376, Z_BANDA, 'y', E, 6)
+  caja(0.03, 0.03, 0.26, m.perfil, xi, 0.395 + dI, Z_LINEA, E)
+  cil(0.009, 0.075, m.azulSensor, xi, 0.325 + dI, Z_LINEA, 'y', E, 20)
+  cil(0.013, 0.006, m.negro, xi, 0.365 + dI, Z_LINEA, 'y', E, 6)
+  cil(0.013, 0.006, m.negro, xi, 0.376 + dI, Z_LINEA, 'y', E, 6)
   const sc1 = led(0xffb020)
-  cil(0.0095, 0.005, sc1, xi, 0.3, Z_BANDA, 'y', E, 20)
+  cil(0.0095, 0.005, sc1, xi, 0.3 + dI, Z_LINEA, 'y', E, 20)
   manguera(
     [
-      [xi, 0.41, Z_BANDA],
-      [xi - 0.02, 0.43, Z_BANDA - 0.06],
-      [xi - 0.01, 0.4, Z_BANDA - 0.13],
-      [xi, 0.1, Z_BANDA - 0.14],
+      [xi, 0.41 + dI, Z_LINEA],
+      [xi - 0.02, 0.43 + dI, Z_LINEA - 0.06],
+      [xi - 0.01, 0.4 + dI, Z_LINEA - 0.13],
+      [xi, 0.1, Z_LINEA - 0.14],
       [-0.3, 0.04, -0.43],
     ],
     0.0025,
     m.cable,
     E,
   )
-  const zs = Z_BANDA - 0.075
-  cil(0.006, 0.055, m.cromo, xi, Y_PIEZA, zs - 0.012, 'z', E, 16)
-  cil(0.0062, 0.006, m.naranja, xi, Y_PIEZA, zs + 0.017, 'z', E, 16)
-  cil(0.009, 0.005, m.acero, xi, Y_PIEZA, zs - 0.004, 'z', E, 6)
-  cil(0.009, 0.005, m.acero, xi, Y_PIEZA, zs - 0.018, 'z', E, 6)
-  caja(0.05, 0.05, 0.004, m.aluOsc, xi + 0.012, Y_PIEZA, zs - 0.011, E)
+  const zs = Z_LINEA - 0.075
+  cil(0.006, 0.055, m.cromo, xi, yI, zs - 0.012, 'z', E, 16)
+  cil(0.0062, 0.006, m.naranja, xi, yI, zs + 0.017, 'z', E, 16)
+  cil(0.009, 0.005, m.acero, xi, yI, zs - 0.004, 'z', E, 6)
+  cil(0.009, 0.005, m.acero, xi, yI, zs - 0.018, 'z', E, 6)
+  caja(0.05, 0.05, 0.004, m.aluOsc, xi + 0.012, yI, zs - 0.011, E)
   const si1 = led(0xffb020)
-  cil(0.0065, 0.004, si1, xi, Y_PIEZA, zs - 0.041, 'z', E, 12)
+  cil(0.0065, 0.004, si1, xi, yI, zs - 0.041, 'z', E, 12)
 
   // SC-2: pieza en la estacion de marcado, visto desde el frente
   const xs = X_MARCADO - 0.05
-  cil(0.009, 0.065, m.azulSensor, xs, Y_PIEZA, Z_BANDA + 0.09, 'z', E, 20)
-  cil(0.013, 0.006, m.negro, xs, Y_PIEZA, Z_BANDA + 0.085, 'z', E, 6)
-  cil(0.013, 0.006, m.negro, xs, Y_PIEZA, Z_BANDA + 0.1, 'z', E, 6)
-  caja(0.034, 0.05, 0.004, m.aluOsc, xs, Y_PIEZA - 0.008, Z_BANDA + 0.0925, E)
+  cil(
+    0.009,
+    0.065,
+    m.azulSensor,
+    xs,
+    yPiezaEn(X_MARCADO),
+    Z_LINEA + 0.09,
+    'z',
+    E,
+    20,
+  )
+  cil(
+    0.013,
+    0.006,
+    m.negro,
+    xs,
+    yPiezaEn(X_MARCADO),
+    Z_LINEA + 0.085,
+    'z',
+    E,
+    6,
+  )
+  cil(0.013, 0.006, m.negro, xs, yPiezaEn(X_MARCADO), Z_LINEA + 0.1, 'z', E, 6)
+  caja(
+    0.034,
+    0.05,
+    0.004,
+    m.aluOsc,
+    xs,
+    yPiezaEn(X_MARCADO) - 0.008,
+    Z_LINEA + 0.0925,
+    E,
+  )
   const sc2 = led(0xffb020)
-  cil(0.0095, 0.005, sc2, xs, Y_PIEZA, Z_BANDA + 0.125, 'z', E, 20)
+  cil(0.0095, 0.005, sc2, xs, yPiezaEn(X_MARCADO), Z_LINEA + 0.125, 'z', E, 20)
 
   // SI-2: carro del portico en posicion de toma
   cil(0.006, 0.05, m.cromo, X_TOMA - 0.075, 0.612, Z_VIGA, 'x', E, 16)
@@ -598,22 +666,37 @@ function sensores(E: Grupo, m: Materiales): Record<SensorCelda, Led> {
   const si2 = led(0xffb020)
   cil(0.0065, 0.004, si2, X_TOMA - 0.102, 0.612, Z_VIGA, 'x', E, 12)
 
+  // SI-3: sensor de metal de la garra, en la pared del deposito
+  const zd = Z_LINEA + 0.075
+  cil(0.006, 0.055, m.cromo, X_TOMA, Y_PIEZA_TOMA, zd + 0.012, 'z', E, 16)
+  cil(0.0062, 0.006, m.naranja, X_TOMA, Y_PIEZA_TOMA, zd - 0.017, 'z', E, 16)
+  cil(0.009, 0.005, m.acero, X_TOMA, Y_PIEZA_TOMA, zd + 0.004, 'z', E, 6)
+  caja(0.05, 0.05, 0.004, m.aluOsc, X_TOMA - 0.012, Y_PIEZA_TOMA, zd + 0.011, E)
+  const si3 = led(0xffb020)
+  cil(0.0065, 0.004, si3, X_TOMA, Y_PIEZA_TOMA, zd + 0.041, 'z', E, 12)
+
   const yLs = Y_PIEZA - 0.02
   return {
     sc1,
     si1,
     sc2,
     si2,
-    ls1: finalCarrera(-0.706, yLs, Z_BANDA + 0.058, Math.PI), // alimentador atras
-    ls2: finalCarrera(-0.541, yLs, Z_BANDA + 0.058, Math.PI), // alimentador adelante
-    ls3: finalCarrera(X_MARCADO + 0.045, yLs, Z_BANDA - 0.092, -Math.PI / 2), // pieza sujeta
+    si3,
+    ls1: finalCarrera(-0.706, yLs, Z_LINEA + 0.058, Math.PI), // alimentador atras
+    ls2: finalCarrera(-0.541, yLs, Z_LINEA + 0.058, Math.PI), // alimentador adelante
+    ls3: finalCarrera(
+      X_MARCADO + 0.045,
+      yPiezaEn(X_MARCADO) - 0.02,
+      Z_LINEA - 0.092,
+      -Math.PI / 2,
+    ), // pieza sujeta
     ls4: finalCarrera(
       X_TOMA + 0.06,
-      Y_PIEZA + 0.02,
-      Z_BANDA,
+      Y_PIEZA_TOMA + 0.02,
+      Z_LINEA,
       -Math.PI / 2,
       true,
-    ), // pieza en el tope
+    ), // pieza en el deposito
   }
 }
 
@@ -658,7 +741,7 @@ function portico(E: Grupo, m: Materiales, ejeZ: Piston) {
   cajaR(0.09, 0.012, 0.085, m.rojo, 0, 0.624, Z_VIGA + 0.012, carro, 0.004)
   for (const y of [0.575, 0.545])
     cajaR(0.06, 0.022, 0.014, m.negro, 0, y, Z_VIGA + 0.041, carro, 0.003)
-  const z0 = Z_BANDA - 0.027
+  const z0 = Z_LINEA - 0.027
   const z1 = Z_VIGA + 0.056
   caja(0.06, 0.05, z0 - z1, m.aluOsc, 0, 0.5, (z0 + z1) / 2, carro)
   caja(0.03, 0.012, 0.11, m.aluOsc, 0, 0.513, Z_VIGA + 0.02, carro) // brazo de la cadena
@@ -669,16 +752,16 @@ function portico(E: Grupo, m: Materiales, ejeZ: Piston) {
     [0.035, 0.52],
   ])
     cil(0.005, 0.004, m.negro, x, y, Z_VIGA + 0.058, 'z', carro, 6)
-  ejeZ.grupo.position.set(0, 0.47, Z_BANDA)
+  ejeZ.grupo.position.set(0, 0.47, Z_LINEA)
   ejeZ.grupo.rotation.z = -Math.PI / 2
   carro.add(ejeZ.grupo)
-  caja(0.012, 0.03, 0.012, m.rojo, 0.034, 0.43, Z_BANDA + 0.03, carro)
+  caja(0.012, 0.03, 0.012, m.rojo, 0.034, 0.43, Z_LINEA + 0.03, carro)
   manguera(
     [
       [0, 0.51, Z_VIGA + 0.03],
-      [0.02, 0.56, Z_BANDA - 0.05],
-      [0.045, 0.67, Z_BANDA - 0.02],
-      [0.03, 0.69, Z_BANDA],
+      [0.02, 0.56, Z_LINEA - 0.05],
+      [0.045, 0.67, Z_LINEA - 0.02],
+      [0.03, 0.69, Z_LINEA],
     ],
     0.0036,
     m.mangueraAmarilla,
@@ -687,9 +770,9 @@ function portico(E: Grupo, m: Materiales, ejeZ: Piston) {
   manguera(
     [
       [0, 0.51, Z_VIGA + 0.03],
-      [-0.03, 0.5, Z_BANDA - 0.06],
-      [-0.045, 0.47, Z_BANDA - 0.03],
-      [-0.03, 0.47, Z_BANDA],
+      [-0.03, 0.5, Z_LINEA - 0.06],
+      [-0.045, 0.47, Z_LINEA - 0.03],
+      [-0.03, 0.47, Z_LINEA],
     ],
     0.0036,
     m.mangueraAmarilla,
@@ -904,14 +987,14 @@ function piezas(E: Grupo) {
 
 export function construirCelda(escena: THREE.Scene, E: Grupo, m: Materiales) {
   bancada(E, m)
-  const poleas = banda(E, m)
+  guia(E, m)
+  deposito(E, m)
   const pist = pistones(E, m)
   almacen(E, m)
   const focos = sensores(E, m)
   const { carro, banderas, acomodarCadena } = portico(E, m, pist.Z)
   rampa(E, m)
   return {
-    poleas,
     pistones: pist,
     focos,
     carro,

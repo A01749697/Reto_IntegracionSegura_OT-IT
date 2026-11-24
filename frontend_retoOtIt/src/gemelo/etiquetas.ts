@@ -4,14 +4,17 @@ import * as THREE from 'three'
 import i18n from '../idioma/i18n'
 import {
   ALTURA_MESA,
-  BANDA_X1,
+  GUIA_X0,
   X_ALMACEN,
   X_IDENTIFICACION,
   X_MARCADO,
   X_TOMA,
-  Y_BANDA,
+  X_TOPE,
+  Y_GUIA,
   Y_PIEZA,
-  Z_BANDA,
+  Y_PIEZA_TOMA,
+  yPiezaEn,
+  Z_LINEA,
   Z_PORTICO,
   type P3,
 } from './medidas'
@@ -23,7 +26,9 @@ export type ClaveEtiqueta =
   | 'alimentador'
   | 'sensorPieza'
   | 'marcador'
-  | 'banda'
+  | 'guia'
+  | 'deposito'
+  | 'tope'
   | 'portico'
   | 'carriles'
   | 'cajas'
@@ -31,7 +36,6 @@ export type ClaveEtiqueta =
   | 'plc'
   | 'electrovalvulas'
   | 'torreta'
-  | 'botonera'
   | 'gabinete'
   | 'pantalla'
   | 'ls1'
@@ -42,6 +46,7 @@ export type ClaveEtiqueta =
   | 'ls3'
   | 'ls4'
   | 'si2'
+  | 'si3'
   | 'pinza'
 
 type Definicion = {
@@ -80,23 +85,26 @@ const seEnciman = (a: Rect, b: Rect) =>
 
 function definiciones(planta: Planta): Definicion[] {
   const yLs = Y_PIEZA - 0.06
+  const yI = yPiezaEn(X_IDENTIFICACION)
+  const yM = yPiezaEn(X_MARCADO)
   return [
-    { clave: 'almacen', punto: [X_ALMACEN, Y_BANDA + 0.43, Z_BANDA] },
+    { clave: 'almacen', punto: [X_ALMACEN, Y_GUIA + 0.43, Z_LINEA] },
     {
       clave: 'alimentador',
-      punto: [-0.86, Y_PIEZA + 0.07, Z_BANDA],
+      punto: [-0.86, Y_PIEZA + 0.07, Z_LINEA],
       senal: 'yA',
     },
     {
       clave: 'sensorPieza',
-      punto: [X_IDENTIFICACION, 0.44, Z_BANDA],
+      punto: [X_IDENTIFICACION, yI + 0.22, Z_LINEA],
       senal: 'sc1',
     },
-    { clave: 'marcador', punto: [X_MARCADO, 0.6, Z_BANDA], senal: 'yC' },
+    { clave: 'marcador', punto: [X_MARCADO, yM + 0.38, Z_LINEA], senal: 'yC' },
+    { clave: 'guia', punto: [GUIA_X0 + 0.42, yI - 0.03, Z_LINEA + 0.06] },
     {
-      clave: 'banda',
-      punto: [BANDA_X1, 0.26, Z_BANDA - 0.25],
-      senal: 'motorBanda',
+      clave: 'deposito',
+      punto: [X_TOMA, Y_PIEZA_TOMA + 0.05, Z_LINEA + 0.05],
+      senal: 'ls4',
     },
     { clave: 'portico', punto: [0.93, 0.66, Z_PORTICO] },
     { clave: 'carriles', punto: [0.86, 0.2, -0.05] },
@@ -105,50 +113,61 @@ function definiciones(planta: Planta): Definicion[] {
     { clave: 'plc', punto: [-0.66, 0.34, -0.33] },
     { clave: 'electrovalvulas', punto: [-0.18, 0.21, -0.4] },
     { clave: 'torreta', punto: [-0.93, 0.55, -0.41] },
-    { clave: 'botonera', punto: [-0.7, 0.14, 0.34] },
     { clave: 'gabinete', punto: [-1.62, 1.25, -0.77] },
     { clave: 'pantalla', punto: [-1.5, 0.62, 0.82] },
     // las de detalle van al final: las principales escogen lugar primero
     {
       clave: 'ls1',
-      punto: [-0.706, yLs, Z_BANDA + 0.075],
+      punto: [-0.706, yLs, Z_LINEA + 0.075],
       senal: 'ls1',
       detalle: true,
     },
     {
       clave: 'ls2',
-      punto: [-0.541, yLs, Z_BANDA + 0.075],
+      punto: [-0.541, yLs, Z_LINEA + 0.075],
       senal: 'ls2',
       detalle: true,
     },
     {
       clave: 'sensorMetal',
-      punto: [X_IDENTIFICACION, Y_PIEZA - 0.04, Z_BANDA - 0.13],
+      punto: [X_IDENTIFICACION, yI - 0.04, Z_LINEA - 0.13],
       senal: 'si1',
       detalle: true,
     },
     {
       clave: 'sujecion',
-      punto: [X_MARCADO, Y_PIEZA + 0.06, Z_BANDA - 0.2],
+      punto: [X_MARCADO, yM + 0.06, Z_LINEA - 0.2],
       senal: 'yB',
       detalle: true,
     },
     {
       clave: 'sc2',
-      punto: [X_MARCADO - 0.05, Y_PIEZA - 0.03, Z_BANDA + 0.13],
+      punto: [X_MARCADO - 0.05, yM - 0.03, Z_LINEA + 0.13],
       senal: 'sc2',
       detalle: true,
     },
     {
+      clave: 'tope',
+      punto: [X_TOPE + 0.02, yM - 0.06, Z_LINEA + 0.05],
+      senal: 'yT',
+      detalle: true,
+    },
+    {
       clave: 'ls3',
-      punto: [X_MARCADO + 0.06, Y_PIEZA - 0.07, Z_BANDA - 0.09],
+      punto: [X_MARCADO + 0.06, yM - 0.07, Z_LINEA - 0.09],
       senal: 'ls3',
       detalle: true,
     },
     {
       clave: 'ls4',
-      punto: [X_TOMA + 0.06, Y_PIEZA + 0.09, Z_BANDA],
+      punto: [X_TOMA + 0.06, Y_PIEZA_TOMA + 0.09, Z_LINEA],
       senal: 'ls4',
+      detalle: true,
+    },
+    {
+      clave: 'si3',
+      punto: [X_TOMA, Y_PIEZA_TOMA - 0.03, Z_LINEA + 0.12],
+      senal: 'si3',
       detalle: true,
     },
     {
@@ -162,7 +181,7 @@ function definiciones(planta: Planta): Definicion[] {
       punto: () => [
         planta.carro.x + 0.04,
         alturaPinza(planta) + 0.01,
-        Z_BANDA + 0.05,
+        Z_LINEA + 0.05,
       ],
       senal: 'yG',
       detalle: true,

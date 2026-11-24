@@ -2,6 +2,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../idioma/i18n'
 import type { ResultadoLecturas, UltimaLectura } from './apiLecturas'
+import { ESTADOS_TORRETA, NODOS } from './nodos'
 import PaginaGemelo from './PaginaGemelo'
 
 // jsdom no tiene WebGL: la vista 3D se cambia por un botón que hace lo que hace cada cuadro.
@@ -14,20 +15,24 @@ vi.mock('./VistaCelda', () => ({
 }))
 
 const lectura = (
+  plc: string,
   variable: string,
   valor: number,
-  ts: string,
-): UltimaLectura => ({ plc: 'S7-1500', variable, valor, ts })
+  ts = new Date().toISOString(),
+): UltimaLectura => ({ plc, variable, valor, ts })
 
-function lecturasDeAhora(contador = 12): ResultadoLecturas {
-  const ts = new Date().toISOString()
+function lecturasDeAhora(verde = 1): ResultadoLecturas {
   return {
     ok: true,
     lecturas: [
-      lectura('estado_estacion', 1, ts),
-      lectura('estado_piston', 0, ts),
-      lectura('presencia_pieza', 1, ts),
-      lectura('contador_piezas', contador, ts),
+      lectura(
+        NODOS.torreta.plc,
+        NODOS.torreta.nodo,
+        verde ? ESTADOS_TORRETA.verde : ESTADOS_TORRETA.roja,
+      ),
+      lectura(NODOS.latido.plc, NODOS.latido.nodo, 77),
+      lectura('S7-1500', 'TAB_PISTON_A', 1),
+      lectura('S7-300', 'CONTADOR_PIEZAS', 12),
     ],
   }
 }
@@ -41,40 +46,54 @@ function preparar(respuesta: ResultadoLecturas) {
   return props
 }
 
-const elegir = (modo: string) =>
-  fireEvent.click(screen.getByRole('button', { name: modo }))
+const elegir = (nombre: string) =>
+  fireEvent.click(screen.getByRole('button', { name: nombre }))
 
 beforeEach(() => vi.clearAllMocks())
 afterEach(() => vi.useRealTimers())
 
 describe('PaginaGemelo en vivo', () => {
-  it('abre en vivo y muestra lo que manda la celda', async () => {
+  it('abre en vivo y muestra la torreta, el latido y los nodos de cada estación', async () => {
     preparar(lecturasDeAhora())
     expect(
       screen.getByRole('heading', { name: 'Gemelo digital' }),
     ).toBeInTheDocument()
     expect(await screen.findByText('Datos en vivo')).toBeInTheDocument()
-    expect(screen.getByText('En marcha')).toBeInTheDocument()
-    expect(screen.getByText('Atrás')).toBeInTheDocument()
-    expect(screen.getByText('Sí')).toBeInTheDocument()
-    expect(screen.getByText('12')).toBeInTheDocument()
+    expect(screen.getByText('Verde: marcha')).toBeInTheDocument()
+    // el latido sale en el resumen y en la lista del S7-1516
+    expect(screen.getAllByText('77')).toHaveLength(2)
+    expect(screen.getByText('TAB_PISTON_A')).toBeInTheDocument()
+    expect(screen.getByText('CONTADOR_PIEZAS')).toBeInTheDocument()
+    expect(screen.getByText(/S7-300 · garra/)).toBeInTheDocument()
     expect(screen.getByText(/Última lectura:/)).toBeInTheDocument()
   })
 
-  it('carga la vista 3D', async () => {
-    preparar(lecturasDeAhora())
-    expect(
-      await screen.findByRole('button', { name: 'vista 3D' }),
-    ).toBeInTheDocument()
+  it('la torreta real en verde pone la celda en marcha', async () => {
+    preparar(lecturasDeAhora(1))
+    const refrescar = await screen.findByRole('button', { name: 'vista 3D' })
+    await screen.findByText('Verde: marcha')
+    fireEvent.click(refrescar)
+    expect(screen.getByText('Torreta verde: marcha')).toBeInTheDocument()
   })
 
-  it('no ofrece mandos: desde el panel no se le ordena nada a la celda', async () => {
+  it('la torreta real en rojo deja la celda en paro', async () => {
+    preparar(lecturasDeAhora(0))
+    expect(await screen.findByText('Roja: paro')).toBeInTheDocument()
+    expect(screen.getByText('Torreta roja: paro')).toBeInTheDocument()
+    expect(screen.getByText(/La torreta real está en rojo/)).toBeInTheDocument()
+  })
+
+  it('no ofrece botones de marcha, paro ni emergencia', async () => {
     preparar(lecturasDeAhora())
     await screen.findByText('Datos en vivo')
-    expect(screen.queryByRole('button', { name: 'Marcha' })).toBeNull()
-    expect(
-      screen.queryByRole('button', { name: 'Paro de emergencia' }),
-    ).toBeNull()
+    for (const nombre of [
+      'Marcha',
+      'Paro',
+      'Paro de emergencia',
+      'Restablecer',
+      'Verde (marcha)',
+    ])
+      expect(screen.queryByRole('button', { name: nombre })).toBeNull()
   })
 
   it('sin lecturas lo explica y sugiere la simulación', async () => {
@@ -86,7 +105,7 @@ describe('PaginaGemelo en vivo', () => {
   it('avisa si las lecturas están atrasadas', async () => {
     preparar({
       ok: true,
-      lecturas: [lectura('contador_piezas', 5, '2026-01-01T00:00:00.000Z')],
+      lecturas: [lectura('S7-300', 'A', 5, '2026-01-01T00:00:00.000Z')],
     })
     expect(await screen.findByText('Lecturas atrasadas')).toBeInTheDocument()
   })
@@ -113,41 +132,48 @@ describe('PaginaGemelo en vivo', () => {
     expect(props.obtenerLecturas).toHaveBeenCalledTimes(3)
   })
 
-  it('muestra el contador nuevo cuando la celda cuenta otra pieza', async () => {
+  it('sigue a la torreta cuando cambia', async () => {
     vi.useFakeTimers()
-    const props = preparar(lecturasDeAhora(12))
+    const props = preparar(lecturasDeAhora(1))
     await vi.advanceTimersByTimeAsync(100)
-    props.obtenerLecturas.mockResolvedValue(lecturasDeAhora(13))
+    props.obtenerLecturas.mockResolvedValue(lecturasDeAhora(0))
     await vi.advanceTimersByTimeAsync(5000)
     vi.useRealTimers()
-    expect(await screen.findByText('13')).toBeInTheDocument()
+    expect(await screen.findByText('Roja: paro')).toBeInTheDocument()
   })
 })
 
 describe('PaginaGemelo en simulación', () => {
-  it('muestra los mandos y deja de consultar la nube', async () => {
+  it('ofrece la torreta simulada en lugar de mandos y deja de consultar la nube', async () => {
     vi.useFakeTimers()
     const props = preparar(lecturasDeAhora())
     await vi.advanceTimersByTimeAsync(100)
     elegir('Simulación')
     expect(screen.getByText('Datos simulados')).toBeInTheDocument()
-    for (const mando of ['Marcha', 'Paro', 'Paro de emergencia', 'Restablecer'])
-      expect(screen.getByRole('button', { name: mando })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Verde (marcha)' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+    expect(
+      screen.getByRole('button', { name: 'Roja (paro)' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Paro de emergencia' }),
+    ).toBeNull()
     await vi.advanceTimersByTimeAsync(20_000)
     expect(props.obtenerLecturas).toHaveBeenCalledTimes(1)
   })
 
-  it('el paro de emergencia se ve en el estado y Restablecer lo quita', async () => {
+  it('la torreta en rojo detiene los pistones y lo dice', async () => {
     preparar(lecturasDeAhora())
     elegir('Simulación')
     const refrescar = await screen.findByRole('button', { name: 'vista 3D' })
-    fireEvent.click(screen.getByRole('button', { name: 'Paro de emergencia' }))
+    elegir('Roja (paro)')
     fireEvent.click(refrescar)
-    expect(screen.getByText('Emergencia')).toBeInTheDocument()
-    expect(screen.getByText(/Paro de emergencia activo/)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Restablecer' }))
+    expect(screen.getByText('Torreta roja: paro')).toBeInTheDocument()
+    expect(screen.getByText(/La torreta está en rojo/)).toBeInTheDocument()
+    elegir('Verde (marcha)')
     fireEvent.click(refrescar)
-    expect(screen.getByText('Reposo')).toBeInTheDocument()
+    expect(screen.getByText('Torreta verde: marcha')).toBeInTheDocument()
   })
 
   it('al volver a En vivo consulta de nuevo', async () => {
@@ -165,7 +191,7 @@ describe('PaginaGemelo, vista y secuencia', () => {
     preparar(lecturasDeAhora())
     const pasos = screen.getByRole('list', { name: 'Secuencia del proceso' })
     expect(pasos.textContent).toBe(
-      '1Alimentar2Identificar3Sujetar y marcar4Llevar a toma5Tomar6Clasificar7Empacar',
+      '1Alimentar2Identificar3Sujetar y marcar4Caer al depósito5Tomar6Clasificar7Empacar',
     )
   })
 
@@ -175,7 +201,7 @@ describe('PaginaGemelo, vista y secuencia', () => {
       'aria-pressed',
       'true',
     )
-    fireEvent.click(screen.getByRole('button', { name: 'Pórtico' }))
+    elegir('Pórtico')
     expect(screen.getByRole('button', { name: 'Pórtico' })).toHaveAttribute(
       'aria-pressed',
       'true',
@@ -198,11 +224,14 @@ describe('PaginaGemelo, vista y secuencia', () => {
     expect(etiquetas).not.toBeChecked()
   })
 
-  it('las señales empiezan con la celda en reposo', () => {
+  it('las señales empiezan con la torreta en rojo y la garra en espera', () => {
     preparar(lecturasDeAhora())
-    expect(screen.getByText('Reposo')).toBeInTheDocument()
+    expect(screen.getByText('Torreta roja: paro')).toBeInTheDocument()
+    expect(screen.getByText('Garra en espera')).toBeInTheDocument()
     expect(screen.getByText('Alimentador atrás')).toBeInTheDocument()
-    expect(screen.getByText('Sin pieza')).toBeInTheDocument()
+    expect(screen.getByText('Pieza en el depósito')).toBeInTheDocument()
+    expect(screen.getByText('Tope baja')).toBeInTheDocument()
+    expect(screen.getAllByText('Sin pieza')).toHaveLength(2)
     expect(screen.getByText('6.00 bar')).toBeInTheDocument()
   })
 })
@@ -216,32 +245,80 @@ describe('PaginaGemelo en inglés', () => {
       screen.getByRole('heading', { name: 'Digital twin' }),
     ).toBeInTheDocument()
     expect(await screen.findByText('Live data')).toBeInTheDocument()
-    expect(screen.getByText('Running')).toBeInTheDocument()
-    expect(screen.getByText('Retracted')).toBeInTheDocument()
-    expect(screen.getByText('Yes')).toBeInTheDocument()
+    expect(screen.getByText('Green: running')).toBeInTheDocument()
     expect(screen.getByText(/Last reading:/)).toBeInTheDocument()
     expect(screen.getByText('Feeder retracted')).toBeInTheDocument()
-    expect(screen.getByText('Idle')).toBeInTheDocument()
+    expect(screen.getByText('Part in the hopper')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Gantry' })).toBeInTheDocument()
 
     const pasos = screen.getByRole('list', { name: 'Process sequence' })
     expect(pasos.textContent).toBe(
-      '1Feed2Identify3Clamp and mark4Move to pick-up5Pick6Sort7Pack',
+      '1Feed2Identify3Clamp and mark4Drop into hopper5Pick6Sort7Pack',
     )
   })
 
-  it('en simulación los mandos y el texto de ayuda salen en inglés', async () => {
+  it('en simulación la torreta y el texto de ayuda salen en inglés', async () => {
     await i18n.changeLanguage('en')
     preparar(lecturasDeAhora())
-    fireEvent.click(screen.getByRole('button', { name: 'Simulation' }))
+    elegir('Simulation')
 
-    expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument()
     expect(
-      screen.getByRole('button', { name: 'Emergency stop' }),
+      screen.getByRole('button', { name: 'Green (run)' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Red (stop)' }),
     ).toBeInTheDocument()
     expect(screen.getByText('Simulated data')).toBeInTheDocument()
-    expect(
-      screen.getByText('The cell is idle. Press Start to begin.'),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/It only controls the pistons/)).toBeInTheDocument()
+  })
+})
+
+describe('PaginaGemelo, alertas del tablero', () => {
+  it('TORRETA_REAL todavía no llega: lo dice y no alerta', async () => {
+    preparar(lecturasDeAhora())
+    expect(await screen.findByText('Aún no se envía')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('si la torreta real no coincide con el tablero, alerta', async () => {
+    const respuesta = lecturasDeAhora(1)
+    if (respuesta.ok)
+      respuesta.lecturas.push(
+        lectura(
+          NODOS.torretaReal.plc,
+          NODOS.torretaReal.nodo,
+          ESTADOS_TORRETA.roja,
+        ),
+      )
+    preparar(respuesta)
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'La torreta real (Roja: paro) no coincide con el estado del tablero (Verde: marcha).',
+    )
+  })
+
+  it('si la torreta real no tiene una sola luz, alerta', async () => {
+    const respuesta = lecturasDeAhora(1)
+    if (respuesta.ok)
+      respuesta.lecturas.push(
+        lectura(NODOS.torretaReal.plc, NODOS.torretaReal.nodo, 0),
+      )
+    preparar(respuesta)
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /todas las luces apagadas o varias prendidas/,
+    )
+  })
+
+  it('si el latido no cambia, alerta y deja los pistones en paro', async () => {
+    vi.useFakeTimers()
+    preparar(lecturasDeAhora(1)) // el latido se queda en 77
+    await vi.advanceTimersByTimeAsync(100)
+    expect(screen.queryByRole('alert')).toBeNull()
+    await vi.advanceTimersByTimeAsync(20_000)
+    vi.useRealTimers()
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /El latido del S7-1516 no cambia desde hace \d+ s/,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'vista 3D' }))
+    expect(screen.getByText('Torreta roja: paro')).toBeInTheDocument()
   })
 })

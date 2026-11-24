@@ -1,4 +1,6 @@
-// Junta las señales, la planta y el PLC simulado, y los hace avanzar en el tiempo.
+// Junta las señales, la planta y los PLC simulados, y los hace avanzar en el tiempo.
+// No hay mandos: el proceso de pistones arranca y se detiene con la torreta
+// (verde = marcha, roja = paro). La garra no depende de la torreta.
 import {
   avanzarPlanta,
   crearPlanta,
@@ -6,14 +8,18 @@ import {
   estaEmpacando,
   type Planta,
 } from './planta'
-import { apagarSalidas, avanzarPlc, crearPlc, irA, type Plc } from './plc'
+import {
+  apagarSalidas,
+  avanzarPlc,
+  crearPlc,
+  reiniciarPlc,
+  type Plc,
+} from './plc'
 import { senalesIniciales, type Senales } from './senales'
 
-// 'vivo': cada pieza que cuenta el PLC real dispara un ciclo.
-// 'simulacion': la persona maneja la celda con los mandos.
+// 'vivo': la torreta real (S7-1200) decide si los pistones trabajan.
+// 'simulacion': la torreta la elige la persona en la pantalla.
 export type Modo = 'vivo' | 'simulacion'
-
-export type Mando = 'marcha' | 'paro' | 'emergencia' | 'restablecer'
 
 export type Gemelo = {
   senales: Senales
@@ -21,7 +27,6 @@ export type Gemelo = {
   plc: Plc
   modo: Modo
   velocidad: number
-  ciclosPedidos: number // solo cuenta en modo 'vivo'
   acumulado: number
 }
 
@@ -29,8 +34,6 @@ export type Gemelo = {
 export type Instantanea = Senales & { empacando: boolean }
 
 const PASO_FIJO = 1 / 120
-// Si la celda real va mas rapido que el gemelo, no se acumulan ciclos sin fin.
-export const MAXIMO_CICLOS_PENDIENTES = 3
 
 export function crearGemelo(
   modo: Modo = 'vivo',
@@ -42,58 +45,34 @@ export function crearGemelo(
     plc: crearPlc(),
     modo,
     velocidad: 1,
-    ciclosPedidos: 0,
     acumulado: 0,
   }
   ponerModo(gemelo, modo)
   return gemelo
 }
 
-function restablecer(gemelo: Gemelo) {
+// Al cambiar de modo se empieza limpio: la linea vacia y la torreta en rojo.
+export function ponerModo(gemelo: Gemelo, modo: Modo) {
   const { senales, planta, plc } = gemelo
-  senales.emergencia = false
   senales.marcha = false
   senales.material = ''
+  senales.materialGarra = ''
   apagarSalidas(senales)
-  irA(plc, 'REPOSO')
+  reiniciarPlc(plc)
   despejarLinea(planta)
-  gemelo.ciclosPedidos = plc.ciclos
-}
-
-// La simulacion arranca andando; en vivo espera a las lecturas.
-export function ponerModo(gemelo: Gemelo, modo: Modo) {
-  restablecer(gemelo)
   gemelo.modo = modo
-  gemelo.senales.marcha = modo === 'simulacion'
+  // la simulacion arranca andando; en vivo espera a la torreta real
+  senales.marcha = modo === 'simulacion'
 }
 
 export function ponerVelocidad(gemelo: Gemelo, velocidad: number) {
   gemelo.velocidad = velocidad
 }
 
-// Los mandos solo mueven la simulacion: el panel nunca le manda ordenes a la celda real.
-export function pulsar(gemelo: Gemelo, mando: Mando) {
-  if (gemelo.modo !== 'simulacion') return
-  const { senales } = gemelo
-  if (mando === 'marcha') {
-    if (!senales.emergencia) senales.marcha = true
-  } else if (mando === 'paro') {
-    senales.marcha = false
-  } else if (mando === 'emergencia') {
-    senales.emergencia = true
-    senales.marcha = false
-  } else {
-    restablecer(gemelo)
-  }
-}
-
-// En vivo: el PLC real conto piezas nuevas, el gemelo hace un ciclo por cada una.
-export function pedirCiclos(gemelo: Gemelo, cuantos: number) {
-  if (gemelo.modo !== 'vivo' || cuantos <= 0) return
-  gemelo.ciclosPedidos = Math.min(
-    Math.max(gemelo.ciclosPedidos, gemelo.plc.ciclos) + cuantos,
-    gemelo.plc.ciclos + MAXIMO_CICLOS_PENDIENTES,
-  )
+// La torreta: verde = marcha, roja = paro. Solo detiene a los pistones;
+// si hay una pieza a medio camino, la terminan antes de quedarse en reposo.
+export function ponerTorreta(gemelo: Gemelo, verde: boolean) {
+  gemelo.senales.marcha = verde
 }
 
 // Avanza con paso fijo para que la secuencia salga igual sin importar los cuadros por segundo.
@@ -104,8 +83,6 @@ export function avanzarGemelo(gemelo: Gemelo, segundos: number) {
     0.5,
   )
   while (gemelo.acumulado >= PASO_FIJO) {
-    if (gemelo.modo === 'vivo')
-      senales.marcha = plc.ciclos < gemelo.ciclosPedidos
     avanzarPlc(plc, senales, planta.cajas, PASO_FIJO)
     avanzarPlanta(planta, senales, PASO_FIJO)
     gemelo.acumulado -= PASO_FIJO

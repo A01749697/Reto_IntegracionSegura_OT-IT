@@ -1,8 +1,8 @@
--- Esquema de la base de datos "reto" (PostgreSQL 18).
+-- Esquema de la base de datos "reto" (PostgreSQL 18): solo lo del panel.
 --
--- Describe lo que ya existe en el servidor: la tabla de lecturas, sus reglas
--- de validacion, las tablas del panel (usuarios, enlaces de reinicio y
--- sesiones) y los roles con permisos minimos.
+-- Tablas del panel (usuarios, enlaces de reinicio, sesiones y bitacora) y su rol
+-- con permisos minimos. La telemetria de las estaciones ya no vive aqui: esta en
+-- la base "historian" (ver historian.sql).
 -- Se puede ejecutar varias veces sin romper nada (no borra ni duplica).
 --
 -- Para recrear la base en un servidor nuevo, con el contenedor "db" corriendo,
@@ -11,61 +11,17 @@
 --   cd /opt/docker_retoOtIt
 --   sudo docker compose exec -T db psql -U reto_admin -d reto -v ON_ERROR_STOP=1 < esquema.sql
 --
--- Este archivo NO guarda contrasenas. Despues de ejecutarlo hay que asignarlas
--- con ALTER ROLE, usando los valores del archivo .env del servidor:
+-- Este archivo NO guarda contrasenas. Despues de ejecutarlo hay que asignarla
+-- con ALTER ROLE, usando el valor del archivo .env del servidor:
 --
---   ALTER ROLE reto_insercion PASSWORD '<DB_INGEST_PASSWORD>';
---   ALTER ROLE reto_lectura   PASSWORD '<DB_READER_PASSWORD>';
---   ALTER ROLE reto_panel     PASSWORD '<DB_PANEL_PASSWORD>';
-
--- Roles ---------------------------------------------------------------------
--- reto_insercion: lo usa la API receptora. Solo puede insertar lecturas.
--- reto_lectura:   lo usa la API del panel. Solo puede leer lecturas.
--- reto_panel:     lo usa la API del panel. Maneja cuentas, enlaces y sesiones
---                 (se crea mas abajo, en la parte del panel).
-
-DO $$
-BEGIN
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'reto_insercion') THEN
-    CREATE ROLE reto_insercion LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
-  END IF;
-  IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'reto_lectura') THEN
-    CREATE ROLE reto_lectura LOGIN NOSUPERUSER NOCREATEDB NOCREATEROLE;
-  END IF;
-END
-$$;
-
--- Tabla de lecturas ---------------------------------------------------------
--- Una fila por cada valor que manda el agente de IT.
--- Las reglas CHECK son la segunda barrera: la primera es la validacion de la API.
-
-CREATE TABLE IF NOT EXISTS public.lecturas (
-  id          bigint GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-  ts          timestamptz NOT NULL,                  -- momento en que el PLC midio el valor
-  recibido_en timestamptz NOT NULL DEFAULT now(),    -- momento en que llego a la nube
-  plc         text NOT NULL,
-  variable    text NOT NULL,
-  valor       double precision NOT NULL,
-  CONSTRAINT lecturas_plc_largo
-    CHECK (char_length(plc) BETWEEN 1 AND 20),
-  CONSTRAINT lecturas_variable_formato
-    CHECK (variable ~ '^[a-z][a-z0-9_]{0,63}$'),
-  CONSTRAINT lecturas_valor_rango
-    CHECK (valor BETWEEN -1e12 AND 1e12)
-);
-
--- Para consultar el historial de una variable ordenado por fecha.
-CREATE INDEX IF NOT EXISTS lecturas_variable_ts_idx
-  ON public.lecturas (variable, ts);
-
--- Para el historial de disponibilidad del panel: cuenta las lecturas por hora de llegada.
-CREATE INDEX IF NOT EXISTS lecturas_recibido_idx
-  ON public.lecturas (recibido_en);
-
--- Permisos ------------------------------------------------------------------
-
-GRANT INSERT ON TABLE public.lecturas TO reto_insercion;
-GRANT SELECT ON TABLE public.lecturas TO reto_lectura;
+--   ALTER ROLE reto_panel PASSWORD '<DB_PANEL_PASSWORD>';
+--
+-- Si el servidor todavia tiene la tabla vieja "lecturas" y los roles reto_insercion
+-- y reto_lectura, ya no se usan. Se pueden borrar a mano cuando ya no hagan falta:
+--
+--   DROP TABLE IF EXISTS public.lecturas;
+--   DROP ROLE IF EXISTS reto_insercion;
+--   DROP ROLE IF EXISTS reto_lectura;
 
 -- ============================================================
 -- Panel: usuarios, enlaces de reinicio y sesiones

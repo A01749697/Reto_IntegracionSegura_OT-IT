@@ -19,7 +19,9 @@ describe('leerEntorno', () => {
     expect(entorno.rutaCertificado).toBe('/certs-servidor/reto.crt')
     expect(entorno.baseDatosLectura).toMatchObject({
       host: 'db',
-      usuario: 'reto_lectura',
+      puerto: 5432,
+      usuario: 'app_lectura',
+      nombre: 'historian',
       contrasena: 'clave_lectura_123',
     })
     expect(entorno.baseDatosPanel).toMatchObject({
@@ -101,4 +103,21 @@ describe('leerEntorno', () => {
       ).toThrow('URL_API_RECEPTORA')
     },
   )
+
+  it('lee el historian de HISTORIAN_HOST y HISTORIAN_PORT si se indican', () => {
+    const entorno = leerEntorno({
+      ...variablesValidas,
+      DB_HOST: 'db',
+      HISTORIAN_HOST: 'host.docker.internal',
+      HISTORIAN_PORT: '5433',
+    })
+    expect(entorno.baseDatosLectura).toMatchObject({
+      host: 'host.docker.internal',
+      puerto: 5433,
+    })
+    expect(entorno.baseDatosPanel.host).toBe('db')
+    expect(() =>
+      leerEntorno({ ...variablesValidas, HISTORIAN_PORT: 'x' }),
+    ).toThrow('HISTORIAN_PORT')
+  })
 })

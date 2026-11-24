@@ -1,8 +1,14 @@
 // Reglas de los filtros del historial (viajan en la dirección: ?plc=...&variable=...).
+// plc es la estación del historian (S7-300, S7-1500, S7-1200) y variable es el nombre del nodo.
 // Todo lo que no cumpla se rechaza.
+import {
+  esPlcHistorian,
+  FORMATO_NODO,
+  type PlcHistorian,
+} from '../configuracion/historian'
 
 export type ConsultaHistorial = {
-  plc: string
+  plc: PlcHistorian
   variable: string
   desde: Date
   hasta: Date
@@ -12,9 +18,6 @@ export type ResultadoConsulta =
   { ok: true; consulta: ConsultaHistorial } | { ok: false; error: string }
 
 const CAMPOS = ['plc', 'variable', 'desde', 'hasta']
-// Mismos formatos que exigen las reglas CHECK de la tabla lecturas.
-const FORMATO_PLC = /^[A-Za-z0-9_-]{1,20}$/
-const FORMATO_VARIABLE = /^[a-z][a-z0-9_]{0,63}$/
 const FORMATO_FECHA = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,3})?Z$/
 
 function esObjeto(x: unknown): x is Record<string, unknown> {
@@ -48,10 +51,10 @@ export function validarConsultaHistorial(consulta: unknown): ResultadoConsulta {
   }
 
   const { plc, variable } = consulta
-  if (typeof plc !== 'string' || !FORMATO_PLC.test(plc)) {
+  if (!esPlcHistorian(plc)) {
     return { ok: false, error: 'plc no es válido' }
   }
-  if (typeof variable !== 'string' || !FORMATO_VARIABLE.test(variable)) {
+  if (typeof variable !== 'string' || !FORMATO_NODO.test(variable)) {
     return { ok: false, error: 'variable no es válida' }
   }
 
