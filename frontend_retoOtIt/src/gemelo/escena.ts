@@ -1,23 +1,21 @@
-// Arma la escena 3D, la mantiene al día con el gemelo y atiende la cámara y los clics.
+// Arma la escena 3D, la mantiene al día con el gemelo y atiende la cámara.
 import * as THREE from 'three'
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js'
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js'
 import { construirCelda } from './celda'
 import { crearEtiquetas, type Rect } from './etiquetas'
-import { avanzarGemelo, type Gemelo, type Mando } from './gemelo'
+import { avanzarGemelo, type Gemelo } from './gemelo'
 import { crearMateriales, prender } from './materiales'
 import {
   ALTURA_MESA,
   CAJA_X,
   CAJA_Y,
   CAJA_Z,
-  LARGO_BANDA,
   PARADAS_CARRO,
   PIEZAS_VISIBLES_ALMACEN,
-  VELOCIDAD_BANDA,
   X_ALMACEN,
   Y_PIEZA,
-  Z_BANDA,
+  Z_LINEA,
 } from './medidas'
 import { construirNave } from './nave'
 import type { SenalDigital } from './senales'
@@ -31,7 +29,6 @@ type Opciones = {
   // Rectangulos de la pagina que tapan la vista, para no poner etiquetas debajo.
   obstaculos: () => DOMRect[]
   alRefrescar: () => void
-  alPulsar: (mando: Mando) => void
 }
 
 // en el mismo orden que los focos de las tarjetas del PLC
@@ -44,22 +41,21 @@ const ENTRADAS: SenalDigital[] = [
   'sc2',
   'si1',
   'si2',
+  'si3',
   'b0',
   'c1',
   'z0',
   'z1',
   'xOk',
-  'marcha',
 ]
 const SALIDAS: SenalDigital[] = [
   'yA',
   'yB',
   'yC',
-  'motorBanda',
+  'yT',
   'yZ',
   'yG',
   'torreVerde',
-  'torreAmarilla',
   'torreRoja',
 ]
 
@@ -110,7 +106,6 @@ export function crearEscena({
   gemelo,
   obstaculos,
   alRefrescar,
-  alPulsar,
 }: Opciones) {
   const { senales, planta } = gemelo
 
@@ -148,9 +143,9 @@ export function crearEscena({
   const etiquetas = crearEtiquetas(capaEtiquetas, planta)
 
   // Pone cada pieza de la escena donde dice el gemelo.
-  function pintar(segundos: number) {
+  function pintar() {
     const { pistones } = celda
-    for (const clave of ['A', 'B', 'C', 'Z'] as const) {
+    for (const clave of ['A', 'B', 'C', 'Z', 'T'] as const) {
       pistones[clave].vastago.position.x =
         planta.extension[clave] * pistones[clave].carrera
     }
@@ -195,7 +190,7 @@ export function crearEscena({
         malla.position.set(
           X_ALMACEN,
           Y_PIEZA + (pieza.fila + planta.caida) * 0.05,
-          Z_BANDA,
+          Z_LINEA,
         )
       } else if (pieza.estado === 'caja') {
         const caja = planta.cajas[pieza.caja]
@@ -214,10 +209,9 @@ export function crearEscena({
 
     for (const [clave, foco] of Object.entries(celda.focos))
       prender(foco, senales[clave as keyof typeof celda.focos])
-    const { torreta, botonera, cpu } = tablero
+    const { torreta, cpu } = tablero
     for (const [luz, encendida] of [
       [torreta.verde, senales.torreVerde],
-      [torreta.amarilla, senales.torreAmarilla],
       [torreta.roja, senales.torreRoja],
     ] as const) {
       luz.lente.emissiveIntensity = encendida ? 2.6 : 0.05
@@ -238,24 +232,11 @@ export function crearEscena({
       prender(tablero.salidas[i], senales[clave], 3),
     )
     prender(cpu.alimentada, true)
-    prender(cpu.corriendo, !senales.emergencia)
+    prender(cpu.corriendo, true)
     prender(cpu.detenida, false)
-    prender(cpu.falla, senales.emergencia)
-    botonera.luces.marcha.emissiveIntensity = senales.marcha ? 1.6 : 0.05
-    botonera.luces.paro.emissiveIntensity =
-      !senales.marcha && !senales.emergencia ? 0.9 : 0.05
-    botonera.luces.restablecer.emissiveIntensity = senales.emergencia
-      ? 1.6
-      : 0.05
-    botonera.hongo.position.y = senales.emergencia ? 0.069 : 0.076
+    prender(cpu.falla, false)
     tablero.aguja.rotation.z =
       Math.PI * 0.75 - (senales.presion / 10) * Math.PI * 1.5
-
-    if (senales.motorBanda) {
-      const avance = VELOCIDAD_BANDA * segundos
-      m.tBanda.offset.x -= avance / (LARGO_BANDA / 12)
-      for (const polea of celda.poleas) polea.rotation.z -= avance / 0.03
-    }
   }
 
   // --- camara: vuelo suave hacia la vista elegida
@@ -270,42 +251,6 @@ export function crearEscena({
     vuelo = null
   }
   orbita.addEventListener('start', cancelarVuelo)
-
-  // --- clics en la botonera
-  const rayo = new THREE.Raycaster()
-  const puntero = new THREE.Vector2()
-  let presion: [number, number] | null = null
-  const botonBajo = (evento: PointerEvent): Mando | undefined => {
-    if (gemelo.modo !== 'simulacion') return undefined
-    const r = lienzo.getBoundingClientRect()
-    puntero.set(
-      ((evento.clientX - r.left) / r.width) * 2 - 1,
-      -((evento.clientY - r.top) / r.height) * 2 + 1,
-    )
-    rayo.setFromCamera(puntero, camara)
-    const tocado = rayo.intersectObjects(tablero.botonera.pulsables, false)[0]
-    return tocado?.object.userData.mando as Mando | undefined
-  }
-  const alBajar = (evento: PointerEvent) => {
-    presion = [evento.clientX, evento.clientY]
-  }
-  const alSubir = (evento: PointerEvent) => {
-    // si el puntero se movio, la persona estaba girando la camara
-    if (
-      !presion ||
-      Math.hypot(evento.clientX - presion[0], evento.clientY - presion[1]) > 5
-    )
-      return
-    const mando = botonBajo(evento)
-    if (mando) alPulsar(mando)
-  }
-  const alMover = (evento: PointerEvent) => {
-    if (evento.buttons === 0)
-      lienzo.style.cursor = botonBajo(evento) ? 'pointer' : 'grab'
-  }
-  lienzo.addEventListener('pointerdown', alBajar)
-  lienzo.addEventListener('pointerup', alSubir)
-  lienzo.addEventListener('pointermove', alMover)
 
   // --- bucle de dibujo
   let ancho = 0
@@ -345,7 +290,7 @@ export function crearEscena({
     anterior = ahora
     ajustarTamano()
     avanzarGemelo(gemelo, segundos)
-    pintar(segundos * gemelo.velocidad)
+    pintar()
 
     if (vuelo) {
       vuelo.t = Math.min(1, vuelo.t + segundos / SEGUNDOS_VUELO)
@@ -391,9 +336,6 @@ export function crearEscena({
     mostrarEtiquetas: etiquetas.mostrar,
     destruir() {
       cancelAnimationFrame(cuadroPendiente)
-      lienzo.removeEventListener('pointerdown', alBajar)
-      lienzo.removeEventListener('pointerup', alSubir)
-      lienzo.removeEventListener('pointermove', alMover)
       orbita.removeEventListener('start', cancelarVuelo)
       orbita.dispose()
       etiquetas.destruir()

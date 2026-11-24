@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { crearEscena, type Escena } from './escena'
-import type { Gemelo, Mando } from './gemelo'
+import type { Gemelo } from './gemelo'
 import type { Vista } from './vistas'
 
 type Props = {
@@ -10,7 +10,6 @@ type Props = {
   conEtiquetas: boolean
   obstaculos: () => DOMRect[]
   alRefrescar: () => void
-  alPulsar: (mando: Mando) => void
 }
 
 // Se prueba en un lienzo aparte y se suelta el contexto para no gastar uno de mas.
@@ -32,7 +31,6 @@ export default function VistaCelda({
   conEtiquetas,
   obstaculos,
   alRefrescar,
-  alPulsar,
 }: Props) {
   const { t } = useTranslation()
   const lienzo = useRef<HTMLCanvasElement>(null)
@@ -49,7 +47,6 @@ export default function VistaCelda({
         gemelo,
         obstaculos,
         alRefrescar,
-        alPulsar,
       })
     } catch {
       // la tarjeta grafica no respondio: la vista queda vacia y lo demas sigue
@@ -59,7 +56,7 @@ export default function VistaCelda({
       escena.current?.destruir()
       escena.current = null
     }
-  }, [sinWebGL, gemelo, obstaculos, alRefrescar, alPulsar])
+  }, [sinWebGL, gemelo, obstaculos, alRefrescar])
 
   useEffect(() => {
     escena.current?.irAVista(vista)

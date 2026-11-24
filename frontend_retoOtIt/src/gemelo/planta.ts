@@ -1,26 +1,33 @@
-// La parte física de la celda: mueve cilindros, carro, piezas y cajas según las salidas del PLC
+// La parte física de la celda: mueve cilindros, carro, piezas y cajas según las salidas de los PLC
 // y deja en las señales lo que verían los sensores. No dibuja nada.
+// No hay banda: la pieza baja sola por la guía inclinada, se detiene en el tope del marcado
+// y, cuando el tope baja, cae al depósito donde la toma la garra.
 import {
+  ACELERACION_GUIA,
   alturaCarril,
-  BANDA_X0,
   CAJA_X,
   CAJA_Y,
   CAJA_Z,
   CAJAS_POR_TARIMA,
   CARRERA,
   CARRILES,
+  GUIA_X0,
+  GUIA_X1,
   PARADAS_CARRO,
   PIEZAS_POR_CAJA,
   RAMPA,
   TOTAL_PIEZAS,
-  VELOCIDAD_BANDA,
+  VELOCIDAD_MAXIMA_GUIA,
   X_ALMACEN,
   X_IDENTIFICACION,
   X_MARCADO,
   X_TOMA,
+  X_TOPE,
   Y_PIEZA,
+  Y_PIEZA_TOMA,
   Y_PINZA_ARRIBA,
-  Z_BANDA,
+  yPiezaEn,
+  Z_LINEA,
   type P3,
 } from './medidas'
 import type { Senales } from './senales'
@@ -55,7 +62,8 @@ export type Caja = {
 }
 
 export type Planta = {
-  extension: { A: number; B: number; C: number; Z: number } // 0 = atras, 1 = afuera
+  // 0 = atras, 1 = afuera. El tope (T) esta afuera, deteniendo piezas, hasta que yT lo baja.
+  extension: { A: number; B: number; C: number; Z: number; T: number }
   carro: { x: number; pinza: number; lleva: Pieza | null }
   piezas: Pieza[]
   cajas: Caja[]
@@ -108,7 +116,7 @@ export function crearPlanta(azar: () => number = Math.random): Planta {
       fila: i,
       x: X_ALMACEN,
       y: 0,
-      z: Z_BANDA,
+      z: Z_LINEA,
       v: 0,
       vy: 0,
       giro: 0,
@@ -119,7 +127,7 @@ export function crearPlanta(azar: () => number = Math.random): Planta {
     })
   }
   return {
-    extension: { A: 0, B: 0, C: 0, Z: 0 },
+    extension: { A: 0, B: 0, C: 0, Z: 0, T: 1 },
     carro: { x: X_TOMA, pinza: 0, lleva: null },
     piezas,
     cajas: [cajaVacia('pl'), cajaVacia('al')],
@@ -152,7 +160,7 @@ function sacarDelAlmacen(planta: Planta) {
     estado: 'linea',
     x: X_ALMACEN,
     y: Y_PIEZA,
-    z: Z_BANDA,
+    z: Z_LINEA,
     v: 0,
     vy: 0,
     giro: 0,
@@ -170,12 +178,14 @@ function moverPinza(planta: Planta) {
     const pieza = carro.lleva
     pieza.x = carro.x
     pieza.y = altura
-    pieza.z = Z_BANDA
+    pieza.z = Z_LINEA
     if (carro.pinza < 0.5) {
       // la pinza suelta
       carro.lleva = null
       if (Math.abs(pieza.x - X_TOMA) < 0.04) {
         pieza.estado = 'linea'
+        pieza.v = 0
+        pieza.vy = 0
       } else {
         let cercano = 0
         CARRILES.forEach((x, i) => {
@@ -251,15 +261,56 @@ function moverCajas(planta: Planta, s: Senales, dt: number) {
   })
 }
 
+// Una pieza suelta en la linea: en la parte plana solo se mueve si la empuja el alimentador;
+// en la pendiente baja sola hasta el tope o, si el tope esta abajo, hasta caer al deposito.
+function moverEnLinea(
+  p: Pieza,
+  caraAlimentador: number,
+  topeArriba: boolean,
+  sujeta: boolean,
+  dt: number,
+) {
+  if (p.x - 0.025 < caraAlimentador) p.x = caraAlimentador + 0.025
+
+  if (p.x < GUIA_X1 + 0.02) {
+    // sobre la guia
+    const enMarcado = Math.abs(p.x - X_MARCADO) < 0.03
+    if (p.x <= GUIA_X0 + 0.005 || (sujeta && enMarcado)) p.v = 0
+    else p.v = Math.min(VELOCIDAD_MAXIMA_GUIA, p.v + ACELERACION_GUIA * dt)
+    p.x += p.v * dt
+    const frente = X_TOPE - 0.029 // donde queda la pieza recargada en el tope
+    // solo detiene a la pieza que llega; la que ya paso por encima sigue su camino
+    if (topeArriba && p.x > frente && p.x < frente + 0.012) {
+      p.x = frente
+      p.v = 0
+    }
+    p.y = yPiezaEn(p.x)
+    p.vy = 0
+    return
+  }
+
+  // cae al deposito; el fondo tiene una ligera pendiente y la pieza resbala
+  // hasta recargarse en la pared, justo debajo de la garra
+  p.vy -= 5 * dt
+  p.y = Math.max(Y_PIEZA_TOMA, p.y + p.vy * dt)
+  if (p.y <= Y_PIEZA_TOMA) {
+    p.vy = 0
+    p.v = Math.max(p.v * 0.98, 0.08)
+  }
+  p.x = Math.min(X_TOMA, p.x + p.v * dt)
+  if (p.x >= X_TOMA) p.v = 0
+}
+
 export function avanzarPlanta(planta: Planta, s: Senales, dt: number) {
   const { extension, carro } = planta
   extension.A = hacia(extension.A, s.yA ? 1 : 0, dt / 0.45)
   extension.B = hacia(extension.B, s.yB ? 1 : 0, dt / 0.22)
   extension.C = hacia(extension.C, s.yC ? 1 : 0, dt / (s.yC ? 0.2 : 0.3))
   extension.Z = hacia(extension.Z, s.yZ ? 1 : 0, dt / 0.38)
+  extension.T = hacia(extension.T, s.yT ? 0 : 1, dt / 0.12)
   carro.pinza = hacia(carro.pinza, s.yG ? 1 : 0, dt / 0.15)
   const objetivoX = PARADAS_CARRO[s.posX] ?? X_TOMA
-  if (!s.emergencia) carro.x = hacia(carro.x, objetivoX, 0.6 * dt)
+  carro.x = hacia(carro.x, objetivoX, 0.6 * dt)
 
   if (s.yA && !planta.alimentaba) sacarDelAlmacen(planta)
   planta.alimentaba = s.yA
@@ -268,23 +319,28 @@ export function avanzarPlanta(planta: Planta, s: Senales, dt: number) {
   moverPinza(planta)
 
   const caraAlimentador = -0.7 + extension.A * CARRERA.A
+  const topeArriba = extension.T > 0.5
+  const sujeta = extension.B > 0.5
   let sc1 = false
   let si1 = false
-  let ls4 = false
   let sc2 = false
+  let ls4 = false
+  let si3 = false
   for (const p of planta.piezas) {
     if (p.estado === 'linea') {
-      if (p.x - 0.025 < caraAlimentador) p.x = caraAlimentador + 0.025
-      if (s.motorBanda && p.x > BANDA_X0 + 0.01)
-        p.x = Math.min(X_TOMA + 0.002, p.x + VELOCIDAD_BANDA * dt)
+      moverEnLinea(p, caraAlimentador, topeArriba, sujeta, dt)
       if (Math.abs(p.x - X_IDENTIFICACION) < 0.03) {
         sc1 = true
         if (p.tipo === 'al') si1 = true
       }
-      if (p.x >= X_TOMA - 0.004) ls4 = true
       if (p.x > X_MARCADO - 0.004 && p.x < X_MARCADO + 0.03) sc2 = true
       if (extension.C > 0.97 && Math.abs(p.x - X_MARCADO) < 0.03)
         p.marcada = true
+      // LS-4 y SI-3 son de la garra: miran el deposito
+      if (p.x >= X_TOMA - 0.004 && p.y <= Y_PIEZA_TOMA + 0.002) {
+        ls4 = true
+        if (p.tipo === 'al') si3 = true
+      }
     } else if (p.estado === 'carril') {
       p.v += 2.4 * dt
       p.z += p.v * dt
@@ -320,8 +376,9 @@ export function avanzarPlanta(planta: Planta, s: Senales, dt: number) {
   // lo que ven los sensores
   s.sc1 = sc1
   s.si1 = si1
-  s.ls4 = ls4
   s.sc2 = sc2
+  s.ls4 = ls4
+  s.si3 = si3
   s.ls1 = extension.A < 0.02
   s.ls2 = extension.A > 0.98
   s.b0 = extension.B < 0.02
@@ -337,7 +394,7 @@ export function avanzarPlanta(planta: Planta, s: Senales, dt: number) {
   s.presion += ((enMovimiento ? 5.72 : 6) - s.presion) * Math.min(1, dt * 6)
 }
 
-// el operador retira lo que quedo en la linea
+// el operador retira lo que quedo en la linea y en el deposito
 export function despejarLinea(planta: Planta) {
   planta.carro.lleva = null
   for (const p of planta.piezas) {
@@ -345,6 +402,7 @@ export function despejarLinea(planta: Planta) {
       reciclar(planta, p)
   }
   planta.caida = 0
+  planta.extension.T = 1
 }
 
 export const estaEmpacando = (planta: Planta) =>

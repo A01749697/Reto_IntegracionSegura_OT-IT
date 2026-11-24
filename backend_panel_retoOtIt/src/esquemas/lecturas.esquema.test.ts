@@ -45,7 +45,7 @@ describe('validarConsultaHistorial', () => {
     expect(validarConsultaHistorial(sinHasta).ok).toBe(false)
   })
 
-  it.each(['', 'a'.repeat(21), "S7';--", 'S7 1200', 123, ['S7-1200']])(
+  it.each(['', 'S7-400', "S7';--", 'S7 1200', '300', 123, ['S7-1200']])(
     'rechaza el plc %j',
     (plc) => {
       expect(validarConsultaHistorial({ ...consultaValida, plc }).ok).toBe(
@@ -54,7 +54,7 @@ describe('validarConsultaHistorial', () => {
     },
   )
 
-  it.each(['Contador', '1abc', 'a-b', 'a'.repeat(65), '', 7])(
+  it.each(["TAB_A';--", 'con espacio', 'a'.repeat(101), '', 7])(
     'rechaza la variable %j',
     (variable) => {
       expect(validarConsultaHistorial({ ...consultaValida, variable }).ok).toBe(

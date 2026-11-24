@@ -77,6 +77,17 @@ export function leerEntorno(
   }
 
   const host = variables.DB_HOST ?? 'db'
+  // El historian puede estar en otro lado (PostgreSQL del host u otro servidor).
+  // Si no se indica, se usa la misma base del panel.
+  const hostHistorian = variables.HISTORIAN_HOST || host
+  const puertoHistorian = Number(variables.HISTORIAN_PORT ?? 5432)
+  if (
+    !Number.isInteger(puertoHistorian) ||
+    puertoHistorian < 1 ||
+    puertoHistorian > 65535
+  ) {
+    throw new Error('HISTORIAN_PORT debe ser un número entre 1 y 65535')
+  }
 
   return {
     puerto,
@@ -85,12 +96,13 @@ export function leerEntorno(
     regionAws: variables.AWS_REGION ?? 'us-east-2',
     urlApiReceptora: leerUrlApiReceptora(variables),
     rutaCertificado: variables.RUTA_CERTIFICADO || '/certs-servidor/reto.crt',
+    // Base "historian": el rol app_lectura solo puede hacer SELECT.
     baseDatosLectura: {
-      host,
-      puerto: 5432,
-      usuario: 'reto_lectura',
+      host: hostHistorian,
+      puerto: puertoHistorian,
+      usuario: 'app_lectura',
       contrasena: leerObligatoria(variables, 'DB_READER_PASSWORD'),
-      nombre: 'reto',
+      nombre: 'historian',
     },
     baseDatosPanel: {
       host,

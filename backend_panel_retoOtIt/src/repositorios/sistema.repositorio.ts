@@ -1,4 +1,4 @@
-// Tamaños de la base de datos. Pregunta solo por tamaños, no lee filas de ninguna tabla.
+// Tamaños de la base historian (las tres tablas de telemetría juntas). Pregunta solo por tamaños, no lee filas de ninguna tabla.
 import type { Pool } from 'pg'
 
 export type TamanosBase = {
@@ -12,7 +12,9 @@ type FilaTamanos = { total: string; lecturas: string }
 export async function obtenerTamanosBase(pool: Pool): Promise<TamanosBase> {
   const resultado = await pool.query<FilaTamanos>(
     `SELECT pg_database_size(current_database())::text AS total,
-            pg_total_relation_size('public.lecturas')::text AS lecturas`,
+            (pg_total_relation_size('public.telemetria_300')
+             + pg_total_relation_size('public.telemetria_1500')
+             + pg_total_relation_size('public.telemetria_1200'))::text AS lecturas`,
   )
   const fila = resultado.rows[0]
   if (!fila) throw new Error('La base no devolvió los tamaños')

@@ -406,12 +406,12 @@ export function construirNave(escena: THREE.Scene, m: Materiales) {
     if (!g) return
     g.fillStyle = '#0d1820'
     g.fillRect(0, 0, 256, 160)
-    g.fillStyle = s.emergencia ? '#f0524a' : s.paso ? '#3fd07a' : '#f2b233'
+    g.fillStyle = s.marcha ? '#3fd07a' : '#f0524a'
     g.fillRect(0, 0, 256, 26)
     g.fillStyle = '#0d1820'
     g.font = '700 15px Arial'
     g.textAlign = 'left'
-    const estado = s.emergencia ? 'EMERGENCIA' : s.paso ? 'EN CICLO' : 'REPOSO'
+    const estado = s.marcha ? 'EN MARCHA' : 'PARO'
     g.fillText(`CELDA 01  ${estado}`, 8, 18)
     g.fillStyle = '#8fa3b1'
     g.font = '12px Arial'

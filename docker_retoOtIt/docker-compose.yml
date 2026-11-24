@@ -33,9 +33,14 @@ services:
       db:
         condition: service_healthy
     environment:
-      DB_HOST: db
+      # Base "historian" (db/historian.sql), rol app_insert. Si el historian esta en el
+      # PostgreSQL del host, en .env: HISTORIAN_HOST=host.docker.internal
+      DB_HOST: ${HISTORIAN_HOST:-db}
+      DB_PORT: ${HISTORIAN_PORT:-5432}
       DB_INGEST_PASSWORD: ${DB_INGEST_PASSWORD:?falta DB_INGEST_PASSWORD}
       API_INGEST_TOKEN: ${API_INGEST_TOKEN:?falta API_INGEST_TOKEN}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "127.0.0.1:3001:3001"
     read_only: true
@@ -65,11 +70,16 @@ services:
         condition: service_healthy
     environment:
       DB_HOST: db
+      # Base "historian", rol app_lectura. Vacio = la misma base "db" del panel.
+      HISTORIAN_HOST: ${HISTORIAN_HOST:-}
+      HISTORIAN_PORT: ${HISTORIAN_PORT:-5432}
       DB_READER_PASSWORD: ${DB_READER_PASSWORD:?falta DB_READER_PASSWORD}
       DB_PANEL_PASSWORD: ${DB_PANEL_PASSWORD:?falta DB_PANEL_PASSWORD}
       URL_PUBLICA: ${URL_PUBLICA:?falta URL_PUBLICA}
       CORREO_REMITENTE: ${CORREO_REMITENTE:?falta CORREO_REMITENTE}
       AWS_REGION: ${AWS_REGION:-us-east-2}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       # Solo lectura. Para ver cuántos días le quedan al certificado de nginx (el certificado es público).
       - /etc/ssl/certs:/certs-servidor:ro

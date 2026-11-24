@@ -65,6 +65,8 @@ describe('diccionarios', () => {
       'gemelo.escena.etiquetas.ls3',
       'gemelo.escena.etiquetas.sc2',
       'gemelo.escena.etiquetas.si2',
+      'gemelo.escena.etiquetas.si3',
+      'gemelo.escena.etiquetas.ls4',
     ])
     expect(iguales.filter((clave) => !permitidas.has(clave))).toEqual([])
   })
