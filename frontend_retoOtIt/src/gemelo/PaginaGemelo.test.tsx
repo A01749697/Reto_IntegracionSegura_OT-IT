@@ -370,6 +370,35 @@ describe('PaginaGemelo, pasos reales', () => {
     expect(desde.toISOString()).toBe('2026-11-24T20:00:05.000Z')
   })
 
+  it('la primera consulta no depende del reloj: pide los cambios más recientes que haya', async () => {
+    const props = preparar(lecturasDeAhora())
+    await waitFor(() => expect(props.obtenerHistorial).toHaveBeenCalled())
+    const desde = props.obtenerHistorial.mock.calls[0][2] as Date
+    expect(desde.getTime()).toBe(0)
+  })
+
+  it('avisa cuando la celda lleva rato sin cambiar de paso', async () => {
+    vi.useFakeTimers()
+    const props = preparar(lecturasDeAhora())
+    props.obtenerHistorial.mockResolvedValue({
+      ok: true,
+      puntos: [{ ts: '2026-11-24T20:00:05.000Z', valor: 8 }],
+    })
+    await vi.advanceTimersByTimeAsync(100)
+    expect(screen.queryByText(/no ha cambiado de paso/)).not.toBeInTheDocument()
+    await vi.advanceTimersByTimeAsync(65_000)
+    expect(screen.getByText(/no ha cambiado de paso/)).toBeInTheDocument()
+  })
+
+  it('avisa si el historian no tiene ningún TAB_PASO', async () => {
+    vi.useFakeTimers()
+    preparar(lecturasDeAhora())
+    await vi.advanceTimersByTimeAsync(65_000)
+    expect(
+      screen.getByText(/no tiene ningún registro de TAB_PASO/),
+    ).toBeInTheDocument()
+  })
+
   it('en simulación no pide pasos reales', async () => {
     vi.useFakeTimers()
     const props = preparar(lecturasDeAhora())

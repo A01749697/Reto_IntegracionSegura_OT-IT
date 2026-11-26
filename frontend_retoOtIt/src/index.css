@@ -22,6 +22,11 @@
   --color-zona-idmz: var(--c-idmz);
   --color-zona-it: var(--c-it);
   --color-zona-nube: var(--c-nube);
+
+  /* Series de las gráficas del tablero (validadas para daltonismo en los dos modos) */
+  --color-serie-al: var(--c-serie-al);
+  --color-serie-pl: var(--c-serie-pl);
+  --color-aviso: var(--c-aviso);
 }
 
 @theme {
@@ -52,6 +57,9 @@
   --c-idmz: #a08cff;
   --c-it: #2ec4b6;
   --c-nube: #62b0ff;
+  --c-serie-al: #338ced;
+  --c-serie-pl: #e76624;
+  --c-aviso: #f2b233;
 }
 
 :root[data-tema='claro'] {
@@ -71,6 +79,9 @@
   --c-idmz: #6d57e0;
   --c-it: #0d8a7e;
   --c-nube: #1f78d1;
+  --c-serie-al: #257de0;
+  --c-serie-pl: #f47230;
+  --c-aviso: #b07a00;
 }
 
 /* Sin elección guardada, se sigue al sistema (el script de index.html la fija antes de pintar). */
@@ -92,6 +103,9 @@
     --c-idmz: #6d57e0;
     --c-it: #0d8a7e;
     --c-nube: #1f78d1;
+    --c-serie-al: #257de0;
+    --c-serie-pl: #f47230;
+    --c-aviso: #b07a00;
   }
 }
 

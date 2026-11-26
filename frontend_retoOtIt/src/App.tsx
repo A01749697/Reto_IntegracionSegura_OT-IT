@@ -41,6 +41,7 @@ import { descargarArchivo } from './panel/descarga'
 import PaginaEstado from './panel/PaginaEstado'
 import PaginaInicio from './panel/PaginaInicio'
 import PaginaMiCuenta from './panel/PaginaMiCuenta'
+import PaginaTablero from './tablero/PaginaTablero'
 import PaginaNoEncontrada from './rutas/PaginaNoEncontrada'
 import { destinoDeSeccion, RAIZ } from './rutas/rutas'
 import { useDestino } from './rutas/useDestino'
@@ -217,6 +218,14 @@ function Contenido() {
         obtener={obtenerEstado}
         obtenerDisponibilidad={obtenerDisponibilidad}
         obtenerServidor={esAdmin ? obtenerServidor : undefined}
+        sesionCaducada={alCaducarSesion}
+      />
+    )
+  } else if (seccion === 'tablero') {
+    contenido = (
+      <PaginaTablero
+        obtenerLecturas={obtenerUltimasLecturas}
+        obtenerHistorial={obtenerHistorialNodo}
         sesionCaducada={alCaducarSesion}
       />
     )

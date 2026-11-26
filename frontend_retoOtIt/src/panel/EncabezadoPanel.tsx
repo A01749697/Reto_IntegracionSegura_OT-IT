@@ -10,6 +10,7 @@ export type Seccion =
   | 'bitacora'
   | 'datos'
   | 'estado'
+  | 'tablero'
   | 'gemelo'
   | 'cuenta'
   | 'ayuda'
@@ -30,6 +31,7 @@ const SECCIONES: { seccion: Pestana; soloAdmin: boolean }[] = [
   { seccion: 'bitacora', soloAdmin: true },
   { seccion: 'datos', soloAdmin: true },
   { seccion: 'estado', soloAdmin: false },
+  { seccion: 'tablero', soloAdmin: false },
   { seccion: 'gemelo', soloAdmin: false },
   { seccion: 'cuenta', soloAdmin: false },
 ]

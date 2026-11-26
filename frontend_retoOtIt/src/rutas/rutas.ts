@@ -18,6 +18,8 @@ const TRAMOS: Record<string, Destino> = {
   bitacora: { donde: 'panel', seccion: 'bitacora' },
   datos: { donde: 'panel', seccion: 'datos' },
   estado: { donde: 'panel', seccion: 'estado' },
+  tablero: { donde: 'panel', seccion: 'tablero' },
+  gemelo: { donde: 'panel', seccion: 'gemelo' },
   'mi-cuenta': { donde: 'panel', seccion: 'cuenta' },
   ayuda: { donde: 'panel', seccion: 'ayuda' },
 }
