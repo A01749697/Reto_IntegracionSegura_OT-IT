@@ -42,6 +42,8 @@ import PaginaEstado from './panel/PaginaEstado'
 import PaginaInicio from './panel/PaginaInicio'
 import PaginaMiCuenta from './panel/PaginaMiCuenta'
 import PaginaTablero from './tablero/PaginaTablero'
+import { obtenerIndicadores } from './indicadores/apiIndicadores'
+import PaginaIndicadores from './indicadores/PaginaIndicadores'
 import PaginaNoEncontrada from './rutas/PaginaNoEncontrada'
 import { destinoDeSeccion, RAIZ } from './rutas/rutas'
 import { useDestino } from './rutas/useDestino'
@@ -218,6 +220,14 @@ function Contenido() {
         obtener={obtenerEstado}
         obtenerDisponibilidad={obtenerDisponibilidad}
         obtenerServidor={esAdmin ? obtenerServidor : undefined}
+        sesionCaducada={alCaducarSesion}
+      />
+    )
+  } else if (seccion === 'indicadores') {
+    contenido = (
+      <PaginaIndicadores
+        obtener={obtenerIndicadores}
+        descargar={descargarArchivo}
         sesionCaducada={alCaducarSesion}
       />
     )

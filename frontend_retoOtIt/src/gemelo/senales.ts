@@ -19,7 +19,7 @@ export type Senales = {
   yT: boolean // V4: baja el tope y la pieza sigue hacia el deposito
   yZ: boolean // garra: bajar el eje Z
   yG: boolean // garra: cerrar la pinza
-  posX: number // 0 = deposito, 1-2 = carriles de plastico, 3-4 = carriles de aluminio
+  posX: number // 0 = deposito, 1-2 = carriles de aluminio, 3-4 = carriles de plastico
   torreVerde: boolean
   torreRoja: boolean
   // entradas

@@ -24,6 +24,7 @@ describe('rutas', () => {
     ['#/bitacora', { donde: 'panel', seccion: 'bitacora' }],
     ['#/datos', { donde: 'panel', seccion: 'datos' }],
     ['#/estado', { donde: 'panel', seccion: 'estado' }],
+    ['#/indicadores', { donde: 'panel', seccion: 'indicadores' }],
     ['#/tablero', { donde: 'panel', seccion: 'tablero' }],
     ['#/gemelo', { donde: 'panel', seccion: 'gemelo' }],
     ['#/mi-cuenta', { donde: 'panel', seccion: 'cuenta' }],

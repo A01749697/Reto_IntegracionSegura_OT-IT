@@ -26,6 +26,10 @@ export const seguridad = {
   },
   lecturas: {
     maximoPuntosHistorial: 1000,
+    // indicadores: lo más que se lee de un nodo y lo más largo que se puede pedir
+    maximoPuntosIndicadores: 300_000,
+    maximoDiasIndicadores: 93,
+    maximoCubetasIndicadores: 100,
   },
   sistema: {
     // pasado este tiempo sin lecturas nuevas, el estado dice "retrasado"

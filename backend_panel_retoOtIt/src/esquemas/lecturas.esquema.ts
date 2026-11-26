@@ -80,3 +80,63 @@ export function validarConsultaHistorial(consulta: unknown): ResultadoConsulta {
 
   return { ok: true, consulta: { plc, variable, desde, hasta } }
 }
+
+// Indicadores: un periodo partido en tramos de una hora o un día.
+export type ConsultaIndicadores = {
+  desde: Date
+  hasta: Date
+  cubetaSegundos: number
+}
+
+export type ResultadoIndicadores =
+  { ok: true; consulta: ConsultaIndicadores } | { ok: false; error: string }
+
+const CUBETAS: Record<string, number> = { hora: 3600, dia: 86400 }
+const CAMPOS_INDICADORES = ['desde', 'hasta', 'cubeta']
+
+export function validarConsultaIndicadores(
+  consulta: unknown,
+  limites: { maximoDias: number; maximoCubetas: number },
+): ResultadoIndicadores {
+  if (!esObjeto(consulta))
+    return { ok: false, error: 'La consulta no es válida' }
+  const claves = Object.keys(consulta)
+  if (
+    claves.length !== CAMPOS_INDICADORES.length ||
+    !claves.every((c) => CAMPOS_INDICADORES.includes(c))
+  ) {
+    return {
+      ok: false,
+      error: 'Se necesitan exactamente desde, hasta y cubeta',
+    }
+  }
+  const { cubeta } = consulta
+  if (typeof cubeta !== 'string' || !Object.hasOwn(CUBETAS, cubeta)) {
+    return { ok: false, error: 'cubeta debe ser hora o dia' }
+  }
+  const desde = leerFecha(consulta.desde)
+  const hasta = leerFecha(consulta.hasta)
+  if (!desde || !hasta) {
+    return {
+      ok: false,
+      error:
+        'desde y hasta deben ser fechas ISO en UTC, por ejemplo 2026-10-28T06:00:00Z',
+    }
+  }
+  const largo = hasta.getTime() - desde.getTime()
+  if (largo <= 0) return { ok: false, error: 'desde debe ser anterior a hasta' }
+  if (largo > limites.maximoDias * 86400_000) {
+    return {
+      ok: false,
+      error: `El periodo no puede pasar de ${limites.maximoDias} días`,
+    }
+  }
+  const cubetaSegundos = CUBETAS[cubeta] ?? 3600
+  if (largo / (cubetaSegundos * 1000) > limites.maximoCubetas) {
+    return {
+      ok: false,
+      error: `El periodo no puede tener más de ${limites.maximoCubetas} tramos`,
+    }
+  }
+  return { ok: true, consulta: { desde, hasta, cubetaSegundos } }
+}

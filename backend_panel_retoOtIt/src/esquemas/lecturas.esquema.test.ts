@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest'
-import { validarConsultaHistorial } from './lecturas.esquema'
+import {
+  validarConsultaHistorial,
+  validarConsultaIndicadores,
+} from './lecturas.esquema'
 
 const consultaValida = {
   plc: 'S7-1500',
@@ -89,5 +92,39 @@ describe('validarConsultaHistorial', () => {
       hasta: consultaValida.desde,
     }
     expect(validarConsultaHistorial(alReves).ok).toBe(false)
+  })
+})
+
+describe('validarConsultaIndicadores', () => {
+  const limites = { maximoDias: 93, maximoCubetas: 100 }
+  const base = {
+    desde: '2026-11-01T06:00:00Z',
+    hasta: '2026-11-08T06:00:00Z',
+    cubeta: 'dia',
+  }
+
+  it('acepta un periodo en días u horas', () => {
+    expect(validarConsultaIndicadores(base, limites)).toEqual({
+      ok: true,
+      consulta: {
+        desde: new Date('2026-11-01T06:00:00Z'),
+        hasta: new Date('2026-11-08T06:00:00Z'),
+        cubetaSegundos: 86400,
+      },
+    })
+    const hoy = { ...base, hasta: '2026-11-02T06:00:00Z', cubeta: 'hora' }
+    expect(validarConsultaIndicadores(hoy, limites).ok).toBe(true)
+  })
+
+  it.each([
+    [{ ...base, cubeta: 'minuto' }],
+    [{ ...base, extra: '1' }],
+    [{ desde: base.desde, hasta: base.hasta }],
+    [{ ...base, desde: 'ayer' }],
+    [{ ...base, desde: base.hasta }],
+    [{ ...base, hasta: '2027-03-01T06:00:00Z' }], // más de 93 días
+    [{ ...base, cubeta: 'hora' }], // 168 tramos de una hora
+  ])('rechaza %o', (consulta) => {
+    expect(validarConsultaIndicadores(consulta, limites).ok).toBe(false)
   })
 })

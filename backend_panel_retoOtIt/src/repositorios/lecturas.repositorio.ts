@@ -195,3 +195,38 @@ export async function obtenerActividadLecturas(
   )
   return { ahora, primera, cubetas: resultado.rows }
 }
+
+export type Serie = { puntos: PuntoHistorial[]; truncado: boolean }
+
+// Todos los cambios de un nodo entre dos fechas, más el último de antes (para saber cómo
+// estaba al empezar). Sin el tope de 1000 del historial: es para calcular, no para graficar.
+export async function obtenerSerie(
+  pool: Pool,
+  plc: PlcHistorian,
+  nodo: string,
+  desde: Date,
+  hasta: Date,
+  limite: number,
+): Promise<Serie> {
+  const tabla = TABLAS_POR_PLC[plc]
+  const resultado = await pool.query<{
+    ts: Date
+    valor: string
+    antes: boolean
+  }>(
+    `(SELECT ts_plc AS ts, valor, true AS antes FROM ${tabla}
+       WHERE nodo = $1 AND ts_plc < $2 ORDER BY ts_plc DESC LIMIT 1)
+     UNION ALL
+     (SELECT ts_plc AS ts, valor, false AS antes FROM ${tabla}
+       WHERE nodo = $1 AND ts_plc >= $2 AND ts_plc <= $3 ORDER BY ts_plc LIMIT $4)`,
+    [nodo, desde.toISOString(), hasta.toISOString(), limite],
+  )
+  const puntos: PuntoHistorial[] = []
+  for (const fila of resultado.rows) {
+    const valor = valorNumerico(fila.valor)
+    if (valor !== null) puntos.push({ ts: fila.ts, valor })
+  }
+  puntos.sort((a, b) => a.ts.getTime() - b.ts.getTime())
+  const enVentana = resultado.rows.filter((f) => !f.antes).length
+  return { puntos, truncado: enVentana >= limite }
+}

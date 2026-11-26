@@ -808,7 +808,7 @@ function portico(E: Grupo, m: Materiales, ejeZ: Piston) {
   return { carro, banderas, acomodarCadena }
 }
 
-// Rampa de cuatro carriles: dos para plastico y dos para aluminio.
+// Rampa de cuatro carriles: dos para aluminio y dos para plastico.
 function rampa(E: Grupo, m: Materiales) {
   const largo = Math.hypot(0.275, 0.09)
   const angulo = Math.atan(RAMPA.pendiente)
@@ -849,13 +849,13 @@ function rampa(E: Grupo, m: Materiales) {
     placa.position.set(x, alturaCarril(-0.135) + 0.03, -0.14)
     E.add(placa)
   }
-  rotulo('PLASTICO', 0.6025)
-  rotulo('ALUMINIO', 0.7725)
+  rotulo('ALUMINIO', 0.6025)
+  rotulo('PLASTICO', 0.7725)
 }
 
 const NOMBRE_TIPO: Record<Tipo, string> = { al: 'ALUMINIO', pl: 'PLASTICO' }
 const COLOR_TIPO: Record<Tipo, string> = { al: '#5c6b78', pl: '#1d2126' }
-const TIPO_CAJA: Tipo[] = ['pl', 'al'] // en el mismo orden que CAJA_X
+const TIPO_CAJA: Tipo[] = ['al', 'pl'] // en el mismo orden que CAJA_X
 
 // Camas de rodillos con una caja de carton por material.
 function cajasEmpaque(E: Grupo, m: Materiales) {

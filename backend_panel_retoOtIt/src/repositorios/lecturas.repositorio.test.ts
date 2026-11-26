@@ -3,6 +3,7 @@ import type { Pool } from 'pg'
 import {
   obtenerActividadLecturas,
   obtenerHistorial,
+  obtenerSerie,
   obtenerUltimasLecturas,
   valorNumerico,
 } from './lecturas.repositorio'
@@ -125,5 +126,57 @@ describe('obtenerActividadLecturas', () => {
     )
     expect(actividad.primera).toBeNull()
     expect(actividad.cubetas).toEqual([])
+  })
+})
+
+describe('obtenerSerie', () => {
+  const desde = new Date('2026-11-24T06:00:00Z')
+  const hasta = new Date('2026-11-25T06:00:00Z')
+
+  it('trae el último valor de antes y los de la ventana, en orden y como número', async () => {
+    const query = vi.fn().mockResolvedValue({
+      rows: [
+        { ts: new Date('2026-11-23T20:00:00Z'), valor: '5', antes: true },
+        { ts: new Date('2026-11-24T07:00:00Z'), valor: '6', antes: false },
+        { ts: new Date('2026-11-24T08:00:00Z'), valor: 'hola', antes: false },
+      ],
+    })
+    const serie = await obtenerSerie(
+      { query } as unknown as Pool,
+      'S7-1500',
+      'TAB_ALUMINIO',
+      desde,
+      hasta,
+      10,
+    )
+    expect(serie.puntos.map((p) => p.valor)).toEqual([5, 6])
+    expect(serie.truncado).toBe(false)
+    const [texto, parametros] = query.mock.calls[0] as [string, unknown[]]
+    expect(texto).toContain('telemetria_1500')
+    expect(texto).not.toContain('TAB_ALUMINIO')
+    expect(parametros).toEqual([
+      'TAB_ALUMINIO',
+      desde.toISOString(),
+      hasta.toISOString(),
+      10,
+    ])
+  })
+
+  it('avisa si llegó al tope', async () => {
+    const query = vi.fn().mockResolvedValue({
+      rows: [
+        { ts: new Date('2026-11-24T07:00:00Z'), valor: '1', antes: false },
+        { ts: new Date('2026-11-24T07:01:00Z'), valor: '2', antes: false },
+      ],
+    })
+    const serie = await obtenerSerie(
+      { query } as unknown as Pool,
+      'S7-1500',
+      'TAB_PASO',
+      desde,
+      hasta,
+      2,
+    )
+    expect(serie.truncado).toBe(true)
   })
 })
