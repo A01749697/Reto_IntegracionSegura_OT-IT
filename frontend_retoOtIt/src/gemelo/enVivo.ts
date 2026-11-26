@@ -1,6 +1,7 @@
 // Convierte las lecturas que llegan del historian en lo que el gemelo necesita.
 // Los nombres de los nodos que se usan por su nombre están en nodos.ts.
 import type { UltimaLectura } from './apiLecturas'
+import type { Tipo } from './planta'
 import {
   ESTACIONES,
   ESTADOS_TORRETA,
@@ -14,6 +15,8 @@ export type NodoLeido = { nodo: string; valor: number; ts: string }
 export type LecturasCelda = {
   torreta: number | null // estado de la torreta (ver ESTADOS_TORRETA)
   torretaReal: number | null // lo que prende de verdad el S7-1200
+  piezasAluminio: number | null // contador TAB_ALUMINIO
+  piezasOtras: number | null // contador TAB_OTRAS
   latido: number | null
   // todos los nodos de cada estacion, ordenados por nombre
   estaciones: Record<Estacion, NodoLeido[]>
@@ -33,6 +36,8 @@ function vacias(): Record<Estacion, NodoLeido[]> {
 export const SIN_LECTURAS: LecturasCelda = {
   torreta: null,
   torretaReal: null,
+  piezasAluminio: null,
+  piezasOtras: null,
   latido: null,
   estaciones: vacias(),
   ultima: null,
@@ -124,4 +129,35 @@ export function estadoEnlace(lecturas: LecturasCelda, ahora: number): Enlace {
   return ahora - Date.parse(lecturas.ultima) > SEGUNDOS_ATRASO * 1000
     ? 'atrasado'
     : 'en_vivo'
+}
+
+// Contadores de piezas del S7-1516 la última vez que se consultaron.
+export type Contadores = { al: number; pl: number }
+
+// Si pasó mucho tiempo entre consultas (pestaña dormida, red caída) no se meten todas:
+// solo las últimas, para que el gemelo no se quede minutos ponéndose al día.
+export const MAXIMO_POR_CONSULTA = 6
+
+// Cuántas piezas entraron desde la consulta anterior, y de qué material.
+// La primera consulta solo toma la referencia; si un contador baja, se reinició y se
+// toma como nueva referencia sin inventar piezas.
+export function piezasNuevas(
+  anterior: Contadores | null,
+  lecturas: LecturasCelda,
+): { contadores: Contadores | null; nuevas: Tipo[] } {
+  const { piezasAluminio, piezasOtras } = lecturas
+  if (piezasAluminio === null && piezasOtras === null)
+    return { contadores: anterior, nuevas: [] }
+  const actuales = {
+    al: Math.round(piezasAluminio ?? 0),
+    pl: Math.round(piezasOtras ?? 0),
+  }
+  if (anterior === null) return { contadores: actuales, nuevas: [] }
+  const al = Math.max(0, actuales.al - anterior.al)
+  const pl = Math.max(0, actuales.pl - anterior.pl)
+  const nuevas: Tipo[] = [
+    ...Array<Tipo>(al).fill('al'),
+    ...Array<Tipo>(pl).fill('pl'),
+  ]
+  return { contadores: actuales, nuevas: nuevas.slice(-MAXIMO_POR_CONSULTA) }
 }

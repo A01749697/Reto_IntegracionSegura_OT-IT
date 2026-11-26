@@ -20,6 +20,10 @@ export const NODOS = {
   // grupo Sistema: "DB_Telemetria".LATIDO, sube 1 cada dos ejecuciones del OB30.
   // No tiene ritmo fijo: se vigila que cambie, no cuánto.
   latido: { plc: 'S7-1500', nodo: 'LATIDO' },
+  // contadores del S7-1516: suben 1 por cada pieza que identifica (TAB_ALUMINIO + TAB_OTRAS
+  // = TAB_CICLOS). En vivo, cada vez que suben entra al gemelo una pieza de ese material.
+  piezasAluminio: { plc: 'S7-1500', nodo: 'TAB_ALUMINIO' },
+  piezasOtras: { plc: 'S7-1500', nodo: 'TAB_OTRAS' },
 } satisfies Record<string, NodoConocido>
 
 export type ClaveNodo = keyof typeof NODOS

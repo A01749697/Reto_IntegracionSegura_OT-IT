@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   avanzarGemelo,
   crearGemelo,
+  meterPiezas,
   ponerModo,
   ponerTorreta,
   ponerVelocidad,
@@ -133,11 +134,53 @@ describe('gemelo en vivo', () => {
     expect(gemelo.senales.torreRoja).toBe(true)
   })
 
-  it('la torreta real en verde pone a trabajar a los pistones', () => {
+  it('sin piezas contadas no entra nada, aunque la torreta esté en verde', () => {
     const gemelo = crearGemelo('vivo')
     ponerTorreta(gemelo, true)
+    correr(gemelo, 10)
+    expect(gemelo.plc.ciclos).toBe(0)
+    expect(gemelo.senales.torreVerde).toBe(true)
+    expect(gemelo.planta.almacenVisible).toBe(0)
+  })
+
+  it('cada pieza contada entra con su material real, en orden', () => {
+    // el azar diría siempre aluminio: si sale plástico, viene del contador
+    const gemelo = crearGemelo('vivo', () => 0)
+    meterPiezas(gemelo, ['pl', 'pl', 'al'])
+    expect(gemelo.planta.almacenVisible).toBe(3)
+    const vistos: string[] = []
+    for (let t = 0; t < 60 && piezas(gemelo) < 3; t += 0.05) {
+      avanzarGemelo(gemelo, 0.05)
+      const m = gemelo.senales.material
+      if (m && m !== vistos[vistos.length - 1]) vistos.push(m)
+      if (!m && vistos[vistos.length - 1] !== '') vistos.push('')
+    }
+    expect(vistos.filter(Boolean)).toEqual(['pl', 'pl', 'al'])
+    expect(gemelo.senales.piezasPl).toBe(2)
+    expect(gemelo.senales.piezasAl).toBe(1)
+    expect(gemelo.porEntrar).toEqual([])
+    expect(gemelo.planta.almacenVisible).toBe(0)
+  })
+
+  it('las piezas contadas entran aunque la torreta ya esté en rojo', () => {
+    const gemelo = crearGemelo('vivo')
+    ponerTorreta(gemelo, false)
+    meterPiezas(gemelo, ['al'])
     correrHasta(gemelo, () => piezas(gemelo) === 1)
-    expect(piezas(gemelo)).toBe(1)
+    expect(gemelo.senales.piezasAl).toBe(1)
+  })
+
+  it('no acumula más de las últimas seis piezas', () => {
+    const gemelo = crearGemelo('vivo')
+    meterPiezas(gemelo, Array(10).fill('pl'))
+    expect(gemelo.porEntrar).toHaveLength(6)
+  })
+
+  it('en simulación no se meten piezas reales', () => {
+    const gemelo = crearGemelo('simulacion')
+    meterPiezas(gemelo, ['al'])
+    expect(gemelo.porEntrar).toEqual([])
+    expect(gemelo.planta.almacenVisible).toBeNull()
   })
 
   it('al cambiar de modo empieza limpio', () => {

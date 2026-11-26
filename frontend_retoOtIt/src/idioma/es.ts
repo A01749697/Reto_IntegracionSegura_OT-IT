@@ -431,8 +431,10 @@ export const es = {
       torreta_amarilla: 'Amarilla: reset',
       torretaOtro: 'Estado {{valor}}: paro',
       latido: 'Latido (S7-1516)',
+      piezasAluminio: 'Piezas de aluminio',
+      piezasOtras: 'Piezas de plástico',
       alertaLatido:
-        'El latido del S7-1516 no cambia desde hace {{segundos}} s: puede estar detenido. Los pistones del gemelo quedan en paro.',
+        'El latido del S7-1516 no cambia desde hace {{segundos}} s: puede estar detenido.',
       alertaLuces:
         'La torreta real tiene todas las luces apagadas o varias prendidas a la vez.',
       alertaDistinta:

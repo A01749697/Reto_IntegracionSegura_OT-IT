@@ -434,8 +434,10 @@ export const en: Diccionario<typeof es> = {
       torreta_amarilla: 'Amber: reset',
       torretaOtro: 'State {{valor}}: stopped',
       latido: 'Heartbeat (S7-1516)',
+      piezasAluminio: 'Aluminium parts',
+      piezasOtras: 'Plastic parts',
       alertaLatido:
-        'The S7-1516 heartbeat has not changed for {{segundos}} s: it may have stopped. The twin pistons stay stopped.',
+        'The S7-1516 heartbeat has not changed for {{segundos}} s: it may have stopped.',
       alertaLuces:
         'The actual signal tower has every light off or several on at once.',
       alertaDistinta:

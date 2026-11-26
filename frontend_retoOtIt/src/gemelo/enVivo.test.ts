@@ -6,6 +6,8 @@ import {
   estadoEnlace,
   latidoDetenido,
   marchaPorTorreta,
+  piezasNuevas,
+  MAXIMO_POR_CONSULTA,
   resumirLecturas,
   SEGUNDOS_ATRASO,
   SEGUNDOS_LATIDO,
@@ -181,5 +183,52 @@ describe('vigilarLatido', () => {
   it('sin latido no hay nada que vigilar', () => {
     expect(vigilarLatido({ valor: 3, desde: t0 }, null, t0)).toBeNull()
     expect(latidoDetenido(null, t0 + 99_000)).toBeNull()
+  })
+})
+
+describe('piezasNuevas', () => {
+  const con = (al: number | null, pl: number | null) =>
+    resumirLecturas([
+      ...(al === null
+        ? []
+        : [lectura(NODOS.piezasAluminio.plc, NODOS.piezasAluminio.nodo, al)]),
+      ...(pl === null
+        ? []
+        : [lectura(NODOS.piezasOtras.plc, NODOS.piezasOtras.nodo, pl)]),
+    ])
+
+  it('la primera consulta solo toma la referencia', () => {
+    expect(piezasNuevas(null, con(52, 250))).toEqual({
+      contadores: { al: 52, pl: 250 },
+      nuevas: [],
+    })
+  })
+
+  it('lo que suba cada contador son piezas de ese material', () => {
+    const { contadores, nuevas } = piezasNuevas(
+      { al: 52, pl: 250 },
+      con(54, 251),
+    )
+    expect(contadores).toEqual({ al: 54, pl: 251 })
+    expect(nuevas).toEqual(['al', 'al', 'pl'])
+  })
+
+  it('si un contador baja se reinició: no inventa piezas', () => {
+    expect(piezasNuevas({ al: 52, pl: 250 }, con(0, 251)).nuevas).toEqual([
+      'pl',
+    ])
+  })
+
+  it('después de mucho tiempo sin consultar solo mete las últimas', () => {
+    expect(piezasNuevas({ al: 0, pl: 0 }, con(40, 0)).nuevas).toHaveLength(
+      MAXIMO_POR_CONSULTA,
+    )
+  })
+
+  it('sin contadores no cambia nada', () => {
+    expect(piezasNuevas({ al: 1, pl: 1 }, con(null, null))).toEqual({
+      contadores: { al: 1, pl: 1 },
+      nuevas: [],
+    })
   })
 })
