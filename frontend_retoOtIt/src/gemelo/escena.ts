@@ -186,7 +186,12 @@ export function crearEscena({
       malla.scale.setScalar(1)
       malla.rotation.set(0, 0, 0)
       if (pieza.estado === 'almacen') {
-        malla.visible = pieza.fila < PIEZAS_VISIBLES_ALMACEN
+        malla.visible =
+          pieza.fila <
+          Math.min(
+            PIEZAS_VISIBLES_ALMACEN,
+            planta.almacenVisible ?? PIEZAS_VISIBLES_ALMACEN,
+          )
         malla.position.set(
           X_ALMACEN,
           Y_PIEZA + (pieza.fila + planta.caida) * 0.05,

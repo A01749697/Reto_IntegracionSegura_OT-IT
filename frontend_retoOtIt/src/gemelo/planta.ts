@@ -70,6 +70,9 @@ export type Planta = {
   tarima: Tipo[] // cajas ya apiladas
   caida: number // la pila del almacen baja suave despues de alimentar
   alimentaba: boolean
+  // cuántas piezas del almacén se ven; null = todas (simulación). En vivo solo se ven
+  // las que el S7-1516 ya contó, con su material real.
+  almacenVisible: number | null
   azar: () => number
 }
 
@@ -134,6 +137,7 @@ export function crearPlanta(azar: () => number = Math.random): Planta {
     tarima: [],
     caida: 0,
     alimentaba: false,
+    almacenVisible: null,
     azar,
   }
 }
@@ -149,6 +153,16 @@ function reciclar(planta: Planta, pieza: Pieza) {
   pieza.caja = -1
   pieza.marcada = false
   pieza.tipo = planta.azar() < 0.5 ? 'al' : 'pl'
+}
+
+// En vivo: las piezas de abajo del almacén toman el material de las piezas reales que
+// faltan por meter, en orden; las demás no se ven.
+export function pintarAlmacen(planta: Planta, tipos: readonly Tipo[]) {
+  const fila = enAlmacen(planta).sort((a, b) => a.fila - b.fila)
+  tipos.forEach((tipo, i) => {
+    if (fila[i]) fila[i].tipo = tipo
+  })
+  planta.almacenVisible = tipos.length
 }
 
 function sacarDelAlmacen(planta: Planta) {

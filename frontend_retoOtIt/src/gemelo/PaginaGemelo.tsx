@@ -12,14 +12,17 @@ import {
   estadoEnlace,
   latidoDetenido,
   marchaPorTorreta,
+  piezasNuevas,
   resumirLecturas,
   vigilarLatido,
+  type Contadores,
   type VigiaLatido,
   type Enlace,
   type LecturasCelda,
 } from './enVivo'
 import {
   crearGemelo,
+  meterPiezas,
   ponerModo,
   ponerTorreta,
   ponerVelocidad,
@@ -237,6 +240,18 @@ function LecturasReales({ consulta }: { consulta: Consulta }) {
               : textoTorreta(lecturas.torretaReal, t),
           ],
           [
+            t('gemelo.lecturas.piezasAluminio'),
+            lecturas.piezasAluminio === null
+              ? sinDato
+              : String(lecturas.piezasAluminio),
+          ],
+          [
+            t('gemelo.lecturas.piezasOtras'),
+            lecturas.piezasOtras === null
+              ? sinDato
+              : String(lecturas.piezasOtras),
+          ],
+          [
             t('gemelo.lecturas.latido'),
             lecturas.latido === null ? sinDato : String(lecturas.latido),
           ],
@@ -320,6 +335,7 @@ export default function PaginaGemelo({
     if (modo !== 'vivo') return
     let vigente = true
     let vigia: VigiaLatido | null = null
+    let contadores: Contadores | null = null
     const consultar = () =>
       obtenerLecturas().then((resultado) => {
         if (!vigente) return
@@ -337,12 +353,11 @@ export default function PaginaGemelo({
         const lecturas = resumirLecturas(resultado.lecturas)
         vigia = vigilarLatido(vigia, lecturas.latido, ahora)
         const latidoParado = latidoDetenido(vigia, ahora)
-        // la torreta decide si los pistones trabajan; si el S7-1516 dejó de latir,
-        // su estado ya no es confiable y el gemelo queda en paro
-        ponerTorreta(
-          gemelo,
-          marchaPorTorreta(lecturas) && latidoParado === null,
-        )
+        // cada pieza que contó el S7-1516 entra al gemelo con su material real
+        const conteo = piezasNuevas(contadores, lecturas)
+        contadores = conteo.contadores
+        meterPiezas(gemelo, conteo.nuevas)
+        ponerTorreta(gemelo, marchaPorTorreta(lecturas))
         setConsulta({
           enlace: estadoEnlace(lecturas, ahora),
           lecturas,

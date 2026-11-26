@@ -308,7 +308,7 @@ describe('PaginaGemelo, alertas del tablero', () => {
     )
   })
 
-  it('si el latido no cambia, alerta y deja los pistones en paro', async () => {
+  it('si el latido no cambia, alerta', async () => {
     vi.useFakeTimers()
     preparar(lecturasDeAhora(1)) // el latido se queda en 77
     await vi.advanceTimersByTimeAsync(100)
@@ -318,7 +318,18 @@ describe('PaginaGemelo, alertas del tablero', () => {
     expect(await screen.findByRole('alert')).toHaveTextContent(
       /El latido del S7-1516 no cambia desde hace \d+ s/,
     )
-    fireEvent.click(screen.getByRole('button', { name: 'vista 3D' }))
-    expect(screen.getByText('Torreta roja: paro')).toBeInTheDocument()
+  })
+
+  it('muestra los contadores de piezas del S7-1516', async () => {
+    const respuesta = lecturasDeAhora()
+    if (respuesta.ok)
+      respuesta.lecturas.push(
+        lectura(NODOS.piezasAluminio.plc, NODOS.piezasAluminio.nodo, 52),
+        lectura(NODOS.piezasOtras.plc, NODOS.piezasOtras.nodo, 250),
+      )
+    preparar(respuesta)
+    expect(await screen.findByText('Piezas de aluminio')).toBeInTheDocument()
+    expect(screen.getAllByText('52').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('250').length).toBeGreaterThan(0)
   })
 })
