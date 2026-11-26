@@ -433,6 +433,8 @@ export const es = {
       latido: 'Latido (S7-1516)',
       piezasAluminio: 'Piezas de aluminio',
       piezasOtras: 'Piezas de plástico',
+      paso: 'Paso del S7-1516',
+      pasoValor: '{{paso}} · {{nombre}}',
       alertaLatido:
         'El latido del S7-1516 no cambia desde hace {{segundos}} s: puede estar detenido.',
       alertaLuces:
@@ -474,9 +476,22 @@ export const es = {
       titulo: 'Ajustes',
       velocidad: 'Velocidad',
       etiquetas: 'Etiquetas en la escena',
+      velocidadVivo: 'En vivo el gemelo va al ritmo real de la celda.',
     },
     notaEnVivo:
-      'En vivo, la torreta real decide si los pistones trabajan. El detalle de abajo lo recrea el gemelo.',
+      'En vivo, los pistones repiten los pasos reales del S7-1516 unos segundos después y cada pieza toma el material que contó el PLC (gris mientras no se sabe). La garra la recrea el gemelo.',
+    pasosReales: {
+      0: 'Reposo',
+      1: 'Arranque',
+      2: 'Empuja',
+      3: 'Regresa el empujador',
+      4: 'Detecta la pieza',
+      5: 'Aprieta',
+      6: 'Sello de aluminio',
+      7: 'Sello de plástico',
+      8: 'Suelta',
+      9: 'Fin de secuencia',
+    },
     valores: {
       titulo: 'Valores',
       material: 'Material en el marcado',

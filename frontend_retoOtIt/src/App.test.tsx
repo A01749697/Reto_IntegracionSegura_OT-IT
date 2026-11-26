@@ -47,6 +47,7 @@ vi.mock('./panel/apiSistema', () => ({
 
 vi.mock('./gemelo/apiLecturas', () => ({
   obtenerUltimasLecturas: vi.fn(),
+  obtenerHistorialNodo: vi.fn().mockResolvedValue({ ok: true, puntos: [] }),
 }))
 
 // jsdom no tiene WebGL
@@ -65,6 +66,10 @@ const TITULO_LANDING = 'Tus datos de planta, seguros hasta la nube'
 
 beforeEach(() => {
   vi.resetAllMocks()
+  vi.mocked(lecturas.obtenerHistorialNodo).mockResolvedValue({
+    ok: true,
+    puntos: [],
+  })
   vi.mocked(api.obtenerSesion).mockResolvedValue(null)
   // el inicio pide estas tres cosas al abrirse
   vi.mocked(sistema.obtenerEstado).mockResolvedValue({

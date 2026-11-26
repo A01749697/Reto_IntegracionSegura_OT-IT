@@ -6,7 +6,7 @@ import {
   ponerModo,
   ponerTorreta,
   ponerVelocidad,
-  tomarInstantanea,
+  recibirPasosReales,
   type Gemelo,
 } from './gemelo'
 import { X_TOMA } from './medidas'
@@ -126,61 +126,126 @@ describe('gemelo en simulación', () => {
 })
 
 describe('gemelo en vivo', () => {
-  it('sin dato de la torreta se queda en paro', () => {
-    const gemelo = crearGemelo('vivo')
-    correr(gemelo, 10)
-    expect(gemelo.plc.ciclos).toBe(0)
-    expect(tomarInstantanea(gemelo).paso).toBe(0)
-    expect(gemelo.senales.torreRoja).toBe(true)
-  })
+  const T0 = Date.parse('2026-11-24T20:00:00.000Z')
 
-  it('sin piezas contadas no entra nada, aunque la torreta esté en verde', () => {
+  // Los cambios de TAB_PASO como los da /historial: un paso cada `cada` segundos.
+  const pasos = (lista: number[], desde = T0, cada = 1.2) =>
+    lista.map((valor, i) => ({
+      ts: new Date(desde + i * cada * 1000).toISOString(),
+      valor,
+    }))
+
+  // Prepara el gemelo como queda tras la primera consulta (la celda en reposo).
+  function enReposo() {
+    const gemelo = crearGemelo('vivo')
+    recibirPasosReales(gemelo, pasos([0], T0 - 60_000))
+    return gemelo
+  }
+
+  // Corre y anota cada paso real que el gemelo mostró.
+  function recorrido(gemelo: Gemelo, segundos: number) {
+    const vistos: number[] = []
+    for (let t = 0; t < segundos; t += 0.05) {
+      avanzarGemelo(gemelo, 0.05)
+      const paso = gemelo.senales.pasoReal
+      if (paso !== null && paso !== vistos[vistos.length - 1]) vistos.push(paso)
+    }
+    return vistos
+  }
+
+  const enAlmacen = (gemelo: Gemelo) =>
+    gemelo.planta.piezas.filter((p) => p.estado === 'almacen').length
+
+  it('sin pasos reales los pistones no se mueven, aunque la torreta esté en verde', () => {
     const gemelo = crearGemelo('vivo')
     ponerTorreta(gemelo, true)
+    const antes = enAlmacen(gemelo)
     correr(gemelo, 10)
-    expect(gemelo.plc.ciclos).toBe(0)
+    expect(enAlmacen(gemelo)).toBe(antes)
     expect(gemelo.senales.torreVerde).toBe(true)
-    expect(gemelo.planta.almacenVisible).toBe(0)
+    expect(gemelo.senales.pasoReal).toBeNull()
   })
 
-  it('cada pieza contada entra con su material real, en orden', () => {
-    // el azar diría siempre aluminio: si sale plástico, viene del contador
-    const gemelo = crearGemelo('vivo', () => 0)
-    meterPiezas(gemelo, ['pl', 'pl', 'al'])
-    expect(gemelo.planta.almacenVisible).toBe(3)
-    const vistos: string[] = []
-    for (let t = 0; t < 60 && piezas(gemelo) < 3; t += 0.05) {
-      avanzarGemelo(gemelo, 0.05)
-      const m = gemelo.senales.material
-      if (m && m !== vistos[vistos.length - 1]) vistos.push(m)
-      if (!m && vistos[vistos.length - 1] !== '') vistos.push('')
-    }
-    expect(vistos.filter(Boolean)).toEqual(['pl', 'pl', 'al'])
-    expect(gemelo.senales.piezasPl).toBe(2)
-    expect(gemelo.senales.piezasAl).toBe(1)
-    expect(gemelo.porEntrar).toEqual([])
-    expect(gemelo.planta.almacenVisible).toBe(0)
-  })
-
-  it('las piezas contadas entran aunque la torreta ya esté en rojo', () => {
+  it('la primera consulta solo dice en qué paso quedó la celda, sin repetir historia', () => {
     const gemelo = crearGemelo('vivo')
-    ponerTorreta(gemelo, false)
-    meterPiezas(gemelo, ['al'])
+    const antes = enAlmacen(gemelo)
+    recibirPasosReales(gemelo, pasos([2, 3, 4, 5, 6, 8, 9], T0 - 60_000))
+    expect(recorrido(gemelo, 3)).toEqual([9])
+    expect(enAlmacen(gemelo)).toBe(antes)
+  })
+
+  it('repite un ciclo real: empuja, sella según el material y la pieza termina clasificada', () => {
+    const gemelo = enReposo()
+    meterPiezas(gemelo, ['pl'])
+    recibirPasosReales(gemelo, pasos([1, 2, 3, 4, 5, 7, 8, 9, 0]))
+    const vistos = recorrido(gemelo, 20)
+    expect(vistos).toEqual([0, 1, 2, 3, 4, 5, 7, 8, 9, 0])
     correrHasta(gemelo, () => piezas(gemelo) === 1)
-    expect(gemelo.senales.piezasAl).toBe(1)
+    expect(gemelo.senales.piezasPl).toBe(1)
+    const pieza = gemelo.planta.ultimaSacada
+    expect(pieza?.tipo).toBe('pl')
+    expect(pieza?.marcada).toBe(true)
+    expect(pieza?.sello).toBe('pl')
   })
 
-  it('no acumula más de las últimas seis piezas', () => {
-    const gemelo = crearGemelo('vivo')
+  it('pasa por los pasos que no quedaron en el historian, con el sello del material', () => {
+    const gemelo = enReposo()
+    meterPiezas(gemelo, ['al'])
+    // al colector se le fueron el 0, el 1, el 4 y el sello
+    recibirPasosReales(gemelo, pasos([2, 3, 5, 8, 9], T0, 1.5))
+    expect(recorrido(gemelo, 20)).toEqual([0, 1, 2, 3, 4, 5, 6, 8, 9])
+    expect(gemelo.planta.ultimaSacada?.sello).toBe('al')
+  })
+
+  it('el paso de sello real manda, aunque el contador diga otro material', () => {
+    const gemelo = enReposo()
+    meterPiezas(gemelo, ['al'])
+    recibirPasosReales(gemelo, pasos([2, 3, 4, 5, 7, 8, 9]))
+    recorrido(gemelo, 20)
+    // así se ve en la escena cuando el sello y el sensor no coinciden
+    expect(gemelo.planta.ultimaSacada?.tipo).toBe('al')
+    expect(gemelo.planta.ultimaSacada?.sello).toBe('pl')
+  })
+
+  it('si el contador llega después de que la pieza salió, la pieza gris toma su material', () => {
+    const gemelo = enReposo()
+    recibirPasosReales(gemelo, pasos([2, 3, 4, 5]))
+    recorrido(gemelo, 11)
+    const pieza = gemelo.planta.ultimaSacada
+    expect(pieza?.conocida).toBe(false)
+    meterPiezas(gemelo, ['al'])
+    expect(pieza?.conocida).toBe(true)
+    expect(pieza?.tipo).toBe('al')
+    expect(gemelo.porEntrar).toEqual([])
+  })
+
+  it('en el almacén solo tienen color las piezas ya contadas; las demás son grises', () => {
+    const gemelo = enReposo()
+    const almacen = () =>
+      gemelo.planta.piezas
+        .filter((p) => p.estado === 'almacen')
+        .sort((a, b) => a.fila - b.fila)
+    expect(almacen().every((p) => !p.conocida)).toBe(true)
+    meterPiezas(gemelo, ['pl', 'al'])
+    const [primera, segunda, tercera] = almacen()
+    expect([primera.tipo, primera.conocida]).toEqual(['pl', true])
+    expect([segunda.tipo, segunda.conocida]).toEqual(['al', true])
+    expect(tercera.conocida).toBe(false)
+  })
+
+  it('no acumula más de las últimas seis piezas contadas', () => {
+    const gemelo = enReposo()
     meterPiezas(gemelo, Array(10).fill('pl'))
     expect(gemelo.porEntrar).toHaveLength(6)
   })
 
-  it('en simulación no se meten piezas reales', () => {
+  it('en simulación no se usan los pasos ni los contadores reales', () => {
     const gemelo = crearGemelo('simulacion')
     meterPiezas(gemelo, ['al'])
+    recibirPasosReales(gemelo, pasos([2, 3]))
     expect(gemelo.porEntrar).toEqual([])
-    expect(gemelo.planta.almacenVisible).toBeNull()
+    expect(gemelo.repeticion.paso).toBeNull()
+    expect(gemelo.planta.piezas.every((p) => p.conocida)).toBe(true)
   })
 
   it('al cambiar de modo empieza limpio', () => {

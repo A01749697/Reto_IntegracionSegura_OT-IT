@@ -1,13 +1,16 @@
-// Junta las señales, la planta y los PLC simulados, y los hace avanzar en el tiempo.
-// No hay mandos. En simulación los pistones arrancan y se detienen con la torreta
-// (verde = marcha, roja = paro). En vivo meten una pieza cada vez que los contadores
-// del S7-1516 (TAB_ALUMINIO / TAB_OTRAS) suben, con el material real. La garra no
-// depende de la torreta.
+// Junta las señales, la planta y los PLC, y los hace avanzar en el tiempo. No hay mandos.
+//   - Simulación: los pistones son un PLC simulado que arranca y se detiene con la torreta
+//     (verde = marcha, roja = paro) y el material de cada pieza es al azar.
+//   - En vivo: los pistones siguen a TAB_PASO, el paso real del S7-1516, unos segundos
+//     después (ver repeticion.ts y seguidor.ts). El material de cada pieza sale de los
+//     contadores TAB_ALUMINIO / TAB_OTRAS; mientras no se sabe, la pieza se ve gris.
+// La garra es simulada en los dos modos y trabaja sola cuando hay pieza en el depósito.
 import {
   avanzarPlanta,
   crearPlanta,
   despejarLinea,
   estaEmpacando,
+  identificarEnLinea,
   pintarAlmacen,
   type Planta,
   type Tipo,
@@ -19,10 +22,16 @@ import {
   reiniciarPlc,
   type Plc,
 } from './plc'
+import {
+  crearRepeticion,
+  pasoEn,
+  recibirPasos,
+  type PuntoPaso,
+  type Repeticion,
+} from './repeticion'
+import { avanzarSeguidor, crearSeguidor, type Seguidor } from './seguidor'
 import { senalesIniciales, type Senales } from './senales'
 
-// 'vivo': entran las piezas que cuenta el S7-1516; la torreta real solo se muestra.
-// 'simulacion': la torreta la elige la persona en la pantalla y el material es al azar.
 export type Modo = 'vivo' | 'simulacion'
 
 export type Gemelo = {
@@ -32,7 +41,10 @@ export type Gemelo = {
   modo: Modo
   velocidad: number
   acumulado: number
-  porEntrar: Tipo[] // en vivo: piezas reales contadas que aún no entran
+  reloj: number // segundos de tiempo real desde que se creó (no lo afecta la velocidad)
+  porEntrar: Tipo[] // en vivo: materiales ya contados que aún no tienen pieza
+  repeticion: Repeticion
+  seguidor: Seguidor
 }
 
 // Lo que necesita la pantalla en cada refresco.
@@ -51,7 +63,10 @@ export function crearGemelo(
     modo,
     velocidad: 1,
     acumulado: 0,
+    reloj: 0,
     porEntrar: [],
+    repeticion: crearRepeticion(),
+    seguidor: crearSeguidor(),
   }
   ponerModo(gemelo, modo)
   return gemelo
@@ -63,14 +78,18 @@ export function ponerModo(gemelo: Gemelo, modo: Modo) {
   senales.marcha = false
   senales.material = ''
   senales.materialGarra = ''
+  senales.pasoReal = null
+  senales.paso = 0
   apagarSalidas(senales)
   reiniciarPlc(plc)
-  despejarLinea(planta)
   gemelo.modo = modo
+  planta.enVivo = modo === 'vivo'
+  despejarLinea(planta)
   gemelo.porEntrar = []
-  if (modo === 'vivo') pintarAlmacen(planta, [])
-  else planta.almacenVisible = null
-  // la simulacion arranca andando; en vivo espera a la torreta real
+  gemelo.repeticion = crearRepeticion()
+  gemelo.seguidor = crearSeguidor()
+  pintarAlmacen(planta, [])
+  // la simulacion arranca andando; en vivo la torreta real solo prende las luces
   senales.marcha = modo === 'simulacion'
 }
 
@@ -84,40 +103,62 @@ export function ponerTorreta(gemelo: Gemelo, verde: boolean) {
   gemelo.senales.marcha = verde
 }
 
-// Las piezas que el S7-1516 contó desde la consulta anterior. Solo cuenta en vivo.
+// Los cambios de TAB_PASO que trajo la última consulta al historial.
+export function recibirPasosReales(
+  gemelo: Gemelo,
+  puntos: readonly PuntoPaso[],
+) {
+  if (gemelo.modo !== 'vivo') return
+  recibirPasos(gemelo.repeticion, puntos, gemelo.reloj)
+}
+
+// Las piezas que el S7-1516 contó desde la consulta anterior. Si ya hay una pieza gris en
+// la línea, toma ese material; si no, lo toma la siguiente que salga del almacén.
 export const MAXIMO_POR_ENTRAR = 6
 
 export function meterPiezas(gemelo: Gemelo, tipos: readonly Tipo[]) {
-  if (gemelo.modo !== 'vivo' || tipos.length === 0) return
-  gemelo.porEntrar = [...gemelo.porEntrar, ...tipos].slice(-MAXIMO_POR_ENTRAR)
+  if (gemelo.modo !== 'vivo') return
+  for (const tipo of tipos) {
+    if (!identificarEnLinea(gemelo.planta, tipo)) gemelo.porEntrar.push(tipo)
+  }
+  gemelo.porEntrar = gemelo.porEntrar.slice(-MAXIMO_POR_ENTRAR)
   pintarAlmacen(gemelo.planta, gemelo.porEntrar)
 }
 
 const contarAlmacen = (planta: Planta) =>
   planta.piezas.filter((p) => p.estado === 'almacen').length
 
-// Si se juntan piezas reales por meter, el gemelo se apura para no quedarse atrás.
-function apuro(gemelo: Gemelo): number {
-  if (gemelo.modo !== 'vivo') return 1
-  return Math.min(3, 1 + 0.5 * Math.max(0, gemelo.porEntrar.length - 1))
+// El material de la pieza que está en proceso, si ya se sabe.
+function materialEnProceso(planta: Planta): Tipo | null {
+  const pieza = planta.ultimaSacada
+  return pieza && pieza.conocida ? pieza.tipo : null
 }
 
 // Avanza con paso fijo para que la secuencia salga igual sin importar los cuadros por segundo.
 export function avanzarGemelo(gemelo: Gemelo, segundos: number) {
   const { senales, planta, plc } = gemelo
+  const vivo = gemelo.modo === 'vivo'
+  gemelo.reloj += segundos
+  // en vivo manda el ritmo real de la celda: la velocidad solo cuenta en simulación
   gemelo.acumulado = Math.min(
-    gemelo.acumulado + segundos * gemelo.velocidad * apuro(gemelo),
+    gemelo.acumulado + segundos * (vivo ? 1 : gemelo.velocidad),
     0.5,
   )
+  const objetivo = vivo ? pasoEn(gemelo.repeticion, gemelo.reloj) : null
   while (gemelo.acumulado >= PASO_FIJO) {
-    const vivo = gemelo.modo === 'vivo'
-    senales.porEntrar = vivo ? gemelo.porEntrar.length : null
+    if (vivo)
+      avanzarSeguidor(
+        gemelo.seguidor,
+        objetivo,
+        senales,
+        materialEnProceso(planta),
+        PASO_FIJO,
+      )
     const enAlmacen = contarAlmacen(planta)
-    avanzarPlc(plc, senales, planta.cajas, PASO_FIJO)
+    avanzarPlc(plc, senales, planta.cajas, PASO_FIJO, !vivo)
     avanzarPlanta(planta, senales, PASO_FIJO)
-    // la pieza real ya salió del almacén (no al empezar el ciclo, que es un paso antes):
-    // se quita de la fila y las de abajo toman los materiales que siguen
-    if (vivo && contarAlmacen(planta) < enAlmacen) {
+    // salió una pieza del almacén: si ya se había contado, se lleva ese material
+    if (vivo && contarAlmacen(planta) < enAlmacen && gemelo.porEntrar.length) {
       gemelo.porEntrar = gemelo.porEntrar.slice(1)
       pintarAlmacen(planta, gemelo.porEntrar)
     }

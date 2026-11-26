@@ -41,3 +41,47 @@ export async function obtenerUltimasLecturas(): Promise<ResultadoLecturas> {
     return { ok: false, motivo: 'fallo' }
   }
 }
+
+export type PuntoHistorial = { ts: string; valor: number }
+
+export type ResultadoHistorial =
+  | { ok: true; puntos: PuntoHistorial[] }
+  | { ok: false; motivo: 'sesion' | 'fallo' }
+
+function esPunto(valor: unknown): valor is PuntoHistorial {
+  if (typeof valor !== 'object' || valor === null) return false
+  const p = valor as Record<string, unknown>
+  return (
+    typeof p.ts === 'string' &&
+    typeof p.valor === 'number' &&
+    Number.isFinite(p.valor)
+  )
+}
+
+// Los valores de un nodo entre dos fechas, en orden (los más recientes si son demasiados).
+export async function obtenerHistorialNodo(
+  plc: string,
+  variable: string,
+  desde: Date,
+  hasta: Date,
+): Promise<ResultadoHistorial> {
+  const consulta = new URLSearchParams({
+    plc,
+    variable,
+    desde: desde.toISOString(),
+    hasta: hasta.toISOString(),
+  })
+  try {
+    const { estado, datos } = await llamar(
+      'GET',
+      `/lecturas/historial?${consulta.toString()}`,
+    )
+    if (estado === 401) return { ok: false, motivo: 'sesion' }
+    const puntos = leerCampo(datos, 'puntos')
+    if (estado !== 200 || !Array.isArray(puntos) || !puntos.every(esPunto))
+      return { ok: false, motivo: 'fallo' }
+    return { ok: true, puntos }
+  } catch {
+    return { ok: false, motivo: 'fallo' }
+  }
+}

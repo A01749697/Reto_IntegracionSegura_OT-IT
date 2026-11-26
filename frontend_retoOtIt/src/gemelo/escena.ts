@@ -134,6 +134,11 @@ export function crearEscena({
   orbita.maxPolarAngle = Math.PI * 0.495
 
   const m = crearMateriales()
+  // en vivo, la pieza cuyo material todavía no se sabe
+  const sinIdentificar = new THREE.MeshStandardMaterial({
+    color: 0x8a9199,
+    roughness: 0.7,
+  })
   const nave = construirNave(escena, m)
   const mesa = new THREE.Group()
   mesa.position.y = ALTURA_MESA
@@ -179,19 +184,20 @@ export function crearEscena({
     })
 
     planta.piezas.forEach((pieza, i) => {
-      const { malla, marca } = celda.piezas[i]
-      malla.material = pieza.tipo === 'al' ? m.pieza : m.plastico
-      marca.visible = pieza.marcada
+      const { malla, marca, marcaPl } = celda.piezas[i]
+      malla.material = !pieza.conocida
+        ? sinIdentificar
+        : pieza.tipo === 'al'
+          ? m.pieza
+          : m.plastico
+      // cada material lleva su propio sello
+      marca.visible = pieza.marcada && pieza.sello !== 'pl'
+      marcaPl.visible = pieza.marcada && pieza.sello === 'pl'
       malla.visible = true
       malla.scale.setScalar(1)
       malla.rotation.set(0, 0, 0)
       if (pieza.estado === 'almacen') {
-        malla.visible =
-          pieza.fila <
-          Math.min(
-            PIEZAS_VISIBLES_ALMACEN,
-            planta.almacenVisible ?? PIEZAS_VISIBLES_ALMACEN,
-          )
+        malla.visible = pieza.fila < PIEZAS_VISIBLES_ALMACEN
         malla.position.set(
           X_ALMACEN,
           Y_PIEZA + (pieza.fila + planta.caida) * 0.05,

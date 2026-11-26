@@ -24,6 +24,8 @@ export const NODOS = {
   // = TAB_CICLOS). En vivo, cada vez que suben entra al gemelo una pieza de ese material.
   piezasAluminio: { plc: 'S7-1500', nodo: 'TAB_ALUMINIO' },
   piezasOtras: { plc: 'S7-1500', nodo: 'TAB_OTRAS' },
+  // paso de la secuencia del S7-1516 (0 a 9); el gemelo lo repite (ver seguidor.ts)
+  paso: { plc: 'S7-1500', nodo: 'TAB_PASO' },
 } satisfies Record<string, NodoConocido>
 
 export type ClaveNodo = keyof typeof NODOS
@@ -34,6 +36,15 @@ export type ClaveNodo = keyof typeof NODOS
 //   3 roja     = cualquier otro caso: parado o en falla
 // Solo el verde es marcha de los pistones; cualquier otro valor (o ninguno) es paro.
 export const ESTADOS_TORRETA = { verde: 1, amarilla: 2, roja: 3 } as const
+
+// TAB_PASO, la secuencia del S7-1516:
+//   0 reposo · 1 arranque · 2 empuja · 3 regresa el empujador
+//   4 detecta: el pistón de apriete sale y regresa y el capacitivo lo ve
+//   5 aprieta · 6 / 7 sello (uno distinto por material) · 8 suelta · 9 fin de secuencia
+// ⚠ Qué paso de sello es de qué material está deducido de los conteos (el 7 sale más,
+// igual que el plástico); si es al revés, solo se cambia aquí.
+export const SELLO_POR_PASO = { 6: 'al', 7: 'pl' } as const
+export const PASOS_DEL_SELLO = { al: 6, pl: 7 } as const
 
 // Las estaciones en el orden en que se muestran.
 export const ESTACIONES = ['S7-1200', 'S7-1500', 'S7-300'] as const

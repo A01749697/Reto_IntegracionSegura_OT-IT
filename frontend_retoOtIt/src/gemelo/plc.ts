@@ -1,7 +1,7 @@
 // Los dos PLC simulados, cada uno como máquina de estados.
 // Leen las entradas de las señales y escriben sus salidas, igual que lo harían los programas reales.
-//   - Pistones (S7-1516): en simulación trabajan con marcha (torreta en verde); en vivo,
-//     cada vez que el S7-1516 real contó una pieza (ver gemelo.ts).
+//   - Pistones (S7-1516): trabajan con marcha (torreta en verde). Solo en simulación:
+//     en vivo los pistones siguen al paso real (ver seguidor.ts).
 //   - Garra (S7-300): no depende de la torreta; atiende el depósito cuando LS-4 ve una pieza.
 import type { Caja } from './planta'
 import type { Senales } from './senales'
@@ -96,10 +96,6 @@ export function reiniciarPlc(plc: Plc) {
   irA(plc.garra, 'REPOSO')
 }
 
-// En vivo arranca cuando hay una pieza real por meter; en simulación, con la torreta en verde.
-const puedeEmpezar = (s: Senales) =>
-  s.porEntrar === null ? s.marcha : s.porEntrar > 0
-
 function empezarPistones(plc: Plc) {
   plc.ciclos++
   irA(plc.pistones, 'A_EXT')
@@ -117,7 +113,7 @@ function avanzarPistones(plc: Plc, s: Senales) {
   switch (p.estado) {
     case 'REPOSO':
       s.yA = s.yB = s.yC = s.yT = false
-      if (puedeEmpezar(s)) empezarPistones(plc)
+      if (s.marcha) empezarPistones(plc)
       break
     case 'A_EXT':
       s.yA = true
@@ -160,7 +156,7 @@ function avanzarPistones(plc: Plc, s: Senales) {
       if (!s.sc2 && p.t > 0.45) {
         s.yT = false
         s.material = ''
-        if (puedeEmpezar(s)) empezarPistones(plc)
+        if (s.marcha) empezarPistones(plc)
         else irA(p, 'REPOSO')
       }
       break
@@ -242,12 +238,13 @@ export function avanzarPlc(
   s: Senales,
   cajas: readonly Caja[],
   dt: number,
+  conPistones = true,
 ) {
   plc.reloj += dt
   plc.pistones.t += dt
   plc.garra.t += dt
 
-  avanzarPistones(plc, s)
+  if (conPistones) avanzarPistones(plc, s)
   avanzarGarra(plc, s, cajas)
 
   // la torreta solo habla del proceso de pistones

@@ -955,13 +955,16 @@ function tarima(escena: THREE.Scene, m: Materiales) {
   return { lugares, cintas }
 }
 
-// Los cubos que se clasifican. La marca es el anillo que deja el punzon.
+// Los cubos que se clasifican. La marca es lo que deja el punzon: un anillo turquesa en el
+// aluminio y un cuadro naranja en el plastico.
 function piezas(E: Grupo) {
   const cubo = new RoundedBoxGeometry(0.05, 0.05, 0.05, 3, 0.004)
   const hoyo = new THREE.CircleGeometry(0.011, 20)
   const anillo = new THREE.RingGeometry(0.014, 0.019, 28)
   const negro = basico(0x0b0d10)
   const turquesa = basico(0x39b8c4)
+  const cuadro = new THREE.RingGeometry(0.013, 0.02, 4)
+  const naranja = basico(0xf08a24)
   const lista = []
   for (let i = 0; i < TOTAL_PIEZAS; i++) {
     const malla = alta(
@@ -980,7 +983,12 @@ function piezas(E: Grupo) {
     marca.position.y = 0.0258
     marca.visible = false
     malla.add(marca)
-    lista.push({ malla, marca })
+    const marcaPl = new THREE.Mesh(cuadro, naranja)
+    marcaPl.rotation.set(-Math.PI / 2, 0, Math.PI / 4)
+    marcaPl.position.y = 0.0258
+    marcaPl.visible = false
+    malla.add(marcaPl)
+    lista.push({ malla, marca, marcaPl })
   }
   return lista
 }

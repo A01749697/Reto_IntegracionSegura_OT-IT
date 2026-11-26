@@ -5,7 +5,7 @@ import { TARJETA } from '../comun/estilos'
 import Segmentos from '../comun/Segmentos'
 import MarcoPanel from '../panel/MarcoPanel'
 import { fechaHora } from '../panel/tiempo'
-import type { ResultadoLecturas } from './apiLecturas'
+import type { ResultadoHistorial, ResultadoLecturas } from './apiLecturas'
 import {
   colorTorreta,
   compararTorreta,
@@ -23,6 +23,7 @@ import {
 import {
   crearGemelo,
   meterPiezas,
+  recibirPasosReales,
   ponerModo,
   ponerTorreta,
   ponerVelocidad,
@@ -45,8 +46,19 @@ const VistaCelda = lazy(() => import('./VistaCelda'))
 
 type Props = {
   obtenerLecturas: () => Promise<ResultadoLecturas>
+  obtenerHistorial: (
+    plc: string,
+    variable: string,
+    desde: Date,
+    hasta: Date,
+  ) => Promise<ResultadoHistorial>
   sesionCaducada: () => void
 }
+
+// La primera vez se piden los cambios de TAB_PASO de este último rato; después, desde el
+// último que llegó. hasta va un poco al futuro por si el reloj del PLC va adelantado.
+const SEGUNDOS_HISTORIA_PASOS = 60
+const SEGUNDOS_ADELANTO_PLC = 10 * 60
 
 type Consulta = {
   enlace: Enlace
@@ -252,6 +264,17 @@ function LecturasReales({ consulta }: { consulta: Consulta }) {
               : String(lecturas.piezasOtras),
           ],
           [
+            t('gemelo.lecturas.paso'),
+            lecturas.paso === null
+              ? sinDato
+              : t('gemelo.lecturas.pasoValor', {
+                  paso: lecturas.paso,
+                  nombre: t(`gemelo.pasosReales.${lecturas.paso}`, {
+                    defaultValue: '—',
+                  }),
+                }),
+          ],
+          [
             t('gemelo.lecturas.latido'),
             lecturas.latido === null ? sinDato : String(lecturas.latido),
           ],
@@ -313,6 +336,7 @@ function LecturasReales({ consulta }: { consulta: Consulta }) {
 
 export default function PaginaGemelo({
   obtenerLecturas,
+  obtenerHistorial,
   sesionCaducada,
 }: Props) {
   const { t, i18n } = useTranslation()
@@ -336,6 +360,23 @@ export default function PaginaGemelo({
     let vigente = true
     let vigia: VigiaLatido | null = null
     let contadores: Contadores | null = null
+    let ultimoPaso: string | null = null // ts del último TAB_PASO recibido
+    // los cambios de TAB_PASO desde la última consulta, para repetirlos en orden
+    const consultarPasos = () => {
+      const ahora = Date.now()
+      const desde = ultimoPaso
+        ? new Date(ultimoPaso)
+        : new Date(ahora - SEGUNDOS_HISTORIA_PASOS * 1000)
+      const hasta = new Date(ahora + SEGUNDOS_ADELANTO_PLC * 1000)
+      obtenerHistorial(NODOS.paso.plc, NODOS.paso.nodo, desde, hasta).then(
+        (resultado) => {
+          if (!vigente || !resultado.ok) return
+          const { puntos } = resultado
+          if (puntos.length) ultimoPaso = puntos[puntos.length - 1].ts
+          recibirPasosReales(gemelo, puntos)
+        },
+      )
+    }
     const consultar = () =>
       obtenerLecturas().then((resultado) => {
         if (!vigente) return
@@ -364,13 +405,17 @@ export default function PaginaGemelo({
           latidoParado,
         })
       })
-    consultar()
-    const reloj = setInterval(consultar, SEGUNDOS_ENTRE_CONSULTAS * 1000)
+    const ambas = () => {
+      consultar()
+      consultarPasos()
+    }
+    ambas()
+    const reloj = setInterval(ambas, SEGUNDOS_ENTRE_CONSULTAS * 1000)
     return () => {
       vigente = false
       clearInterval(reloj)
     }
-  }, [modo, gemelo, obtenerLecturas, sesionCaducada])
+  }, [modo, gemelo, obtenerLecturas, obtenerHistorial, sesionCaducada])
 
   const refrescar = useCallback(
     () => setInstantanea(tomarInstantanea(gemelo)),
@@ -539,14 +584,20 @@ export default function PaginaGemelo({
                 max="3"
                 step="0.25"
                 value={velocidad}
+                disabled={modo === 'vivo'}
                 onChange={(evento) => {
                   const nueva = Number(evento.target.value)
                   ponerVelocidad(gemelo, nueva)
                   setVelocidad(nueva)
                 }}
-                className="w-full accent-acento"
+                className="w-full accent-acento disabled:opacity-40"
               />
             </label>
+            {modo === 'vivo' && (
+              <p className="mt-1 text-[11px] leading-snug text-suave">
+                {t('gemelo.ajustes.velocidadVivo')}
+              </p>
+            )}
             <label className="mt-2.5 flex items-center justify-between gap-2 text-[12.5px] text-suave">
               {t('gemelo.ajustes.etiquetas')}
               <input

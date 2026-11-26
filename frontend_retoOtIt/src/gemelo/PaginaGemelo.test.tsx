@@ -40,6 +40,7 @@ function lecturasDeAhora(verde = 1): ResultadoLecturas {
 function preparar(respuesta: ResultadoLecturas) {
   const props = {
     obtenerLecturas: vi.fn().mockResolvedValue(respuesta),
+    obtenerHistorial: vi.fn().mockResolvedValue({ ok: true, puntos: [] }),
     sesionCaducada: vi.fn(),
   }
   render(<PaginaGemelo {...props} />)
@@ -212,8 +213,15 @@ describe('PaginaGemelo, vista y secuencia', () => {
     )
   })
 
-  it('deja cambiar la velocidad y ocultar las etiquetas', () => {
+  it('en vivo la velocidad no se puede cambiar: va al ritmo de la celda', () => {
     preparar(lecturasDeAhora())
+    expect(screen.getByRole('slider')).toBeDisabled()
+    expect(screen.getByText(/ritmo real de la celda/)).toBeInTheDocument()
+  })
+
+  it('en simulación deja cambiar la velocidad y ocultar las etiquetas', () => {
+    preparar(lecturasDeAhora())
+    elegir('Simulación')
     fireEvent.change(screen.getByRole('slider'), { target: { value: '2' } })
     expect(screen.getByText('2x')).toBeInTheDocument()
     const etiquetas = screen.getByRole('checkbox', {
@@ -331,5 +339,43 @@ describe('PaginaGemelo, alertas del tablero', () => {
     expect(await screen.findByText('Piezas de aluminio')).toBeInTheDocument()
     expect(screen.getAllByText('52').length).toBeGreaterThan(0)
     expect(screen.getAllByText('250').length).toBeGreaterThan(0)
+  })
+})
+
+describe('PaginaGemelo, pasos reales', () => {
+  it('pide a /historial los cambios de TAB_PASO y muestra el paso más reciente', async () => {
+    const respuesta = lecturasDeAhora()
+    if (respuesta.ok)
+      respuesta.lecturas.push(lectura(NODOS.paso.plc, NODOS.paso.nodo, 6))
+    const props = preparar(respuesta)
+    expect(await screen.findByText('6 · Sello de aluminio')).toBeInTheDocument()
+    await waitFor(() => expect(props.obtenerHistorial).toHaveBeenCalled())
+    const [plc, variable, desde, hasta] = props.obtenerHistorial.mock
+      .calls[0] as [string, string, Date, Date]
+    expect([plc, variable]).toEqual([NODOS.paso.plc, NODOS.paso.nodo])
+    expect(desde.getTime()).toBeLessThan(hasta.getTime())
+  })
+
+  it('la siguiente consulta pide desde el último cambio que llegó', async () => {
+    vi.useFakeTimers()
+    const props = preparar(lecturasDeAhora())
+    await vi.advanceTimersByTimeAsync(100)
+    props.obtenerHistorial.mockResolvedValueOnce({
+      ok: true,
+      puntos: [{ ts: '2026-11-24T20:00:05.000Z', valor: 2 }],
+    })
+    await vi.advanceTimersByTimeAsync(5000) // esta trae el cambio
+    await vi.advanceTimersByTimeAsync(5000) // y esta pide desde él
+    const desde = props.obtenerHistorial.mock.calls[2][2] as Date
+    expect(desde.toISOString()).toBe('2026-11-24T20:00:05.000Z')
+  })
+
+  it('en simulación no pide pasos reales', async () => {
+    vi.useFakeTimers()
+    const props = preparar(lecturasDeAhora())
+    await vi.advanceTimersByTimeAsync(100)
+    elegir('Simulación')
+    await vi.advanceTimersByTimeAsync(20_000)
+    expect(props.obtenerHistorial).toHaveBeenCalledTimes(1)
   })
 })
