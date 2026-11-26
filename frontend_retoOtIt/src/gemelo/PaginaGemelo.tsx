@@ -23,6 +23,7 @@ import {
 import {
   crearGemelo,
   meterPiezas,
+  ponerPasoInicial,
   recibirPasosReales,
   ponerModo,
   ponerTorreta,
@@ -55,16 +56,23 @@ type Props = {
   sesionCaducada: () => void
 }
 
-// La primera vez se piden los cambios de TAB_PASO de este último rato; después, desde el
-// último que llegó. hasta va un poco al futuro por si el reloj del PLC va adelantado.
-const SEGUNDOS_HISTORIA_PASOS = 60
-const SEGUNDOS_ADELANTO_PLC = 10 * 60
+// Los cambios de TAB_PASO se piden desde el último que llegó (la primera vez, los más
+// recientes que haya, sean de cuando sean). Así no importa si el reloj del colector y el
+// del navegador no coinciden. hasta queda lejos en el futuro por la misma razón.
+const INICIO_HISTORIAL = new Date(0)
+const DIAS_ADELANTO = 365
+// Si en este tiempo no llegó ningún cambio de paso, se avisa que la celda está quieta.
+export const SEGUNDOS_PASO_QUIETO = 60
 
 type Consulta = {
   enlace: Enlace
   lecturas: LecturasCelda | null
   latidoParado: number | null // segundos sin cambiar, si pasó el límite
 }
+
+// La celda no cambió de paso en un rato: ts del último cambio que hay en el historian
+// (null si no hay ninguno). undefined = sí se está moviendo, o aún no se sabe.
+type PasoQuieto = { ultimo: string | null } | undefined
 
 const SEGUNDOS_ENTRE_CONSULTAS = 5
 
@@ -221,7 +229,13 @@ function Valores({
 }
 
 // Lo que manda la celda real. Es de solo lectura: desde aquí no se le ordena nada.
-function LecturasReales({ consulta }: { consulta: Consulta }) {
+function LecturasReales({
+  consulta,
+  pasoQuieto,
+}: {
+  consulta: Consulta
+  pasoQuieto: PasoQuieto
+}) {
   const { t } = useTranslation()
   const { lecturas } = consulta
 
@@ -280,6 +294,15 @@ function LecturasReales({ consulta }: { consulta: Consulta }) {
           ],
         ]}
       />
+      {pasoQuieto && (
+        <p role="status" className={AVISO}>
+          {pasoQuieto.ultimo
+            ? t('gemelo.lecturas.pasoQuieto', {
+                fecha: fechaHora(pasoQuieto.ultimo),
+              })
+            : t('gemelo.lecturas.pasoSinRegistros')}
+        </p>
+      )}
       {consulta.latidoParado !== null && (
         <p role="alert" className={AVISO}>
           {t('gemelo.lecturas.alertaLatido', {
@@ -348,6 +371,7 @@ export default function PaginaGemelo({
     lecturas: null,
     latidoParado: null,
   })
+  const [pasoQuieto, setPasoQuieto] = useState<PasoQuieto>(undefined)
   const [vista, setVista] = useState<Vista>('General')
   const [conEtiquetas, setConEtiquetas] = useState(true)
   const [velocidad, setVelocidad] = useState(1)
@@ -361,19 +385,27 @@ export default function PaginaGemelo({
     let vigia: VigiaLatido | null = null
     let contadores: Contadores | null = null
     let ultimoPaso: string | null = null // ts del último TAB_PASO recibido
+    let cambioLocal = Date.now() // hora del navegador del último cambio nuevo
     // los cambios de TAB_PASO desde la última consulta, para repetirlos en orden
     const consultarPasos = () => {
       const ahora = Date.now()
-      const desde = ultimoPaso
-        ? new Date(ultimoPaso)
-        : new Date(ahora - SEGUNDOS_HISTORIA_PASOS * 1000)
-      const hasta = new Date(ahora + SEGUNDOS_ADELANTO_PLC * 1000)
+      const desde = ultimoPaso ? new Date(ultimoPaso) : INICIO_HISTORIAL
+      const hasta = new Date(ahora + DIAS_ADELANTO * 24 * 3600 * 1000)
       obtenerHistorial(NODOS.paso.plc, NODOS.paso.nodo, desde, hasta).then(
         (resultado) => {
           if (!vigente || !resultado.ok) return
-          const { puntos } = resultado
-          if (puntos.length) ultimoPaso = puntos[puntos.length - 1].ts
-          recibirPasosReales(gemelo, puntos)
+          const nuevos = resultado.puntos.filter(
+            (p) =>
+              ultimoPaso === null || Date.parse(p.ts) > Date.parse(ultimoPaso),
+          )
+          if (nuevos.length && ultimoPaso !== null) cambioLocal = Date.now()
+          if (nuevos.length) ultimoPaso = nuevos[nuevos.length - 1].ts
+          recibirPasosReales(gemelo, resultado.puntos)
+          setPasoQuieto(
+            Date.now() - cambioLocal >= SEGUNDOS_PASO_QUIETO * 1000
+              ? { ultimo: ultimoPaso }
+              : undefined,
+          )
         },
       )
     }
@@ -398,6 +430,8 @@ export default function PaginaGemelo({
         const conteo = piezasNuevas(contadores, lecturas)
         contadores = conteo.contadores
         meterPiezas(gemelo, conteo.nuevas)
+        // mientras el historial no diga nada, al menos se muestra el paso en que está
+        ponerPasoInicial(gemelo, lecturas.paso)
         ponerTorreta(gemelo, marchaPorTorreta(lecturas))
         setConsulta({
           enlace: estadoEnlace(lecturas, ahora),
@@ -434,6 +468,7 @@ export default function PaginaGemelo({
     ponerModo(gemelo, nuevo)
     setTorretaSimulada('verde')
     setConsulta({ enlace: 'conectando', lecturas: null, latidoParado: null })
+    setPasoQuieto(undefined)
     setModo(nuevo)
   }
 
@@ -532,7 +567,7 @@ export default function PaginaGemelo({
           className={`${PANEL} lg:top-3 lg:left-3 lg:w-[236px]`}
         >
           {enVivo ? (
-            <LecturasReales consulta={consulta} />
+            <LecturasReales consulta={consulta} pasoQuieto={pasoQuieto} />
           ) : (
             <div>
               <h2 className={SUBTITULO}>{t('gemelo.torreta.titulo')}</h2>

@@ -112,6 +112,14 @@ export function recibirPasosReales(
   recibirPasos(gemelo.repeticion, puntos, gemelo.reloj)
 }
 
+// El paso en que está la celda según la última lectura. Solo sirve mientras el historial
+// todavía no dice nada: así el gemelo muestra dónde quedó aunque la celda no se mueva.
+export function ponerPasoInicial(gemelo: Gemelo, paso: number | null) {
+  if (gemelo.modo !== 'vivo' || paso === null) return
+  if (gemelo.repeticion.paso === null && gemelo.repeticion.eventos.length === 0)
+    gemelo.repeticion.paso = paso
+}
+
 // Las piezas que el S7-1516 contó desde la consulta anterior. Si ya hay una pieza gris en
 // la línea, toma ese material; si no, lo toma la siguiente que salga del almacén.
 export const MAXIMO_POR_ENTRAR = 6

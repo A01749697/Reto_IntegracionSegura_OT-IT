@@ -179,6 +179,7 @@ export const en: Diccionario<typeof es> = {
       bitacora: 'Log',
       datos: 'Data',
       estado: 'Status',
+      tablero: 'Dashboard',
       gemelo: 'Digital twin',
       cuenta: 'My account',
     },
@@ -366,6 +367,46 @@ export const en: Diccionario<typeof es> = {
       nota: 'Each bar is a {{tramo}} slot. It counts as available if at least one reading arrived in that slot. It measures data arriving in the cloud, not whether the server was up.',
     },
   },
+  tablero: {
+    titulo: 'Cell dashboard',
+    rango: 'Period',
+    rangos: { '1h': 'Last hour', '8h': '8 hours', '24h': '24 hours' },
+    actualizar: 'Refresh',
+    error: 'The cell data could not be loaded. It will retry on its own.',
+    periodo: 'From {{desde}} to {{hasta}}, up to the cell’s latest reading.',
+    sinLecturas: 'There are no S7-1516 readings in the historian yet.',
+    celdaQuieta:
+      'The cell has not sent readings for {{hace}}: showing its last activity.',
+    indicadores: 'Indicators',
+    piezas: 'Parts',
+    piezasDetalle: '{{al}} % aluminum · {{pl}} % plastic',
+    sinPiezas: 'None in this period',
+    aluminio: 'Aluminum',
+    plastico: 'Plastic',
+    ciclo: 'Average cycle',
+    cicloDetalle: 'From {{minimo}} to {{maximo}}',
+    sinCiclos: 'No complete cycle',
+    enMarcha: 'Running',
+    enMarchaDetalle: '{{tiempo}} with the tower light green',
+    sinTorreta: 'No tower light data in this period',
+    sinPasos: 'No TAB_PASO data in this period',
+    ahora: 'Now',
+    pasoActual: 'Step:',
+    verTabla: 'Show as table',
+    graficaPiezas: {
+      titulo: 'Parts per interval',
+      tramo: 'Interval',
+      detalle: '{{tramo}}: {{al}} aluminum, {{pl}} plastic, {{total}} total',
+    },
+    graficaPasos: {
+      titulo: 'Time in each step',
+      nota: 'A step that runs long, like step 8 when the limit switch slips, shows up here.',
+    },
+    torreta: {
+      titulo: 'Tower light',
+      nota: 'The board state (TAB_TORRETA) over the period.',
+    },
+  },
   gemelo: {
     titulo: 'Digital twin',
     fuente: 'Data source',
@@ -438,6 +479,10 @@ export const en: Diccionario<typeof es> = {
       piezasOtras: 'Plastic parts',
       paso: 'S7-1516 step',
       pasoValor: '{{paso}} · {{nombre}}',
+      pasoQuieto:
+        'The cell has not changed step since {{fecha}}. In live mode the twin only moves when TAB_PASO changes; switch to Simulation to see it run.',
+      pasoSinRegistros:
+        'The historian has no TAB_PASO records, so the live twin has nothing to follow. Switch to Simulation to see it run.',
       alertaLatido:
         'The S7-1516 heartbeat has not changed for {{segundos}} s: it may have stopped.',
       alertaLuces:
@@ -761,6 +806,8 @@ export const en: Diccionario<typeof es> = {
       datos: 'The accounts and log tables, read only. Every query is noted.',
       estado:
         'Whether the API, the databases and the data arrival are up to date.',
+      tablero:
+        'What the cell produced: parts by material, cycles, steps and tower light.',
       gemelo:
         'The 3D sorting cell. It follows the readings as they arrive or runs a simulation.',
       cuenta: 'Your details and changing your password.',

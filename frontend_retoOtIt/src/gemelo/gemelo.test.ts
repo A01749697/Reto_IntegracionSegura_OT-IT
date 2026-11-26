@@ -4,6 +4,7 @@ import {
   crearGemelo,
   meterPiezas,
   ponerModo,
+  ponerPasoInicial,
   ponerTorreta,
   ponerVelocidad,
   recibirPasosReales,
@@ -231,6 +232,15 @@ describe('gemelo en vivo', () => {
     expect([primera.tipo, primera.conocida]).toEqual(['pl', true])
     expect([segunda.tipo, segunda.conocida]).toEqual(['al', true])
     expect(tercera.conocida).toBe(false)
+  })
+
+  it('sin historial, muestra el paso de la última lectura; el historial manda después', () => {
+    const gemelo = crearGemelo('vivo')
+    ponerPasoInicial(gemelo, 8)
+    expect(recorrido(gemelo, 1)).toEqual([8])
+    recibirPasosReales(gemelo, pasos([5], T0 - 60_000))
+    ponerPasoInicial(gemelo, 8)
+    expect(recorrido(gemelo, 3)).toEqual([9, 0, 1, 2, 3, 4, 5])
   })
 
   it('no acumula más de las últimas seis piezas contadas', () => {

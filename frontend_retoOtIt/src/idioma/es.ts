@@ -175,6 +175,7 @@ export const es = {
       bitacora: 'Bitácora',
       datos: 'Datos',
       estado: 'Estado',
+      tablero: 'Tablero',
       gemelo: 'Gemelo',
       cuenta: 'Mi cuenta',
     },
@@ -362,6 +363,49 @@ export const es = {
       nota: 'Cada barra es un tramo de {{tramo}}. Cuenta como disponible si llegó al menos una lectura en ese tramo. Mide la llegada de datos a la nube, no si el servidor estuvo encendido.',
     },
   },
+  tablero: {
+    titulo: 'Tablero de la celda',
+    rango: 'Periodo',
+    rangos: { '1h': 'Última hora', '8h': '8 horas', '24h': '24 horas' },
+    actualizar: 'Actualizar',
+    error:
+      'No se pudieron consultar los datos de la celda. Se vuelve a intentar solo.',
+    periodo:
+      'Del {{desde}} al {{hasta}}, hasta la lectura más reciente de la celda.',
+    sinLecturas: 'Todavía no hay lecturas del S7-1516 en el historian.',
+    celdaQuieta:
+      'La celda no envía lecturas desde hace {{hace}}: se muestra su última actividad.',
+    indicadores: 'Indicadores',
+    piezas: 'Piezas',
+    piezasDetalle: '{{al}} % aluminio · {{pl}} % plástico',
+    sinPiezas: 'Ninguna en este periodo',
+    aluminio: 'Aluminio',
+    plastico: 'Plástico',
+    ciclo: 'Ciclo promedio',
+    cicloDetalle: 'De {{minimo}} a {{maximo}}',
+    sinCiclos: 'Ningún ciclo completo',
+    enMarcha: 'En marcha',
+    enMarchaDetalle: '{{tiempo}} con la torreta en verde',
+    sinTorreta: 'Sin datos de la torreta en este periodo',
+    sinPasos: 'Sin datos de TAB_PASO en este periodo',
+    ahora: 'Ahora',
+    pasoActual: 'Paso:',
+    verTabla: 'Ver como tabla',
+    graficaPiezas: {
+      titulo: 'Piezas por tramo',
+      tramo: 'Tramo',
+      detalle:
+        '{{tramo}}: {{al}} de aluminio, {{pl}} de plástico, {{total}} en total',
+    },
+    graficaPasos: {
+      titulo: 'Tiempo en cada paso',
+      nota: 'Un paso que se alarga, como el 8 cuando se desajusta el final de carrera, se nota aquí.',
+    },
+    torreta: {
+      titulo: 'Torreta',
+      nota: 'El estado del tablero (TAB_TORRETA) a lo largo del periodo.',
+    },
+  },
   gemelo: {
     titulo: 'Gemelo digital',
     fuente: 'Fuente de datos',
@@ -435,6 +479,10 @@ export const es = {
       piezasOtras: 'Piezas de plástico',
       paso: 'Paso del S7-1516',
       pasoValor: '{{paso}} · {{nombre}}',
+      pasoQuieto:
+        'La celda no ha cambiado de paso desde {{fecha}}. En vivo el gemelo solo se mueve cuando cambia TAB_PASO; para verlo andar, cambia a Simulación.',
+      pasoSinRegistros:
+        'El historian no tiene ningún registro de TAB_PASO, así que el gemelo en vivo no tiene qué seguir. Para verlo andar, cambia a Simulación.',
       alertaLatido:
         'El latido del S7-1516 no cambia desde hace {{segundos}} s: puede estar detenido.',
       alertaLuces:
@@ -760,6 +808,8 @@ export const es = {
         'Las tablas de cuentas y bitácora, solo para leer. Cada consulta queda anotada.',
       estado:
         'Si la API, las bases de datos y la llegada de datos están al día.',
+      tablero:
+        'Lo que produjo la celda: piezas por material, ciclos, pasos y torreta.',
       gemelo:
         'La celda clasificadora en 3D. Sigue las lecturas que llegan o corre una simulación.',
       cuenta: 'Tus datos y el cambio de tu contraseña.',
