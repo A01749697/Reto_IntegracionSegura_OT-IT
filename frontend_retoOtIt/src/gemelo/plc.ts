@@ -3,7 +3,8 @@
 //   - Pistones (S7-1516): trabajan con marcha (torreta en verde). Solo en simulación:
 //     en vivo los pistones siguen al paso real (ver seguidor.ts).
 //   - Garra (S7-300): no depende de la torreta; atiende el depósito cuando LS-4 ve una pieza.
-import type { Caja } from './planta'
+import { CARRILES_DE, PIEZAS_POR_CARRIL } from './medidas'
+import type { Carril } from './planta'
 import type { Senales } from './senales'
 
 export type EstadoPistones =
@@ -38,8 +39,9 @@ export type Plc = {
   }
   garra: Maquina<EstadoGarra> & {
     inicioCiclo: number
-    aluminio: number
-    plastico: number
+    // cuál de sus dos carriles está llenando cada material (0 o 1) y cuántas lleva en él
+    carril: { al: number; pl: number }
+    puestas: { al: number; pl: number }
   }
   reloj: number
   ciclos: number // piezas que han empezado en los pistones
@@ -75,7 +77,13 @@ const ASENTAR_SEGUNDOS = 0.35
 export function crearPlc(): Plc {
   return {
     pistones: { estado: 'REPOSO', t: 0, vioPieza: false, esMetal: false },
-    garra: { estado: 'REPOSO', t: 0, inicioCiclo: 0, aluminio: 0, plastico: 0 },
+    garra: {
+      estado: 'REPOSO',
+      t: 0,
+      inicioCiclo: 0,
+      carril: { al: 0, pl: 0 },
+      puestas: { al: 0, pl: 0 },
+    },
     reloj: 0,
     ciclos: 0,
   }
@@ -94,6 +102,8 @@ export function apagarSalidas(s: Senales) {
 export function reiniciarPlc(plc: Plc) {
   irA(plc.pistones, 'REPOSO')
   irA(plc.garra, 'REPOSO')
+  plc.garra.carril = { al: 0, pl: 0 }
+  plc.garra.puestas = { al: 0, pl: 0 }
 }
 
 function empezarPistones(plc: Plc) {
@@ -164,7 +174,7 @@ function avanzarPistones(plc: Plc, s: Senales) {
   s.paso = PASO_PISTONES[p.estado] ?? 0
 }
 
-function avanzarGarra(plc: Plc, s: Senales, cajas: readonly Caja[]) {
+function avanzarGarra(plc: Plc, s: Senales, carriles: readonly Carril[]) {
   const g = plc.garra
   switch (g.estado) {
     case 'REPOSO':
@@ -190,20 +200,14 @@ function avanzarGarra(plc: Plc, s: Senales, cajas: readonly Caja[]) {
     case 'Z_SUBE':
       s.yZ = false
       if (s.z0) {
-        // alterna entre los dos carriles de cada material
-        s.posX =
-          s.materialGarra === 'al'
-            ? 3 + (g.aluminio++ % 2)
-            : 1 + (g.plastico++ % 2)
+        // pone 4 en un carril de su material y luego 4 en el otro: 4, 4, 4, 4
+        const material = s.materialGarra === 'al' ? 'al' : 'pl'
+        s.posX = CARRILES_DE[material][g.carril[material]] + 1
         irA(g, 'X_IR')
       }
       break
-    case 'X_IR': // espera a que el carro llegue y a que haya caja lista
-      if (
-        g.t > 0.1 &&
-        s.xOk &&
-        cajas[s.materialGarra === 'al' ? 1 : 0].estado === 'llenando'
-      )
+    case 'X_IR': // espera a que el carro llegue y a que el carril tenga lugar
+      if (g.t > 0.1 && s.xOk && carriles[s.posX - 1].piezas < PIEZAS_POR_CARRIL)
         irA(g, 'Z_BAJA2')
       break
     case 'Z_BAJA2':
@@ -215,6 +219,11 @@ function avanzarGarra(plc: Plc, s: Senales, cajas: readonly Caja[]) {
       if (g.t > 0.3) {
         if (s.materialGarra === 'al') s.piezasAl++
         else s.piezasPl++
+        const material = s.materialGarra === 'al' ? 'al' : 'pl'
+        if (++g.puestas[material] >= PIEZAS_POR_CARRIL) {
+          g.puestas[material] = 0
+          g.carril[material] = 1 - g.carril[material]
+        }
         irA(g, 'Z_SUBE2')
       }
       break
@@ -236,7 +245,7 @@ function avanzarGarra(plc: Plc, s: Senales, cajas: readonly Caja[]) {
 export function avanzarPlc(
   plc: Plc,
   s: Senales,
-  cajas: readonly Caja[],
+  carriles: readonly Carril[],
   dt: number,
   conPistones = true,
 ) {
@@ -245,7 +254,7 @@ export function avanzarPlc(
   plc.garra.t += dt
 
   if (conPistones) avanzarPistones(plc, s)
-  avanzarGarra(plc, s, cajas)
+  avanzarGarra(plc, s, carriles)
 
   // la torreta solo habla del proceso de pistones
   s.torreVerde = s.marcha

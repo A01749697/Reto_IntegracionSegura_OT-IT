@@ -11,10 +11,13 @@ import {
   CAJAS_POR_TARIMA,
   CARRERA,
   CARRILES,
+  CARRILES_DE,
   GUIA_X0,
   GUIA_X1,
   PARADAS_CARRO,
+  PASO_EN_CARRIL,
   PIEZAS_POR_CAJA,
+  PIEZAS_POR_CARRIL,
   RAMPA,
   TOTAL_PIEZAS,
   VELOCIDAD_MAXIMA_GUIA,
@@ -45,6 +48,7 @@ export type Pieza = {
   vy: number
   giro: number
   carril: number
+  lugar: number // en el carril: 0 es la de hasta abajo
   caja: number
   destino: P3 // lugar dentro de su caja
   marcada: boolean
@@ -55,7 +59,6 @@ export type Pieza = {
 export type Caja = {
   tipo: Tipo
   piezas: number
-  columnas: [number, number]
   estado: 'llenando' | 'cerrando' | 'saliendo' | 'retiro' | 'entra'
   t: number
   avance: number // cuanto ha salido por los rodillos
@@ -63,11 +66,19 @@ export type Caja = {
   cierre: number // 0 = solapas abiertas, 1 = cerradas
 }
 
+// Un carril de la rampa: las piezas se forman una tras otra contra la compuerta de abajo.
+// Cuando hay PIEZAS_POR_CARRIL, la compuerta abre y bajan todas juntas a la caja.
+export type Carril = {
+  piezas: number
+  lleno: number // segundos que lleva lleno y formado
+}
+
 export type Planta = {
   // 0 = atras, 1 = afuera. El tope (T) esta afuera, deteniendo piezas, hasta que yT lo baja.
   extension: { A: number; B: number; C: number; Z: number; T: number }
   carro: { x: number; pinza: number; lleva: Pieza | null }
   piezas: Pieza[]
+  carriles: Carril[]
   cajas: Caja[]
   tarima: Tipo[] // cajas ya apiladas
   caida: number // la pila del almacen baja suave despues de alimentar
@@ -103,7 +114,6 @@ function cajaVacia(tipo: Tipo): Caja {
   return {
     tipo,
     piezas: 0,
-    columnas: [0, 0],
     estado: 'llenando',
     t: 0,
     avance: 0,
@@ -126,6 +136,7 @@ export function crearPlanta(azar: () => number = Math.random): Planta {
       vy: 0,
       giro: 0,
       carril: 0,
+      lugar: 0,
       caja: -1,
       destino: [0, 0, 0],
       marcada: false,
@@ -137,7 +148,8 @@ export function crearPlanta(azar: () => number = Math.random): Planta {
     extension: { A: 0, B: 0, C: 0, Z: 0, T: 1 },
     carro: { x: X_TOMA, pinza: 0, lleva: null },
     piezas,
-    cajas: [cajaVacia('pl'), cajaVacia('al')],
+    carriles: CARRILES.map(() => ({ piezas: 0, lleno: 0 })),
+    cajas: [cajaVacia('al'), cajaVacia('pl')],
     tarima: [],
     caida: 0,
     alimentaba: false,
@@ -227,6 +239,7 @@ function moverPinza(planta: Planta) {
         })
         pieza.estado = 'carril'
         pieza.carril = cercano
+        pieza.lugar = planta.carriles[cercano].piezas++
         pieza.x = CARRILES[cercano]
         pieza.v = 0.12
       }
@@ -243,6 +256,41 @@ function moverPinza(planta: Planta) {
       carro.lleva = pieza
     }
   }
+}
+
+// La caja de cada material queda bajo sus dos carriles.
+const cajaDelCarril = (carril: number) =>
+  (CARRILES_DE.al as readonly number[]).includes(carril) ? 0 : 1
+
+// Un carril lleno espera un momento formado y, si su caja está vacía y lista, abre la
+// compuerta: sus piezas bajan juntas a la caja, dos al frente y dos atrás.
+function moverCarriles(planta: Planta, dt: number) {
+  planta.carriles.forEach((carril, indice) => {
+    const suyas = planta.piezas.filter(
+      (p) => p.estado === 'carril' && p.carril === indice,
+    )
+    const formado =
+      carril.piezas >= PIEZAS_POR_CARRIL &&
+      suyas.length >= PIEZAS_POR_CARRIL &&
+      suyas.every((p) => p.v === 0)
+    carril.lleno = formado ? carril.lleno + dt : 0
+    const caja = planta.cajas[cajaDelCarril(indice)]
+    if (carril.lleno < 1.2 || caja.estado !== 'llenando' || caja.piezas > 0)
+      return
+    for (const p of suyas) {
+      p.caja = cajaDelCarril(indice)
+      p.vy = -0.25
+      p.estado = 'cae'
+      p.destino = [
+        p.lugar % 2 ? 0.04 : -0.04,
+        0.029,
+        p.lugar < 2 ? 0.04 : -0.04,
+      ]
+    }
+    caja.piezas += suyas.length
+    carril.piezas = 0
+    carril.lleno = 0
+  })
 }
 
 // cajas: llenar, cerrar las solapas, salir por los rodillos y pasar a la tarima
@@ -385,16 +433,11 @@ export function avanzarPlanta(planta: Planta, s: Senales, dt: number) {
       p.z += p.v * dt
       p.y = hacia(p.y, alturaCarril(p.z) + 0.027, dt * 0.6)
       p.giro = hacia(p.giro, Math.atan(RAMPA.pendiente), dt * 5)
-      if (p.z > RAMPA.z1) {
-        const indice = p.carril < 2 ? 0 : 1
-        const caja = planta.cajas[indice]
-        const columna = p.carril % 2
-        const fondo = Math.min(1, caja.columnas[columna]++)
-        caja.piezas++
-        p.caja = indice
-        p.vy = -0.25
-        p.estado = 'cae'
-        p.destino = [columna ? 0.04 : -0.04, 0.029, fondo ? -0.04 : 0.04]
+      // se detiene formada detrás de las que ya están en el carril
+      const alto = RAMPA.z1 - 0.03 - p.lugar * PASO_EN_CARRIL
+      if (p.z >= alto) {
+        p.z = alto
+        p.v = 0
       }
     } else if (p.estado === 'cae') {
       const caja = planta.cajas[p.caja]
@@ -410,6 +453,7 @@ export function avanzarPlanta(planta: Planta, s: Senales, dt: number) {
     }
   }
 
+  moverCarriles(planta, dt)
   moverCajas(planta, s, dt)
 
   // lo que ven los sensores
@@ -441,6 +485,8 @@ export function despejarLinea(planta: Planta) {
     if (p.estado === 'linea' || p.estado === 'pinza' || p.estado === 'carril')
       reciclar(planta, p)
   }
+  for (const carril of planta.carriles)
+    Object.assign(carril, { piezas: 0, lleno: 0 })
   planta.caida = 0
   planta.extension.T = 1
 }

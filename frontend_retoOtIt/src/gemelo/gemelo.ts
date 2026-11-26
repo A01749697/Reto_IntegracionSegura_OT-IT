@@ -163,7 +163,7 @@ export function avanzarGemelo(gemelo: Gemelo, segundos: number) {
         PASO_FIJO,
       )
     const enAlmacen = contarAlmacen(planta)
-    avanzarPlc(plc, senales, planta.cajas, PASO_FIJO, !vivo)
+    avanzarPlc(plc, senales, planta.carriles, PASO_FIJO, !vivo)
     avanzarPlanta(planta, senales, PASO_FIJO)
     // salió una pieza del almacén: si ya se había contado, se lleva ese material
     if (vivo && contarAlmacen(planta) < enAlmacen && gemelo.porEntrar.length) {

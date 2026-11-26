@@ -35,7 +35,13 @@ export const Y_DEPOSITO = 0.2 // fondo del deposito
 export const Y_PIEZA_TOMA = Y_DEPOSITO + 0.025
 
 // portico (la garra)
-export const CARRILES = [0.56, 0.645, 0.73, 0.815] // 1-2 plastico, 3-4 aluminio
+export const CARRILES = [0.56, 0.645, 0.73, 0.815] // 1-2 aluminio, 3-4 plastico
+// Qué carriles (índice en CARRILES) son de cada material. Se llena uno hasta tener
+// PIEZAS_POR_CARRIL y luego el otro: 4, 4, 4, 4.
+export const CARRILES_DE = { al: [0, 1], pl: [2, 3] } as const
+export const PIEZAS_POR_CARRIL = 4
+// distancia entre piezas formadas en un carril, sobre la rampa
+export const PASO_EN_CARRIL = 0.055
 export const PARADAS_CARRO = [X_TOMA, ...CARRILES] // 0 = toma
 export const Y_PINZA_ARRIBA = 0.37
 export const Z_PORTICO = -0.25
@@ -48,12 +54,14 @@ export const RAMPA = { z0: -0.125, y0: 0.21, z1: 0.15, pendiente: 0.09 / 0.275 }
 export const alturaCarril = (z: number) =>
   RAMPA.y0 - (z - RAMPA.z0) * RAMPA.pendiente
 
-// cajas de empaque: la 0 es de plastico y la 1 de aluminio
+// cajas de empaque: la 0 es de aluminio (bajo los carriles 1-2) y la 1 de plastico.
+// Cada caja recibe de una vez las piezas de un carril lleno.
 export const CAJA_X = [0.6025, 0.7725]
 export const CAJA_Y = 0.034
 export const CAJA_Z = 0.235
 export const PIEZAS_POR_CAJA = 4
 export const CAJAS_POR_TARIMA = 12
 
-export const TOTAL_PIEZAS = 12
+// los carriles llegan a guardar 16 piezas: con menos, el almacén se quedaría vacío
+export const TOTAL_PIEZAS = 28
 export const PIEZAS_VISIBLES_ALMACEN = 6

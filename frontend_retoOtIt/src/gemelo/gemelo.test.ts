@@ -126,6 +126,62 @@ describe('gemelo en simulación', () => {
   })
 })
 
+describe('carriles de la garra', () => {
+  // Corre la simulación y anota a qué carril (1 a 4) llevó la garra cada pieza.
+  function destinos(gemelo: Gemelo, segundos: number) {
+    const lista: { carril: number; tipo: string }[] = []
+    let anterior = 0
+    for (let t = 0; t < segundos; t += 0.05) {
+      avanzarGemelo(gemelo, 0.05)
+      const { posX, materialGarra } = gemelo.senales
+      if (posX !== anterior && posX > 0)
+        lista.push({ carril: posX, tipo: materialGarra })
+      anterior = posX
+    }
+    return lista
+  }
+
+  it('aluminio va a los carriles 1-2 y plástico a los 3-4, cuatro en cada uno', () => {
+    const gemelo = crearGemelo('simulacion')
+    ponerVelocidad(gemelo, 4)
+    const lista = destinos(gemelo, 200)
+    const al = lista.filter((d) => d.tipo === 'al').map((d) => d.carril)
+    const pl = lista.filter((d) => d.tipo === 'pl').map((d) => d.carril)
+    expect(al.length).toBeGreaterThanOrEqual(9)
+    expect(pl.length).toBeGreaterThanOrEqual(9)
+    expect(al.slice(0, 9)).toEqual([1, 1, 1, 1, 2, 2, 2, 2, 1])
+    expect(pl.slice(0, 9)).toEqual([3, 3, 3, 3, 4, 4, 4, 4, 3])
+  })
+
+  it('las piezas se forman en el carril y bajan juntas a la caja cuando son cuatro', () => {
+    const gemelo = crearGemelo('simulacion')
+    ponerVelocidad(gemelo, 4)
+    const enCarril = (i: number) =>
+      gemelo.planta.piezas.filter(
+        (p) => p.estado === 'carril' && p.carril === i,
+      )
+    let maximo = 0
+    let vacioTrasLleno = false
+    for (let t = 0; t < 120; t += 0.05) {
+      avanzarGemelo(gemelo, 0.05)
+      const n = enCarril(0).length
+      if (maximo === 4 && n === 0) vacioTrasLleno = true
+      maximo = Math.max(maximo, n)
+    }
+    expect(maximo).toBe(4)
+    expect(vacioTrasLleno).toBe(true)
+    expect(gemelo.senales.cajasAl).toBeGreaterThan(0)
+  })
+
+  it('no se atora: sigue empacando de los dos materiales mucho rato', () => {
+    const gemelo = crearGemelo('simulacion')
+    ponerVelocidad(gemelo, 8)
+    correr(gemelo, 600)
+    expect(gemelo.senales.cajasAl).toBeGreaterThanOrEqual(4)
+    expect(gemelo.senales.cajasPl).toBeGreaterThanOrEqual(4)
+  }, 30_000)
+})
+
 describe('gemelo en vivo', () => {
   const T0 = Date.parse('2026-11-24T20:00:00.000Z')
 

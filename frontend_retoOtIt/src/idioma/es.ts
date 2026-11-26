@@ -175,6 +175,7 @@ export const es = {
       bitacora: 'Bitácora',
       datos: 'Datos',
       estado: 'Estado',
+      indicadores: 'Indicadores',
       tablero: 'Tablero',
       gemelo: 'Gemelo',
       cuenta: 'Mi cuenta',
@@ -361,6 +362,89 @@ export const es = {
         duro: 'Duración: {{tiempo}}',
       },
       nota: 'Cada barra es un tramo de {{tramo}}. Cuenta como disponible si llegó al menos una lectura en ese tramo. Mide la llegada de datos a la nube, no si el servidor estuvo encendido.',
+    },
+  },
+  indicadores: {
+    titulo: 'Indicadores de la celda',
+    periodo: 'Periodo',
+    periodos: { hoy: 'Hoy', '7d': '7 días', '30d': '30 días' },
+    actualizar: 'Actualizar',
+    descargar: 'Descargar CSV',
+    error:
+      'No se pudieron calcular los indicadores. Se vuelve a intentar solo.',
+    truncado:
+      'El periodo tiene demasiados registros: los números solo cubren una parte. Prueba un periodo más corto.',
+    sinActividad:
+      'La celda no registró actividad en este periodo. Cuando trabaje, aquí aparecerán su producción y su disponibilidad.',
+    resumen: 'Resumen del periodo',
+    contraAnterior: 'vs. periodo anterior',
+    puntos: '{{valor}} pts',
+    aluminio: 'Aluminio',
+    plastico: 'Plástico',
+    kpi: {
+      produccion: 'Producción',
+      produccionDetalle: '{{al}} de aluminio · {{pl}} de plástico',
+      disponibilidad: 'Disponibilidad',
+      disponibilidadDetalle: '{{marcha}} en marcha',
+      ritmo: 'Piezas por hora',
+      ritmoDetalle: 'Por cada hora en marcha',
+      ciclo: 'Tiempo de ciclo',
+      cicloDetalle: 'Promedio de {{ciclos}} ciclos',
+      paros: 'Paros',
+      parosDetalle: '{{tiempo}} detenida',
+      mezcla: 'Aluminio en la mezcla',
+      mezclaDetalle: 'Del total de piezas',
+    },
+    produccion: {
+      titulo_hora: 'Producción por hora',
+      titulo_dia: 'Producción por día',
+      detalle:
+        '{{tramo}}: {{total}} piezas ({{al}} de aluminio, {{pl}} de plástico)',
+    },
+    disponibilidad: {
+      titulo_hora: 'Disponibilidad por hora',
+      titulo_dia: 'Disponibilidad por día',
+      nota: 'Tiempo en marcha entre el tiempo con datos de la celda.',
+      detalle:
+        '{{tramo}}: {{valor}} % ({{marcha}} en marcha, {{paro}} en paro)',
+      sinDatos: '{{tramo}}: sin actividad',
+    },
+    ciclo: {
+      titulo: 'Tiempo de ciclo promedio',
+      nota: 'De que el empujador sale a que la secuencia vuelve a empezar. Más bajo es mejor.',
+      detalle: '{{tramo}}: {{valor}} en promedio ({{ciclos}} ciclos)',
+      sinTramo: '{{tramo}}: sin ciclos',
+      sin: 'No hubo ciclos completos en este periodo.',
+    },
+    tiempo: {
+      titulo: 'Uso del tiempo',
+      nota: 'Sin registro: la celda no mandó ningún cambio (apagada, sin conexión, o detenida sin latido).',
+      marcha: 'En marcha',
+      paro: 'En paro',
+      sinRegistro: 'Sin registro',
+    },
+    tabla: {
+      titulo: 'Detalle por tramo',
+      tramo: 'Tramo',
+      aluminio: 'Aluminio',
+      plastico: 'Plástico',
+      piezas: 'Piezas',
+      disponibilidad: 'Disponibilidad',
+      paros: 'Paros',
+      ciclo: 'Ciclo prom.',
+    },
+    csv: {
+      inicio: 'inicio',
+      aluminio: 'aluminio',
+      plastico: 'plastico',
+      piezas: 'piezas',
+      horasMarcha: 'horas_marcha',
+      horasParo: 'horas_paro',
+      horasSinRegistro: 'horas_sin_registro',
+      disponibilidad: 'disponibilidad_pct',
+      paros: 'paros',
+      ciclos: 'ciclos',
+      ciclo: 'ciclo_promedio_s',
     },
   },
   tablero: {
@@ -808,6 +892,8 @@ export const es = {
         'Las tablas de cuentas y bitácora, solo para leer. Cada consulta queda anotada.',
       estado:
         'Si la API, las bases de datos y la llegada de datos están al día.',
+      indicadores:
+        'La vista para dirección: producción, disponibilidad, tiempo de ciclo y paros por día, contra el periodo anterior.',
       tablero:
         'Lo que produjo la celda: piezas por material, ciclos, pasos y torreta.',
       gemelo:

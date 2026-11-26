@@ -82,6 +82,7 @@ function prepararApp() {
     obtenerHistorial: vi
       .fn()
       .mockResolvedValue({ puntos: [], truncado: false }),
+    obtenerSerie: vi.fn().mockResolvedValue({ puntos: [], truncado: false }),
   }
   const bitacora = {
     insertarEvento: vi.fn().mockResolvedValue(undefined),
@@ -769,6 +770,31 @@ describe('API del panel', { timeout: 20000 }, () => {
           limite: seguridad.lecturas.maximoPuntosHistorial,
         }),
       )
+    })
+
+    it('indicadores exige sesión y responde un tramo por día', async () => {
+      const { app, sesion, lecturas } = prepararApp()
+      const ruta =
+        '/lecturas/indicadores?desde=2026-11-18T06:00:00Z&hasta=2026-11-25T06:00:00Z&cubeta=dia'
+      expect((await consultar(app, ruta)).status).toBe(401)
+
+      sesion.buscarSesionActiva.mockResolvedValue(sesionUsuario)
+      const respuesta = await consultar(app, ruta).set('Cookie', COOKIE)
+      expect(respuesta.status).toBe(200)
+      expect(respuesta.body.cubetas).toHaveLength(7)
+      expect(respuesta.body.truncado).toBe(false)
+      expect(lecturas.obtenerSerie).toHaveBeenCalledTimes(5)
+    })
+
+    it('indicadores responde 400 con un periodo inválido', async () => {
+      const { app, sesion, lecturas } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionUsuario)
+      const respuesta = await consultar(
+        app,
+        '/lecturas/indicadores?desde=2026-11-18T06:00:00Z&hasta=2026-11-25T06:00:00Z&cubeta=semana',
+      ).set('Cookie', COOKIE)
+      expect(respuesta.status).toBe(400)
+      expect(lecturas.obtenerSerie).not.toHaveBeenCalled()
     })
 
     it('historial responde 400 con filtros inválidos y no consulta la base', async () => {
