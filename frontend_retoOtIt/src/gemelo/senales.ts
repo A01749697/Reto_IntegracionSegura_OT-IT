@@ -12,9 +12,6 @@ export type Material = '' | 'al' | 'pl'
 
 export type Senales = {
   marcha: boolean // torreta en verde: el proceso de pistones puede trabajar
-  // En vivo: piezas reales que el S7-1516 ya contó y el gemelo aún no mete.
-  // En simulación es null: el almacén nunca se acaba y manda la torreta.
-  porEntrar: number | null
   // salidas
   yA: boolean // V1: alimentador
   yB: boolean // V2: sujecion
@@ -52,12 +49,12 @@ export type Senales = {
   presion: number
   paso: number // pistones: 0 = reposo, 1 a 4
   pasoGarra: number // garra: 0 = reposo, 5 o 6
+  pasoReal: number | null // en vivo: TAB_PASO que el gemelo está mostrando
 }
 
 export function senalesIniciales(): Senales {
   return {
     marcha: false,
-    porEntrar: null,
     yA: false,
     yB: false,
     yC: false,
@@ -92,6 +89,7 @@ export function senalesIniciales(): Senales {
     presion: 6,
     paso: 0,
     pasoGarra: 0,
+    pasoReal: null,
   }
 }
 

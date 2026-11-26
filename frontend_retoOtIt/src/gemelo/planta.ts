@@ -48,6 +48,8 @@ export type Pieza = {
   caja: number
   destino: P3 // lugar dentro de su caja
   marcada: boolean
+  sello: Tipo | null // qué sello le puso el marcador (uno distinto por material)
+  conocida: boolean // en vivo: ya se sabe su material (si no, se ve gris)
 }
 
 export type Caja = {
@@ -70,9 +72,9 @@ export type Planta = {
   tarima: Tipo[] // cajas ya apiladas
   caida: number // la pila del almacen baja suave despues de alimentar
   alimentaba: boolean
-  // cuántas piezas del almacén se ven; null = todas (simulación). En vivo solo se ven
-  // las que el S7-1516 ya contó, con su material real.
-  almacenVisible: number | null
+  // en vivo el material de una pieza no se sabe hasta que lo cuenta el S7-1516
+  enVivo: boolean
+  ultimaSacada: Pieza | null // la pieza que está en proceso en los pistones
   azar: () => number
 }
 
@@ -127,6 +129,8 @@ export function crearPlanta(azar: () => number = Math.random): Planta {
       caja: -1,
       destino: [0, 0, 0],
       marcada: false,
+      sello: null,
+      conocida: true,
     })
   }
   return {
@@ -137,7 +141,8 @@ export function crearPlanta(azar: () => number = Math.random): Planta {
     tarima: [],
     caida: 0,
     alimentaba: false,
-    almacenVisible: null,
+    enVivo: false,
+    ultimaSacada: null,
     azar,
   }
 }
@@ -152,17 +157,30 @@ function reciclar(planta: Planta, pieza: Pieza) {
   pieza.giro = 0
   pieza.caja = -1
   pieza.marcada = false
+  pieza.sello = null
   pieza.tipo = planta.azar() < 0.5 ? 'al' : 'pl'
+  pieza.conocida = !planta.enVivo
 }
 
-// En vivo: las piezas de abajo del almacén toman el material de las piezas reales que
-// faltan por meter, en orden; las demás no se ven.
+// En vivo: las piezas de abajo del almacén toman, en orden, los materiales que el S7-1516
+// ya contó; las demás quedan grises porque todavía no se sabe qué son.
 export function pintarAlmacen(planta: Planta, tipos: readonly Tipo[]) {
   const fila = enAlmacen(planta).sort((a, b) => a.fila - b.fila)
-  tipos.forEach((tipo, i) => {
-    if (fila[i]) fila[i].tipo = tipo
+  fila.forEach((pieza, i) => {
+    if (i < tipos.length) {
+      pieza.tipo = tipos[i]
+      pieza.conocida = true
+    } else pieza.conocida = !planta.enVivo
   })
-  planta.almacenVisible = tipos.length
+}
+
+// En vivo: llegó el material de la pieza que ya está en proceso.
+export function identificarEnLinea(planta: Planta, tipo: Tipo): boolean {
+  const pieza = planta.ultimaSacada
+  if (!pieza || pieza.conocida || pieza.estado === 'almacen') return false
+  pieza.tipo = tipo
+  pieza.conocida = true
+  return true
 }
 
 function sacarDelAlmacen(planta: Planta) {
@@ -179,6 +197,7 @@ function sacarDelAlmacen(planta: Planta) {
     vy: 0,
     giro: 0,
   })
+  planta.ultimaSacada = pieza
   planta.caida = 1
 }
 
@@ -348,8 +367,14 @@ export function avanzarPlanta(planta: Planta, s: Senales, dt: number) {
         if (p.tipo === 'al') si1 = true
       }
       if (p.x > X_MARCADO - 0.004 && p.x < X_MARCADO + 0.03) sc2 = true
-      if (extension.C > 0.97 && Math.abs(p.x - X_MARCADO) < 0.03)
+      if (
+        !p.marcada &&
+        extension.C > 0.97 &&
+        Math.abs(p.x - X_MARCADO) < 0.03
+      ) {
         p.marcada = true
+        p.sello = s.material || p.tipo
+      }
       // LS-4 y SI-3 son de la garra: miran el deposito
       if (p.x >= X_TOMA - 0.004 && p.y <= Y_PIEZA_TOMA + 0.002) {
         ls4 = true
@@ -411,6 +436,7 @@ export function avanzarPlanta(planta: Planta, s: Senales, dt: number) {
 // el operador retira lo que quedo en la linea y en el deposito
 export function despejarLinea(planta: Planta) {
   planta.carro.lleva = null
+  planta.ultimaSacada = null
   for (const p of planta.piezas) {
     if (p.estado === 'linea' || p.estado === 'pinza' || p.estado === 'carril')
       reciclar(planta, p)

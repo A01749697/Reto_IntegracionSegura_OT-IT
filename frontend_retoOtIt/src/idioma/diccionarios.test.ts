@@ -58,6 +58,7 @@ describe('diccionarios', () => {
       'datos.no',
       'estado.servidor.cpu.valor',
       'gemelo.lecturas.no',
+      'gemelo.lecturas.pasoValor',
       'gemelo.valores.material',
       'gemelo.escena.etiquetas.plc',
       'gemelo.escena.etiquetas.ls1',

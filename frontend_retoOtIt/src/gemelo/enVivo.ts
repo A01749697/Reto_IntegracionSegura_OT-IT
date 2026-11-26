@@ -17,6 +17,7 @@ export type LecturasCelda = {
   torretaReal: number | null // lo que prende de verdad el S7-1200
   piezasAluminio: number | null // contador TAB_ALUMINIO
   piezasOtras: number | null // contador TAB_OTRAS
+  paso: number | null // TAB_PASO más reciente
   latido: number | null
   // todos los nodos de cada estacion, ordenados por nombre
   estaciones: Record<Estacion, NodoLeido[]>
@@ -38,6 +39,7 @@ export const SIN_LECTURAS: LecturasCelda = {
   torretaReal: null,
   piezasAluminio: null,
   piezasOtras: null,
+  paso: null,
   latido: null,
   estaciones: vacias(),
   ultima: null,

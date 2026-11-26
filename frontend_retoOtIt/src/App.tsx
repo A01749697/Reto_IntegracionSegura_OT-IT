@@ -1,7 +1,10 @@
 import { useCallback, useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import FondoOnda from './comun/FondoOnda'
-import { obtenerUltimasLecturas } from './gemelo/apiLecturas'
+import {
+  obtenerHistorialNodo,
+  obtenerUltimasLecturas,
+} from './gemelo/apiLecturas'
 import PaginaGemelo from './gemelo/PaginaGemelo'
 import FranjaZonas from './comun/FranjaZonas'
 import PaginaLanding from './landing/PaginaLanding'
@@ -221,6 +224,7 @@ function Contenido() {
     contenido = (
       <PaginaGemelo
         obtenerLecturas={obtenerUltimasLecturas}
+        obtenerHistorial={obtenerHistorialNodo}
         sesionCaducada={alCaducarSesion}
       />
     )

@@ -436,6 +436,8 @@ export const en: Diccionario<typeof es> = {
       latido: 'Heartbeat (S7-1516)',
       piezasAluminio: 'Aluminium parts',
       piezasOtras: 'Plastic parts',
+      paso: 'S7-1516 step',
+      pasoValor: '{{paso}} · {{nombre}}',
       alertaLatido:
         'The S7-1516 heartbeat has not changed for {{segundos}} s: it may have stopped.',
       alertaLuces:
@@ -477,9 +479,22 @@ export const en: Diccionario<typeof es> = {
       titulo: 'Settings',
       velocidad: 'Speed',
       etiquetas: 'Labels in the scene',
+      velocidadVivo: 'Live, the twin follows the real pace of the cell.',
     },
     notaEnVivo:
-      'Live, the real signal tower decides whether the pistons run. The detail below is recreated by the twin.',
+      'Live, the pistons replay the real S7-1516 steps a few seconds later and each part takes the material the PLC counted (grey until it is known). The gripper is recreated by the twin.',
+    pasosReales: {
+      0: 'Idle',
+      1: 'Start',
+      2: 'Push',
+      3: 'Pusher returns',
+      4: 'Detect part',
+      5: 'Clamp',
+      6: 'Aluminium stamp',
+      7: 'Plastic stamp',
+      8: 'Release',
+      9: 'End of sequence',
+    },
     valores: {
       titulo: 'Values',
       material: 'Material at marking',
