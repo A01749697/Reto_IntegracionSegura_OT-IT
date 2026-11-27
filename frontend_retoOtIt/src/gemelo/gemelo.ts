@@ -37,7 +37,6 @@ import {
   type Plc,
 } from './plc'
 import {
-  COLCHON,
   crearRepeticion,
   recibirCambios,
   sembrar,
@@ -67,6 +66,8 @@ export type Gemelo = {
   reloj: number // segundos de tiempo real desde que se creó (no lo afecta la velocidad)
   valores: Valores // lo que dicen ahora los nodos del S7-1516
   latido: Latido
+  enlace: boolean // en vivo: el panel responde a las consultas
+  retraso: number | null // en vivo: segundos que va detrás de la celda (aprox.)
   comunicacion: boolean // simulación: se puede cortar para probar el aviso
   contadores: { al: number; pl: number } | null
   porEntrar: Tipo[] // en vivo: materiales ya contados que aún no tienen pieza
@@ -75,7 +76,12 @@ export type Gemelo = {
 }
 
 // Lo que necesita la pantalla en cada refresco.
-export type Instantanea = Senales & { empacando: boolean; valores: Valores }
+export type Instantanea = Senales & {
+  empacando: boolean
+  valores: Valores
+  retraso: number | null
+  segundosSinLatido: number // segundos desde que LATIDO cambió (o desde que empezó)
+}
 
 const PASO_FIJO = 1 / 120
 
@@ -93,7 +99,9 @@ export function crearGemelo(
     acumulado: 0,
     reloj: 0,
     valores: {},
-    latido: { valor: undefined, cambio: 0 },
+    latido: { valor: undefined, cambio: 0, vigilado: false },
+    enlace: true,
+    retraso: null,
     comunicacion: true,
     contadores: null,
     porEntrar: [],
@@ -126,10 +134,13 @@ export function ponerModo(gemelo: Gemelo, modo: Modo) {
   gemelo.s7 = crearPlc1516()
   gemelo.valores = {}
   gemelo.comunicacion = true
-  // en vivo, el primer cambio tarda COLCHON en mostrarse: no se avisa antes de tiempo
+  gemelo.enlace = true
+  gemelo.retraso = null
+  // el S7-1516 virtual siempre tiene latido: en simulación se vigila desde el arranque
   gemelo.latido = {
     valor: undefined,
-    cambio: gemelo.reloj + (modo === 'vivo' ? COLCHON : 0),
+    cambio: gemelo.reloj,
+    vigilado: modo === 'simulacion',
   }
   pintarAlmacen(planta, [])
   if (modo === 'simulacion') mandar(gemelo.s7, 'marcha')
@@ -165,6 +176,11 @@ export function sembrarValores(
   // la torreta y el letrero muestran la última lectura sin esperar al siguiente cuadro
   gemelo.valores = gemelo.repeticion.valores
   actualizarEstado(gemelo)
+}
+
+// En vivo: si el panel responde. Si deja de hacerlo, la celda queda sin comunicación.
+export function ponerEnlace(gemelo: Gemelo, responde: boolean) {
+  gemelo.enlace = responde
 }
 
 // En vivo: los cambios que trajo la última consulta.
@@ -217,7 +233,10 @@ function actualizarEstado(gemelo: Gemelo) {
     valores[NODO.latido],
     gemelo.reloj,
   )
-  const sinComunicacion = sinLatido(gemelo.latido, gemelo.reloj)
+  const sinComunicacion =
+    (gemelo.modo === 'vivo' && !gemelo.enlace) ||
+    sinLatido(gemelo.latido, gemelo.reloj)
+  s.vigilaLatido = gemelo.latido.vigilado
   s.estado = estadoCelda(valores, sinComunicacion)
   s.codFalla = valores[NODO.codFalla] ?? 0
   const luces = lucesTorreta(
@@ -235,14 +254,19 @@ function actualizarEstado(gemelo: Gemelo) {
 export function avanzarGemelo(gemelo: Gemelo, segundos: number) {
   const { senales, planta, plc } = gemelo
   const vivo = gemelo.modo === 'vivo'
+  // el reloj sigue al tiempo real aunque los cuadros vayan lentos (la repetición depende
+  // de él); la física avanza a lo más 0.1 s por cuadro para no dar saltos
   gemelo.reloj += segundos
-  // en vivo manda el ritmo real de la celda: la velocidad solo cuenta en simulación
   gemelo.acumulado = Math.min(
-    gemelo.acumulado + segundos * (vivo ? 1 : gemelo.velocidad),
+    gemelo.acumulado + Math.min(segundos, 0.1) * (vivo ? 1 : gemelo.velocidad),
     0.5,
   )
   if (vivo) {
+    const antes = gemelo.repeticion.aplicado
     gemelo.valores = valoresEn(gemelo.repeticion, gemelo.reloj)
+    const ahora = gemelo.repeticion.aplicado
+    if (ahora !== null && ahora !== antes)
+      gemelo.retraso = Math.max(0, (Date.now() - ahora) / 1000)
     contarPiezas(gemelo)
   }
   while (gemelo.acumulado >= PASO_FIJO) {
@@ -276,5 +300,7 @@ export function tomarInstantanea(gemelo: Gemelo): Instantanea {
     ...gemelo.senales,
     empacando: estaEmpacando(gemelo.planta),
     valores: { ...gemelo.valores },
+    retraso: gemelo.modo === 'vivo' ? gemelo.retraso : null,
+    segundosSinLatido: gemelo.reloj - gemelo.latido.cambio,
   }
 }

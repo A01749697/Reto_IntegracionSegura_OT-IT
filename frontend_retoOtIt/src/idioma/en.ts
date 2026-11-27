@@ -579,7 +579,11 @@ export const en: Diccionario<typeof es> = {
       sinConexion: 'The panel is not responding. Retrying.',
       sinLecturas: 'The historian has no readings.',
       ultima: 'Latest reading: {{fecha}}',
-      sinLatido: 'LATIDO is not changing. Check that the collector stores it.',
+      retraso: 'Approx. delay: {{segundos}} s',
+      latidoQuieto:
+        'LATIDO is not changing (last record: {{fecha}}). Communication is not monitored until it arrives.',
+      latidoAusente:
+        'The historian has no LATIDO. Communication is not monitored until it arrives.',
       estaciones: {
         'S7-1200': 'S7-1200 · tower light',
         'S7-1500': 'S7-1516 · board',

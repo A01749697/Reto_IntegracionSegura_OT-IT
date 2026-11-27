@@ -97,4 +97,22 @@ describe('repetición de cambios', () => {
     expect(valoresEn(rep, ahora + 1).TAB_PASO).toBe(5)
     expect(valoresEn(rep, ahora + 1 + COLCHON).TAB_PASO).toBe(9)
   })
+
+  it('un lote que llega tarde recorre la repetición, y luego se recupera poco a poco', () => {
+    const { rep } = sembrada()
+    recibirCambios(rep, [en(0, 'TAB_PASO', 2)], 100)
+    // este llegó 6 s tarde: ya debió mostrarse en 105
+    recibirCambios(rep, [en(1, 'TAB_PASO', 3)], 110)
+    expect(rep.eventos.at(-1)?.t).toBeCloseTo(110.5)
+    // los siguientes llegan a tiempo: el atraso extra se va quitando
+    let anterior = Infinity
+    for (let i = 0; i < 20; i++) {
+      const ahora = 112 + i * 2
+      recibirCambios(rep, [en(3 + i * 2, 'TAB_PASO', 4 + i)], ahora)
+      const colchon = (rep.eventos.at(-1)?.t ?? 0) - ahora
+      expect(colchon).toBeLessThanOrEqual(anterior + 1e-9)
+      anterior = colchon
+    }
+    expect(anterior).toBeLessThanOrEqual(COLCHON + 1.01)
+  })
 })

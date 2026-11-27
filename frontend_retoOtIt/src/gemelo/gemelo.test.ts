@@ -4,6 +4,7 @@ import {
   crearGemelo,
   mandarSimulacion,
   meterPiezas,
+  ponerEnlace,
   ponerModo,
   ponerVelocidad,
   recibirCambiosReales,
@@ -322,14 +323,48 @@ describe('gemelo en vivo', () => {
     en(9.5, NODO.paso, 0),
   ]
 
-  it('sin datos dice SIN DATO y, sin latido, pasa a SIN COMUNICACIÓN', () => {
+  it('sin datos dice SIN DATO', () => {
     const gemelo = crearGemelo('vivo')
     correr(gemelo, 1)
     expect(gemelo.senales.estado).toBe('sinDato')
     expect(gemelo.senales.torreVerde || gemelo.senales.torreRoja).toBe(false)
-    correr(gemelo, 10)
+  })
+
+  it('si LATIDO nunca cambia (no se guarda), no se marca sin comunicación', () => {
+    const gemelo = enMarcha()
+    recibirCambiosReales(gemelo, [en(0, NODO.paso, 2)])
+    correr(gemelo, 30)
+    expect(gemelo.senales.vigilaLatido).toBe(false)
+    expect(gemelo.senales.estado).toBe('marcha')
+  })
+
+  it('si el panel deja de responder: SIN COMUNICACIÓN aunque no haya latido', () => {
+    const gemelo = enMarcha()
+    correr(gemelo, 0.5)
+    ponerEnlace(gemelo, false)
+    correr(gemelo, 0.1)
     expect(gemelo.senales.estado).toBe('sinComunicacion')
-    expect(gemelo.senales.torreGris).toBe(true)
+    ponerEnlace(gemelo, true)
+    correr(gemelo, 0.1)
+    expect(gemelo.senales.estado).toBe('marcha')
+  })
+
+  it('el reloj de la repetición va con el tiempo real aunque los cuadros sean lentos', () => {
+    const gemelo = enMarcha()
+    recibirCambiosReales(gemelo, [en(0, NODO.empujaExt, 1), ...latidos(10)])
+    // cuadros de medio segundo (2 cuadros por segundo)
+    for (let i = 0; i < 9; i++) avanzarGemelo(gemelo, 0.5)
+    expect(gemelo.senales.yA).toBe(true)
+  })
+
+  it('un lote que llega tarde se recorre en lugar de aplicarse de golpe', () => {
+    const gemelo = enMarcha()
+    recibirCambiosReales(gemelo, [en(0, NODO.paso, 2), ...latidos(1)])
+    correr(gemelo, 8)
+    // llega 10 s después: ya debió mostrarse, pero se ve en orden
+    recibirCambiosReales(gemelo, [en(2, NODO.paso, 3), en(3, NODO.paso, 4)])
+    const pasos = anotar(gemelo, 3, () => gemelo.senales.pasoReal)
+    expect(pasos).toEqual([2, 3, 4])
   })
 
   it('arranca con la última lectura: torreta y letrero salen de TAB_TORRETA', () => {

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { estadoCelda, lucesTorreta, sinLatido, vigilarLatido } from './estado'
+import {
+  estadoCelda,
+  lucesTorreta,
+  sinLatido,
+  vigilarLatido,
+  type Latido,
+} from './estado'
 import { NODO } from './nodos'
 
 const con = (torreta: number, falla = 0) => ({
@@ -70,13 +76,25 @@ describe('lucesTorreta', () => {
 })
 
 describe('latido', () => {
-  it('se da por perdido si no cambia en más de 5 s', () => {
-    let latido = vigilarLatido({ valor: undefined, cambio: 0 }, 7, 1)
-    expect(latido).toEqual({ valor: 7, cambio: 1 })
-    latido = vigilarLatido(latido, 7, 5)
-    expect(sinLatido(latido, 5.9)).toBe(false)
-    expect(sinLatido(latido, 6.1)).toBe(true)
-    latido = vigilarLatido(latido, 8, 6.2)
-    expect(sinLatido(latido, 6.3)).toBe(false)
+  it('se vigila desde que cambia por primera vez', () => {
+    let latido = vigilarLatido(
+      { valor: undefined, cambio: 0, vigilado: false },
+      7,
+      1,
+    )
+    // un solo valor (el colector no lo guarda): no se puede saber nada
+    expect(latido.vigilado).toBe(false)
+    expect(sinLatido(latido, 60)).toBe(false)
+    latido = vigilarLatido(latido, 8, 2)
+    expect(latido).toEqual({ valor: 8, cambio: 2, vigilado: true })
+  })
+
+  it('ya vigilado, se da por perdido si no cambia en más de 5 s', () => {
+    let latido: Latido = { valor: 8, cambio: 2, vigilado: true }
+    latido = vigilarLatido(latido, 8, 6)
+    expect(sinLatido(latido, 6.9)).toBe(false)
+    expect(sinLatido(latido, 7.1)).toBe(true)
+    latido = vigilarLatido(latido, 9, 7.2)
+    expect(sinLatido(latido, 7.3)).toBe(false)
   })
 })

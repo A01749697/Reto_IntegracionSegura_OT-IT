@@ -62,17 +62,26 @@ export function lucesTorreta(
 }
 
 // Vigila que LATIDO cambie. cambio: reloj del gemelo (segundos) de la última vez que cambió.
-export type Latido = { valor: number | undefined; cambio: number }
+// Se vigila desde la primera vez que se le ve cambiar: si el colector no lo guarda, su
+// valor nunca cambia y no se puede saber si hay comunicación (se avisa aparte).
+export type Latido = {
+  valor: number | undefined
+  cambio: number
+  vigilado: boolean
+}
 
 export function vigilarLatido(
   latido: Latido,
   valor: number | undefined,
   reloj: number,
 ): Latido {
-  if (valor !== undefined && valor !== latido.valor)
-    return { valor, cambio: reloj }
-  return latido
+  if (valor === undefined || valor === latido.valor) return latido
+  return {
+    valor,
+    cambio: reloj,
+    vigilado: latido.vigilado || latido.valor !== undefined,
+  }
 }
 
 export const sinLatido = (latido: Latido, reloj: number) =>
-  reloj - latido.cambio > SEGUNDOS_SIN_LATIDO
+  latido.vigilado && reloj - latido.cambio > SEGUNDOS_SIN_LATIDO
