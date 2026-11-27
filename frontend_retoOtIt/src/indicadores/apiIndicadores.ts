@@ -6,29 +6,46 @@ export type Tramo = {
   aluminio: number
   plastico: number
   marcha: number // segundos con la torreta en verde
-  paro: number // segundos en otro estado, con la celda mandando datos
+  mantenimiento: number // segundos en mantenimiento (paro planeado)
+  paro: number // segundos en paro, falla o reset, con la celda mandando datos
   sinRegistro: number // segundos sin ningún dato
   paros: number
+  fallas: number
   ciclos: number
   segundosCiclo: number
 }
 
 export type Cubeta = 'hora' | 'dia'
 
+// Cada vez que se activó TAB_FALLA, con el código que tenía TAB_COD_FALLA.
+export type EventoFalla = { ts: string; codigo: number | null }
+
 export type ResultadoIndicadores =
-  | { ok: true; tramos: Tramo[]; truncado: boolean }
+  | { ok: true; tramos: Tramo[]; fallas: EventoFalla[]; truncado: boolean }
   | { ok: false; motivo: 'sesion' | 'fallo' }
 
 const NUMEROS = [
   'aluminio',
   'plastico',
   'marcha',
+  'mantenimiento',
   'paro',
   'sinRegistro',
   'paros',
+  'fallas',
   'ciclos',
   'segundosCiclo',
 ] as const
+
+function esEventoFalla(valor: unknown): valor is EventoFalla {
+  if (typeof valor !== 'object' || valor === null) return false
+  const f = valor as Record<string, unknown>
+  return (
+    typeof f.ts === 'string' &&
+    (f.codigo === null ||
+      (typeof f.codigo === 'number' && Number.isFinite(f.codigo)))
+  )
+}
 
 function esTramo(valor: unknown): valor is Tramo {
   if (typeof valor !== 'object' || valor === null) return false
@@ -56,9 +73,21 @@ export async function obtenerIndicadores(
     )
     if (estado === 401) return { ok: false, motivo: 'sesion' }
     const tramos = leerCampo(datos, 'cubetas')
-    if (estado !== 200 || !Array.isArray(tramos) || !tramos.every(esTramo))
+    const fallas = leerCampo(datos, 'fallas') ?? []
+    if (
+      estado !== 200 ||
+      !Array.isArray(tramos) ||
+      !tramos.every(esTramo) ||
+      !Array.isArray(fallas) ||
+      !fallas.every(esEventoFalla)
+    )
       return { ok: false, motivo: 'fallo' }
-    return { ok: true, tramos, truncado: leerCampo(datos, 'truncado') === true }
+    return {
+      ok: true,
+      tramos,
+      fallas,
+      truncado: leerCampo(datos, 'truncado') === true,
+    }
   } catch {
     return { ok: false, motivo: 'fallo' }
   }

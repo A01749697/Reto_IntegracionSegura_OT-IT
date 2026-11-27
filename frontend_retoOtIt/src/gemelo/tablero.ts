@@ -1,6 +1,5 @@
 // Lo que controla la celda: tablero trasero con el PLC y las electroválvulas,
-// la unidad de aire, las mangueras y la torreta (verde = marcha, roja = paro).
-// No hay botonera: la marcha y el paro de los pistones los da la torreta.
+// la unidad de aire, las mangueras y la torreta de tres luces (verde, amarilla, roja).
 import * as THREE from 'three'
 import i18n from '../idioma/i18n'
 import { CADENA, type Piston } from './celda'
@@ -322,13 +321,15 @@ function torreta(E: Grupo, m: Materiales) {
     resplandor.scale.setScalar(0.3)
     resplandor.position.set(x, y, z)
     E.add(resplandor)
-    return { lente, halo }
+    return { lente, halo, color: new THREE.Color(color) }
   }
+  // de abajo hacia arriba, como en planta: verde, amarilla, roja
   const luces = {
     verde: luz(0x2fd36b, 0),
-    roja: luz(0xf2392f, 1),
+    amarilla: luz(0xf2b233, 1),
+    roja: luz(0xf2392f, 2),
   }
-  cil(0.03, 0.012, m.negro, x, 0.444, z, 'y', E, 28, 0.02)
+  cil(0.03, 0.012, m.negro, x, 0.498, z, 'y', E, 28, 0.02)
   return luces
 }
 

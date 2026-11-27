@@ -1,18 +1,44 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import i18n from '../idioma/i18n'
-import type { ResultadoLecturas, UltimaLectura } from './apiLecturas'
-import { ESTADOS_TORRETA, NODOS } from './nodos'
-import PaginaGemelo from './PaginaGemelo'
+import type {
+  ResultadoCambios,
+  ResultadoLecturas,
+  UltimaLectura,
+} from './apiLecturas'
+import { avanzarGemelo, type Gemelo } from './gemelo'
+import { NODO, NODOS_TABLERO, PLC_TABLERO } from './nodos'
+import PaginaGemelo, { SEGUNDOS_CAMBIOS } from './PaginaGemelo'
 
-// jsdom no tiene WebGL: la vista 3D se cambia por un botón que hace lo que hace cada cuadro.
+// jsdom no tiene WebGL: la vista 3D se cambia por un botón que hace lo que hace un cuadro.
 vi.mock('./VistaCelda', () => ({
-  default: ({ alRefrescar }: { alRefrescar: () => void }) => (
-    <button type="button" onClick={alRefrescar}>
+  default: ({
+    gemelo,
+    alRefrescar,
+  }: {
+    gemelo: Gemelo
+    alRefrescar: () => void
+  }) => (
+    <button
+      type="button"
+      onClick={() => {
+        avanzarGemelo(gemelo, 0.2)
+        alRefrescar()
+      }}
+    >
       vista 3D
     </button>
   ),
 }))
+
+const TS = '2026-11-26T20:00:00.000Z'
 
 const lectura = (
   plc: string,
@@ -21,390 +47,264 @@ const lectura = (
   ts = new Date().toISOString(),
 ): UltimaLectura => ({ plc, variable, valor, ts })
 
-function lecturasDeAhora(verde = 1): ResultadoLecturas {
+function lecturas(torreta = 1, extra: UltimaLectura[] = []): ResultadoLecturas {
+  const ahora = new Date().toISOString()
   return {
     ok: true,
     lecturas: [
-      lectura(
-        NODOS.torreta.plc,
-        NODOS.torreta.nodo,
-        verde ? ESTADOS_TORRETA.verde : ESTADOS_TORRETA.roja,
-      ),
-      lectura(NODOS.latido.plc, NODOS.latido.nodo, 77),
-      lectura('S7-1500', 'TAB_PISTON_A', 1),
-      lectura('S7-300', 'CONTADOR_PIEZAS', 12),
+      lectura(PLC_TABLERO, NODO.torreta, torreta, ahora),
+      lectura(PLC_TABLERO, NODO.latido, 77, ahora),
+      lectura(PLC_TABLERO, NODO.paso, 5, ahora),
+      lectura(PLC_TABLERO, NODO.ciclos, 302, ahora),
+      lectura('S7-300', 'CONTADOR_PIEZAS', 12, ahora),
+      ...extra,
     ],
   }
 }
 
-function preparar(respuesta: ResultadoLecturas) {
+function preparar(
+  respuesta: ResultadoLecturas = lecturas(),
+  cambios: ResultadoCambios = { ok: true, cambios: [], truncado: false },
+) {
   const props = {
     obtenerLecturas: vi.fn().mockResolvedValue(respuesta),
-    obtenerHistorial: vi.fn().mockResolvedValue({ ok: true, puntos: [] }),
+    obtenerCambios: vi.fn().mockResolvedValue(cambios),
     sesionCaducada: vi.fn(),
   }
   render(<PaginaGemelo {...props} />)
   return props
 }
 
-const elegir = (nombre: string) =>
+const pulsar = (nombre: string) =>
   fireEvent.click(screen.getByRole('button', { name: nombre }))
+
+const letrero = (nombre = 'Estado de la celda') =>
+  screen.getByRole('status', { name: nombre })
 
 beforeEach(() => vi.clearAllMocks())
 afterEach(() => vi.useRealTimers())
 
 describe('PaginaGemelo en vivo', () => {
-  it('abre en vivo y muestra la torreta, el latido y los nodos de cada estación', async () => {
-    preparar(lecturasDeAhora())
+  it('arranca con la última lectura: letrero, paso y datos del S7-1516', async () => {
+    preparar()
     expect(
       screen.getByRole('heading', { name: 'Gemelo digital' }),
     ).toBeInTheDocument()
-    expect(await screen.findByText('Datos en vivo')).toBeInTheDocument()
-    expect(screen.getByText('Verde: marcha')).toBeInTheDocument()
-    // el latido sale en el resumen y en la lista del S7-1516
-    expect(screen.getAllByText('77')).toHaveLength(2)
-    expect(screen.getByText('TAB_PISTON_A')).toBeInTheDocument()
-    expect(screen.getByText('CONTADOR_PIEZAS')).toBeInTheDocument()
-    expect(screen.getByText(/S7-300 · garra/)).toBeInTheDocument()
-    expect(screen.getByText(/Última lectura:/)).toBeInTheDocument()
+    expect(await screen.findByText('En línea')).toBeInTheDocument()
+    pulsar('vista 3D')
+    expect(letrero()).toHaveTextContent('EN MARCHA')
+    const datos = screen.getByRole('region', { name: 'Datos de la celda' })
+    expect(within(datos).getByText('5 · Aprieta')).toBeInTheDocument()
+    expect(within(datos).getByText('302')).toBeInTheDocument()
+    expect(within(datos).getByText(NODO.tCarreraPd1)).toBeInTheDocument()
   })
 
-  it('la torreta real en verde pone la celda en marcha', async () => {
-    preparar(lecturasDeAhora(1))
-    const refrescar = await screen.findByRole('button', { name: 'vista 3D' })
-    await screen.findByText('Verde: marcha')
-    fireEvent.click(refrescar)
-    expect(screen.getByText('Torreta verde: marcha')).toBeInTheDocument()
+  it.each([
+    [2, 'MANTENIMIENTO'],
+    [3, 'PARO'],
+    [4, 'RESET / REGRESO A INICIO'],
+    [8, 'SIN DATO'],
+  ])('TAB_TORRETA %i se ve como %s', async (torreta, texto) => {
+    preparar(lecturas(torreta))
+    await screen.findByText('En línea')
+    pulsar('vista 3D')
+    expect(letrero()).toHaveTextContent(texto)
   })
 
-  it('la torreta real en rojo deja la celda en paro', async () => {
-    preparar(lecturasDeAhora(0))
-    expect(await screen.findByText('Roja: paro')).toBeInTheDocument()
-    expect(screen.getByText('Torreta roja: paro')).toBeInTheDocument()
-    expect(screen.getByText(/La torreta real está en rojo/)).toBeInTheDocument()
+  it('una falla muestra su código', async () => {
+    preparar(
+      lecturas(3, [
+        lectura(PLC_TABLERO, NODO.falla, 1),
+        lectura(PLC_TABLERO, NODO.codFalla, 7),
+      ]),
+    )
+    await screen.findByText('En línea')
+    pulsar('vista 3D')
+    expect(letrero()).toHaveTextContent('FALLA')
+    expect(letrero()).toHaveTextContent('Código 7')
   })
 
-  it('no ofrece botones de marcha, paro ni emergencia', async () => {
-    preparar(lecturasDeAhora())
-    await screen.findByText('Datos en vivo')
-    for (const nombre of [
-      'Marcha',
-      'Paro',
-      'Paro de emergencia',
-      'Restablecer',
-      'Verde (marcha)',
-    ])
-      expect(screen.queryByRole('button', { name: nombre })).toBeNull()
-  })
-
-  it('sin lecturas lo explica y sugiere la simulación', async () => {
-    preparar({ ok: true, lecturas: [] })
-    expect(await screen.findByText('Sin lecturas todavía')).toBeInTheDocument()
-    expect(screen.getByText(/Aún no llega ninguna lectura/)).toBeInTheDocument()
-  })
-
-  it('avisa si las lecturas están atrasadas', async () => {
-    preparar({
+  it('pide los cambios de los nodos del S7-1516 desde la última lectura, y luego desde el último cambio', async () => {
+    vi.useFakeTimers()
+    const props = preparar(lecturas(1, [lectura(PLC_TABLERO, 'TAB_X', 1, TS)]))
+    await vi.advanceTimersByTimeAsync(100)
+    props.obtenerCambios.mockResolvedValueOnce({
       ok: true,
-      lecturas: [lectura('S7-300', 'A', 5, '2026-01-01T00:00:00.000Z')],
+      cambios: [{ nodo: NODO.paso, ts: '2030-01-01T00:00:05.000Z', valor: 6 }],
+      truncado: false,
     })
-    expect(await screen.findByText('Lecturas atrasadas')).toBeInTheDocument()
+    await vi.advanceTimersByTimeAsync(SEGUNDOS_CAMBIOS * 1000)
+    const [plc, nodos, desde] = props.obtenerCambios.mock.calls[0] as [
+      string,
+      string[],
+      Date,
+    ]
+    expect(plc).toBe(PLC_TABLERO)
+    expect(nodos).toEqual(NODOS_TABLERO)
+    expect(desde.getTime()).toBeGreaterThan(Date.parse(TS))
+    await vi.advanceTimersByTimeAsync(SEGUNDOS_CAMBIOS * 1000)
+    const segunda = props.obtenerCambios.mock.calls[1][2] as Date
+    expect(segunda.toISOString()).toBe('2030-01-01T00:00:05.000Z')
+  })
+
+  it('si la respuesta venía recortada, pide lo que sigue sin esperar', async () => {
+    vi.useFakeTimers()
+    const props = preparar()
+    await vi.advanceTimersByTimeAsync(100)
+    props.obtenerCambios.mockResolvedValueOnce({
+      ok: true,
+      cambios: [],
+      truncado: true,
+    })
+    await vi.advanceTimersByTimeAsync(SEGUNDOS_CAMBIOS * 1000 + 10)
+    expect(props.obtenerCambios).toHaveBeenCalledTimes(2)
+  })
+
+  it('sin lecturas lo dice', async () => {
+    preparar({ ok: true, lecturas: [] })
+    expect(
+      await screen.findByText('El historian no tiene lecturas.'),
+    ).toBeInTheDocument()
   })
 
   it('avisa si no se pudo consultar', async () => {
     preparar({ ok: false, motivo: 'fallo' })
-    expect(await screen.findByText('Sin conexión')).toBeInTheDocument()
     expect(
-      screen.getByText(/No se pudieron consultar las lecturas/),
+      await screen.findByText('El panel no responde. Reintentando.'),
     ).toBeInTheDocument()
   })
 
   it('avisa a la app cuando la sesión caducó', async () => {
     const props = preparar({ ok: false, motivo: 'sesion' })
-    await waitFor(() => expect(props.sesionCaducada).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(props.sesionCaducada).toHaveBeenCalled())
   })
 
-  it('vuelve a consultar cada 5 segundos', async () => {
-    vi.useFakeTimers()
-    const props = preparar(lecturasDeAhora())
-    await vi.advanceTimersByTimeAsync(100)
-    expect(props.obtenerLecturas).toHaveBeenCalledTimes(1)
-    await vi.advanceTimersByTimeAsync(10_000)
-    expect(props.obtenerLecturas).toHaveBeenCalledTimes(3)
+  it('no ofrece mandos: en vivo solo se lee', async () => {
+    preparar()
+    await screen.findByText('En línea')
+    expect(screen.queryByRole('button', { name: 'Marcha' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Reset' })).toBeNull()
   })
 
-  it('sigue a la torreta cuando cambia', async () => {
-    vi.useFakeTimers()
-    const props = preparar(lecturasDeAhora(1))
-    await vi.advanceTimersByTimeAsync(100)
-    props.obtenerLecturas.mockResolvedValue(lecturasDeAhora(0))
-    await vi.advanceTimersByTimeAsync(5000)
-    vi.useRealTimers()
-    expect(await screen.findByText('Roja: paro')).toBeInTheDocument()
+  it('la velocidad no se puede cambiar: va al ritmo de la celda', () => {
+    preparar()
+    expect(screen.getByRole('slider')).toBeDisabled()
   })
 })
 
 describe('PaginaGemelo en simulación', () => {
-  it('ofrece la torreta simulada en lugar de mandos y deja de consultar la nube', async () => {
+  async function enSimulacion() {
+    const props = preparar()
+    await screen.findByText('En línea')
+    pulsar('Simulación')
+    return props
+  }
+
+  it('ofrece los mandos del operador y deja de consultar', async () => {
     vi.useFakeTimers()
-    const props = preparar(lecturasDeAhora())
+    const props = preparar()
     await vi.advanceTimersByTimeAsync(100)
-    elegir('Simulación')
-    expect(screen.getByText('Datos simulados')).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'Verde (marcha)' }),
-    ).toHaveAttribute('aria-pressed', 'true')
-    expect(
-      screen.getByRole('button', { name: 'Roja (paro)' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'Paro de emergencia' }),
-    ).toBeNull()
+    pulsar('Simulación')
+    const llamadas = props.obtenerLecturas.mock.calls.length
     await vi.advanceTimersByTimeAsync(20_000)
-    expect(props.obtenerLecturas).toHaveBeenCalledTimes(1)
+    expect(props.obtenerLecturas).toHaveBeenCalledTimes(llamadas)
+    expect(screen.getByText('Datos simulados')).toBeInTheDocument()
+    for (const mando of ['Marcha', 'Paro', 'Mantenimiento', 'Reset'])
+      expect(screen.getByRole('button', { name: mando })).toBeInTheDocument()
+    expect(screen.getByRole('slider')).toBeEnabled()
   })
 
-  it('la torreta en rojo detiene los pistones y lo dice', async () => {
-    preparar(lecturasDeAhora())
-    elegir('Simulación')
-    const refrescar = await screen.findByRole('button', { name: 'vista 3D' })
-    elegir('Roja (paro)')
-    fireEvent.click(refrescar)
-    expect(screen.getByText('Torreta roja: paro')).toBeInTheDocument()
-    expect(screen.getByText(/La torreta está en rojo/)).toBeInTheDocument()
-    elegir('Verde (marcha)')
-    fireEvent.click(refrescar)
-    expect(screen.getByText('Torreta verde: marcha')).toBeInTheDocument()
+  it('arranca en marcha; Paro y Mantenimiento cambian el letrero', async () => {
+    await enSimulacion()
+    pulsar('vista 3D')
+    expect(letrero()).toHaveTextContent('EN MARCHA')
+    pulsar('Paro')
+    pulsar('vista 3D')
+    expect(letrero()).toHaveTextContent('PARO')
+    pulsar('Mantenimiento')
+    pulsar('vista 3D')
+    expect(letrero()).toHaveTextContent('MANTENIMIENTO')
+    expect(
+      screen.getByRole('button', { name: 'Mantenimiento' }),
+    ).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('Reset muestra RESET / REGRESO A INICIO', async () => {
+    await enSimulacion()
+    pulsar('Reset')
+    pulsar('vista 3D')
+    expect(letrero()).toHaveTextContent('RESET / REGRESO A INICIO')
+  })
+
+  it('trabar PD-1 termina en falla con su código y su descripción', async () => {
+    await enSimulacion()
+    pulsar('Trabar PD-1')
+    act(() => {
+      for (let i = 0; i < 30; i++) pulsar('vista 3D')
+    })
+    expect(letrero()).toHaveTextContent('FALLA')
+    expect(letrero()).toHaveTextContent('Código 1')
+    expect(
+      screen.getByText('Código 1: PD-1 no llegó a TAB_FINC_EMPUJAR'),
+    ).toBeInTheDocument()
+  })
+
+  it('cortar la comunicación termina en SIN COMUNICACIÓN', async () => {
+    await enSimulacion()
+    pulsar('vista 3D')
+    pulsar('Cortar comunicación')
+    act(() => {
+      for (let i = 0; i < 30; i++) pulsar('vista 3D')
+    })
+    expect(letrero()).toHaveTextContent('SIN COMUNICACIÓN')
   })
 
   it('al volver a En vivo consulta de nuevo', async () => {
-    const props = preparar(lecturasDeAhora())
-    await screen.findByText('Datos en vivo')
-    elegir('Simulación')
-    elegir('En vivo')
-    await waitFor(() => expect(props.obtenerLecturas).toHaveBeenCalledTimes(2))
-    expect(await screen.findByText('Datos en vivo')).toBeInTheDocument()
+    const props = await enSimulacion()
+    const llamadas = props.obtenerLecturas.mock.calls.length
+    pulsar('En vivo')
+    await waitFor(() =>
+      expect(props.obtenerLecturas).toHaveBeenCalledTimes(llamadas + 1),
+    )
   })
 })
 
-describe('PaginaGemelo, vista y secuencia', () => {
-  it('lista los siete pasos del proceso', () => {
-    preparar(lecturasDeAhora())
-    const pasos = screen.getByRole('list', { name: 'Secuencia del proceso' })
-    expect(pasos.textContent).toBe(
-      '1Alimentar2Identificar3Sujetar y marcar4Caer al depósito5Tomar6Clasificar7Empacar',
-    )
+describe('PaginaGemelo, secuencia y vista', () => {
+  it('lista los diez pasos del S7-1516 y marca el actual', async () => {
+    preparar()
+    await screen.findByText('En línea')
+    pulsar('vista 3D')
+    const secuencia = screen.getByRole('list', {
+      name: 'Secuencia del S7-1516',
+    })
+    expect(within(secuencia).getAllByRole('listitem')).toHaveLength(10)
+    expect(
+      within(secuencia).getByText('Aprieta').closest('li'),
+    ).toHaveAttribute('aria-current', 'step')
   })
 
   it('marca la vista elegida', () => {
-    preparar(lecturasDeAhora())
-    expect(screen.getByRole('button', { name: 'General' })).toHaveAttribute(
+    preparar()
+    pulsar('Marcado')
+    expect(screen.getByRole('button', { name: 'Marcado' })).toHaveAttribute(
       'aria-pressed',
       'true',
     )
-    elegir('Pórtico')
-    expect(screen.getByRole('button', { name: 'Pórtico' })).toHaveAttribute(
-      'aria-pressed',
-      'true',
-    )
-    expect(screen.getByRole('button', { name: 'General' })).toHaveAttribute(
-      'aria-pressed',
-      'false',
-    )
-  })
-
-  it('en vivo la velocidad no se puede cambiar: va al ritmo de la celda', () => {
-    preparar(lecturasDeAhora())
-    expect(screen.getByRole('slider')).toBeDisabled()
-    expect(screen.getByText(/ritmo real de la celda/)).toBeInTheDocument()
-  })
-
-  it('en simulación deja cambiar la velocidad y ocultar las etiquetas', () => {
-    preparar(lecturasDeAhora())
-    elegir('Simulación')
-    fireEvent.change(screen.getByRole('slider'), { target: { value: '2' } })
-    expect(screen.getByText('2x')).toBeInTheDocument()
-    const etiquetas = screen.getByRole('checkbox', {
-      name: 'Etiquetas en la escena',
-    })
-    expect(etiquetas).toBeChecked()
-    fireEvent.click(etiquetas)
-    expect(etiquetas).not.toBeChecked()
-  })
-
-  it('las señales empiezan con la torreta en rojo y la garra en espera', () => {
-    preparar(lecturasDeAhora())
-    expect(screen.getByText('Torreta roja: paro')).toBeInTheDocument()
-    expect(screen.getByText('Garra en espera')).toBeInTheDocument()
-    expect(screen.getByText('Alimentador atrás')).toBeInTheDocument()
-    expect(screen.getByText('Pieza en el depósito')).toBeInTheDocument()
-    expect(screen.getByText('Tope baja')).toBeInTheDocument()
-    expect(screen.getAllByText('Sin pieza')).toHaveLength(2)
-    expect(screen.getByText('6.00 bar')).toBeInTheDocument()
   })
 })
 
 describe('PaginaGemelo en inglés', () => {
-  it('muestra la pantalla, las señales y los pasos en inglés', async () => {
+  beforeEach(async () => {
     await i18n.changeLanguage('en')
-    preparar(lecturasDeAhora())
-
-    expect(
-      screen.getByRole('heading', { name: 'Digital twin' }),
-    ).toBeInTheDocument()
-    expect(await screen.findByText('Live data')).toBeInTheDocument()
-    expect(screen.getByText('Green: running')).toBeInTheDocument()
-    expect(screen.getByText(/Last reading:/)).toBeInTheDocument()
-    expect(screen.getByText('Feeder retracted')).toBeInTheDocument()
-    expect(screen.getByText('Part in the hopper')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Gantry' })).toBeInTheDocument()
-
-    const pasos = screen.getByRole('list', { name: 'Process sequence' })
-    expect(pasos.textContent).toBe(
-      '1Feed2Identify3Clamp and mark4Drop into hopper5Pick6Sort7Pack',
-    )
   })
 
-  it('en simulación la torreta y el texto de ayuda salen en inglés', async () => {
-    await i18n.changeLanguage('en')
-    preparar(lecturasDeAhora())
-    elegir('Simulation')
-
-    expect(
-      screen.getByRole('button', { name: 'Green (run)' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole('button', { name: 'Red (stop)' }),
-    ).toBeInTheDocument()
-    expect(screen.getByText('Simulated data')).toBeInTheDocument()
-    expect(screen.getByText(/It only controls the pistons/)).toBeInTheDocument()
-  })
-})
-
-describe('PaginaGemelo, alertas del tablero', () => {
-  it('TORRETA_REAL todavía no llega: lo dice y no alerta', async () => {
-    preparar(lecturasDeAhora())
-    expect(await screen.findByText('Aún no se envía')).toBeInTheDocument()
-    expect(screen.queryByRole('alert')).toBeNull()
-  })
-
-  it('si la torreta real no coincide con el tablero, alerta', async () => {
-    const respuesta = lecturasDeAhora(1)
-    if (respuesta.ok)
-      respuesta.lecturas.push(
-        lectura(
-          NODOS.torretaReal.plc,
-          NODOS.torretaReal.nodo,
-          ESTADOS_TORRETA.roja,
-        ),
-      )
-    preparar(respuesta)
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      'La torreta real (Roja: paro) no coincide con el estado del tablero (Verde: marcha).',
-    )
-  })
-
-  it('si la torreta real no tiene una sola luz, alerta', async () => {
-    const respuesta = lecturasDeAhora(1)
-    if (respuesta.ok)
-      respuesta.lecturas.push(
-        lectura(NODOS.torretaReal.plc, NODOS.torretaReal.nodo, 0),
-      )
-    preparar(respuesta)
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      /todas las luces apagadas o varias prendidas/,
-    )
-  })
-
-  it('si el latido no cambia, alerta', async () => {
-    vi.useFakeTimers()
-    preparar(lecturasDeAhora(1)) // el latido se queda en 77
-    await vi.advanceTimersByTimeAsync(100)
-    expect(screen.queryByRole('alert')).toBeNull()
-    await vi.advanceTimersByTimeAsync(20_000)
-    vi.useRealTimers()
-    expect(await screen.findByRole('alert')).toHaveTextContent(
-      /El latido del S7-1516 no cambia desde hace \d+ s/,
-    )
-  })
-
-  it('muestra los contadores de piezas del S7-1516', async () => {
-    const respuesta = lecturasDeAhora()
-    if (respuesta.ok)
-      respuesta.lecturas.push(
-        lectura(NODOS.piezasAluminio.plc, NODOS.piezasAluminio.nodo, 52),
-        lectura(NODOS.piezasOtras.plc, NODOS.piezasOtras.nodo, 250),
-      )
-    preparar(respuesta)
-    expect(await screen.findByText('Piezas de aluminio')).toBeInTheDocument()
-    expect(screen.getAllByText('52').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('250').length).toBeGreaterThan(0)
-  })
-})
-
-describe('PaginaGemelo, pasos reales', () => {
-  it('pide a /historial los cambios de TAB_PASO y muestra el paso más reciente', async () => {
-    const respuesta = lecturasDeAhora()
-    if (respuesta.ok)
-      respuesta.lecturas.push(lectura(NODOS.paso.plc, NODOS.paso.nodo, 6))
-    const props = preparar(respuesta)
-    expect(await screen.findByText('6 · Sello de aluminio')).toBeInTheDocument()
-    await waitFor(() => expect(props.obtenerHistorial).toHaveBeenCalled())
-    const [plc, variable, desde, hasta] = props.obtenerHistorial.mock
-      .calls[0] as [string, string, Date, Date]
-    expect([plc, variable]).toEqual([NODOS.paso.plc, NODOS.paso.nodo])
-    expect(desde.getTime()).toBeLessThan(hasta.getTime())
-  })
-
-  it('la siguiente consulta pide desde el último cambio que llegó', async () => {
-    vi.useFakeTimers()
-    const props = preparar(lecturasDeAhora())
-    await vi.advanceTimersByTimeAsync(100)
-    props.obtenerHistorial.mockResolvedValueOnce({
-      ok: true,
-      puntos: [{ ts: '2026-11-24T20:00:05.000Z', valor: 2 }],
-    })
-    await vi.advanceTimersByTimeAsync(5000) // esta trae el cambio
-    await vi.advanceTimersByTimeAsync(5000) // y esta pide desde él
-    const desde = props.obtenerHistorial.mock.calls[2][2] as Date
-    expect(desde.toISOString()).toBe('2026-11-24T20:00:05.000Z')
-  })
-
-  it('la primera consulta no depende del reloj: pide los cambios más recientes que haya', async () => {
-    const props = preparar(lecturasDeAhora())
-    await waitFor(() => expect(props.obtenerHistorial).toHaveBeenCalled())
-    const desde = props.obtenerHistorial.mock.calls[0][2] as Date
-    expect(desde.getTime()).toBe(0)
-  })
-
-  it('avisa cuando la celda lleva rato sin cambiar de paso', async () => {
-    vi.useFakeTimers()
-    const props = preparar(lecturasDeAhora())
-    props.obtenerHistorial.mockResolvedValue({
-      ok: true,
-      puntos: [{ ts: '2026-11-24T20:00:05.000Z', valor: 8 }],
-    })
-    await vi.advanceTimersByTimeAsync(100)
-    expect(screen.queryByText(/no ha cambiado de paso/)).not.toBeInTheDocument()
-    await vi.advanceTimersByTimeAsync(65_000)
-    expect(screen.getByText(/no ha cambiado de paso/)).toBeInTheDocument()
-  })
-
-  it('avisa si el historian no tiene ningún TAB_PASO', async () => {
-    vi.useFakeTimers()
-    preparar(lecturasDeAhora())
-    await vi.advanceTimersByTimeAsync(65_000)
-    expect(
-      screen.getByText(/no tiene ningún registro de TAB_PASO/),
-    ).toBeInTheDocument()
-  })
-
-  it('en simulación no pide pasos reales', async () => {
-    vi.useFakeTimers()
-    const props = preparar(lecturasDeAhora())
-    await vi.advanceTimersByTimeAsync(100)
-    elegir('Simulación')
-    await vi.advanceTimersByTimeAsync(20_000)
-    expect(props.obtenerHistorial).toHaveBeenCalledTimes(1)
+  it('muestra el letrero, los datos y los mandos en inglés', async () => {
+    preparar()
+    await screen.findByText('Online')
+    pulsar('vista 3D')
+    expect(letrero('Cell status')).toHaveTextContent('RUNNING')
+    pulsar('Simulation')
+    expect(screen.getByRole('button', { name: 'Start' })).toBeInTheDocument()
+    expect(screen.getByText('Outputs')).toBeInTheDocument()
   })
 })

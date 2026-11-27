@@ -56,10 +56,12 @@ const SALIDAS: SenalDigital[] = [
   'yZ',
   'yG',
   'torreVerde',
+  'torreAmarilla',
   'torreRoja',
 ]
 
 const FONDO = 0x1c252d
+const GRIS_TORRETA = new THREE.Color(0x6b7178)
 const SEGUNDOS_REFRESCO = 0.1
 const SEGUNDOS_VUELO = 0.9
 
@@ -223,8 +225,12 @@ export function crearEscena({
     const { torreta, cpu } = tablero
     for (const [luz, encendida] of [
       [torreta.verde, senales.torreVerde],
+      [torreta.amarilla, senales.torreAmarilla],
       [torreta.roja, senales.torreRoja],
     ] as const) {
+      // sin comunicación la torreta se ve gris: no se sabe qué está prendido
+      luz.lente.color.copy(senales.torreGris ? GRIS_TORRETA : luz.color)
+      luz.lente.emissive.copy(senales.torreGris ? GRIS_TORRETA : luz.color)
       luz.lente.emissiveIntensity = encendida ? 2.6 : 0.05
       luz.halo.opacity = encendida ? 0.75 : 0
     }
@@ -242,10 +248,11 @@ export function crearEscena({
     SALIDAS.forEach((clave, i) =>
       prender(tablero.salidas[i], senales[clave], 3),
     )
+    // los focos de la CPU: sin latido se ve detenida; la falla prende el rojo
     prender(cpu.alimentada, true)
-    prender(cpu.corriendo, true)
-    prender(cpu.detenida, false)
-    prender(cpu.falla, false)
+    prender(cpu.corriendo, !senales.torreGris)
+    prender(cpu.detenida, senales.torreGris)
+    prender(cpu.falla, senales.estado === 'falla')
     tablero.aguja.rotation.z =
       Math.PI * 0.75 - (senales.presion / 10) * Math.PI * 1.5
   }

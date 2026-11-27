@@ -13,9 +13,11 @@ const tramo = {
   aluminio: 3,
   plastico: 4,
   marcha: 1800,
+  mantenimiento: 0,
   paro: 60,
   sinRegistro: 1740,
   paros: 1,
+  fallas: 1,
   ciclos: 7,
   segundosCiclo: 105,
 }
@@ -26,10 +28,12 @@ afterEach(() => vi.unstubAllGlobals())
 
 describe('obtenerIndicadores', () => {
   it('pide el periodo y entrega los tramos', async () => {
-    responder(200, { cubetas: [tramo], truncado: false })
+    const fallas = [{ ts: '2026-11-24T07:00:00.000Z', codigo: 4 }]
+    responder(200, { cubetas: [tramo], fallas, truncado: false })
     expect(await obtenerIndicadores(desde, hasta, 'hora')).toEqual({
       ok: true,
       tramos: [tramo],
+      fallas,
       truncado: false,
     })
     const [url] = vi.mocked(fetch).mock.calls[0] as [string]

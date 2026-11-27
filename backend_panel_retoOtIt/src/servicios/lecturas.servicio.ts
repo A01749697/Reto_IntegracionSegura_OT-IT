@@ -2,11 +2,13 @@
 // En el historial, primero se validan los filtros y, solo si son válidos, se consulta la base.
 import { seguridad } from '../configuracion/seguridad'
 import {
+  validarConsultaCambios,
   validarConsultaHistorial,
   validarConsultaIndicadores,
 } from '../esquemas/lecturas.esquema'
 import type { PlcHistorian } from '../configuracion/historian'
 import type {
+  Cambio,
   FiltrosHistorial,
   Historial,
   Serie,
@@ -14,7 +16,9 @@ import type {
 } from '../repositorios/lecturas.repositorio'
 import {
   calcularIndicadores,
+  eventosDeFalla,
   type CubetaIndicadores,
+  type EventoFalla,
   type Series,
 } from '../utilidades/indicadores'
 
@@ -22,7 +26,16 @@ export type ResultadoHistorial =
   ({ ok: true } & Historial) | { ok: false; error: string }
 
 export type ResultadoIndicadores =
-  | { ok: true; cubetas: CubetaIndicadores[]; truncado: boolean }
+  | {
+      ok: true
+      cubetas: CubetaIndicadores[]
+      fallas: EventoFalla[]
+      truncado: boolean
+    }
+  | { ok: false; error: string }
+
+export type ResultadoCambios =
+  | { ok: true; cambios: Cambio[]; truncado: boolean }
   | { ok: false; error: string }
 
 type Dependencias = {
@@ -35,6 +48,12 @@ type Dependencias = {
     hasta: Date,
     limite: number,
   ) => Promise<Serie>
+  obtenerCambios: (
+    plc: PlcHistorian,
+    nodos: string[],
+    desde: Date,
+    limite: number,
+  ) => Promise<{ cambios: Cambio[]; truncado: boolean }>
   ahora?: () => number
 }
 
@@ -45,12 +64,15 @@ const NODOS_INDICADORES: Record<keyof Series, string> = {
   pasos: 'TAB_PASO',
   torreta: 'TAB_TORRETA',
   latido: 'LATIDO',
+  falla: 'TAB_FALLA',
+  codFalla: 'TAB_COD_FALLA',
 }
 
 export function crearServicioLecturas({
   obtenerUltimasLecturas,
   obtenerHistorial,
   obtenerSerie,
+  obtenerCambios,
   ahora = Date.now,
 }: Dependencias) {
   return {
@@ -98,7 +120,29 @@ export function crearServicioLecturas({
         cubetaSegundos,
         ahora: new Date(ahora()),
       })
-      return { ok: true, cubetas, truncado: leidas.some((l) => l.truncado) }
+      return {
+        ok: true,
+        cubetas,
+        fallas: eventosDeFalla(series, { desde, hasta }),
+        truncado: leidas.some((l) => l.truncado),
+      }
+    },
+
+    // Lo que cambió en varios nodos desde una fecha, en orden, para que el gemelo lo repita.
+    async cambios(consulta: unknown): Promise<ResultadoCambios> {
+      const validacion = validarConsultaCambios(
+        consulta,
+        seguridad.lecturas.maximoNodosCambios,
+      )
+      if (!validacion.ok) return validacion
+      const { plc, nodos, desde } = validacion.consulta
+      const resultado = await obtenerCambios(
+        plc,
+        nodos,
+        desde,
+        seguridad.lecturas.maximoCambios,
+      )
+      return { ok: true, ...resultado }
     },
   }
 }

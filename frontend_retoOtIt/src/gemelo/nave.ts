@@ -11,6 +11,7 @@ import {
   textura,
   type Materiales,
 } from './materiales'
+import type { EstadoCelda } from './estado'
 import type { Senales } from './senales'
 
 const AMARILLO = 0xe0b21a
@@ -336,6 +337,17 @@ function pedestal(cerca: THREE.Group, m: Materiales) {
   return { g: lienzo.getContext('2d'), tPantalla }
 }
 
+// Texto y color de la franja de arriba de la pantalla, por estado de la celda.
+const PANTALLA: Record<EstadoCelda, [string, string]> = {
+  marcha: ['EN MARCHA', '#3fd07a'],
+  mantenimiento: ['MANTENIMIENTO', '#f2b233'],
+  reset: ['RESET / REGRESO A INICIO', '#f2b233'],
+  paro: ['PARO', '#f0524a'],
+  falla: ['FALLA', '#f0524a'],
+  sinDato: ['SIN DATO', '#8fa3b1'],
+  sinComunicacion: ['SIN COMUNICACION', '#8fa3b1'],
+}
+
 export function construirNave(escena: THREE.Scene, m: Materiales) {
   const tFranjas = textura(
     64,
@@ -401,31 +413,35 @@ export function construirNave(escena: THREE.Scene, m: Materiales) {
   cil(0.07, 0.42, rojo, -2, 0.6, -1.3, 'y', junto, 16)
   cil(0.02, 0.1, m.viga, -2, 0.85, -1.3, 'y', junto, 10)
 
-  // La pantalla del operador repite el estado y los contadores.
+  // La pantalla del operador repite el estado de la celda y los contadores.
   function pintarPantalla(s: Senales) {
     if (!g) return
+    const [texto, fondo] = PANTALLA[s.estado]
     g.fillStyle = '#0d1820'
     g.fillRect(0, 0, 256, 160)
-    g.fillStyle = s.marcha ? '#3fd07a' : '#f0524a'
+    g.fillStyle = fondo
     g.fillRect(0, 0, 256, 26)
     g.fillStyle = '#0d1820'
-    g.font = '700 15px Arial'
+    g.font = '700 14px Arial'
     g.textAlign = 'left'
-    const estado = s.marcha ? 'EN MARCHA' : 'PARO'
-    g.fillText(`CELDA 01  ${estado}`, 8, 18)
+    g.fillText(
+      s.estado === 'falla' ? `${texto}  COD ${s.codFalla}` : texto,
+      8,
+      18,
+    )
     g.fillStyle = '#8fa3b1'
     g.font = '12px Arial'
-    g.fillText('ALUMINIO', 12, 50)
-    g.fillText('PLASTICO', 138, 50)
-    g.fillText('CAJAS', 12, 112)
-    g.fillText('CAJAS', 138, 112)
+    g.fillText('PASO', 12, 46)
+    g.fillText('ALUMINIO', 96, 46)
+    g.fillText('PLASTICO', 176, 46)
+    g.fillText('CAJAS AL / PL', 12, 112)
     g.fillStyle = '#e6eef3'
-    g.font = '700 34px Arial'
-    g.fillText(String(s.piezasAl), 12, 86)
-    g.fillText(String(s.piezasPl), 138, 86)
-    g.font = '700 26px Arial'
-    g.fillText(String(s.cajasAl), 12, 142)
-    g.fillText(String(s.cajasPl), 138, 142)
+    g.font = '700 30px Arial'
+    g.fillText(s.pasoReal === null ? '-' : String(s.pasoReal), 12, 82)
+    g.fillText(String(s.piezasAl), 96, 82)
+    g.fillText(String(s.piezasPl), 176, 82)
+    g.font = '700 24px Arial'
+    g.fillText(`${s.cajasAl} / ${s.cajasPl}`, 12, 142)
     tPantalla.needsUpdate = true
   }
 

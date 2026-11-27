@@ -1,83 +1,99 @@
-// Repite en el gemelo los cambios de TAB_PASO con el mismo ritmo con que pasaron en la celda,
-// unos segundos después. El panel solo consulta cada pocos segundos: si se mostrara el último
-// valor, la barra de pasos saltaría. Así se ve cada paso, en orden y con su duración real.
+// Repite en el gemelo los cambios de los nodos del S7-1516 en el mismo orden y con el mismo
+// ritmo con que pasaron, unos segundos después. Se consulta cada pocos segundos: si solo se
+// mostrara el último valor, un pulso corto (un sello, un reset de 3 s) se perdería.
 //
-// No hace falta que el reloj del PLC y el del navegador coincidan: el primer cambio nuevo
+// Los relojes del PLC y del navegador no tienen que coincidir: el primer cambio que llega
 // fija el desfase entre los dos y los siguientes guardan la distancia que tenían entre sí.
+import type { Valores } from './estado'
 
-// Segundos que la animación va detrás de la llegada del primer cambio. Tiene que cubrir el
-// tiempo entre consultas, para que el siguiente cambio llegue antes de que toque mostrarlo.
-export const COLCHON = 7
+// Segundos que la animación va detrás del primer cambio que llega. Tiene que cubrir el tiempo
+// entre consultas, para que el siguiente lote llegue antes de que toque mostrarlo.
+export const COLCHON = 4
 
 // Si la animación queda más atrás o más adelante que esto (pestaña dormida, relojes que se
-// mueven), se vuelve a anclar en lugar de reproducir minutos de historia.
-const DESVIO_MAXIMO = 20
+// mueven), se vuelve a anclar: lo atrasado se aplica de golpe en lugar de repetir minutos.
+export const DESVIO_MAXIMO = 20
 
-type Evento = { t: number; paso: number } // t: segundos en el reloj del gemelo
+export type Cambio = { nodo: string; ts: string; valor: number }
+
+type Evento = { t: number; nodo: string; valor: number } // t: reloj del gemelo (s)
 
 export type Repeticion = {
-  eventos: Evento[] // pendientes de mostrar, en orden
-  desfase: number | null // reloj del gemelo - reloj del PLC (segundos)
-  ultimo: number | null // ts_plc (ms) del cambio más nuevo que ya se recibió
-  paso: number | null // el paso que toca mostrar ahora
-  iniciada: boolean
+  sembrada: boolean // ya se tomaron los valores de partida
+  valores: Valores // lo que se está mostrando
+  eventos: Evento[] // pendientes, en orden
+  desfase: number | null // reloj del gemelo - reloj del PLC (s)
+  ultimo: number | null // ts (ms) del cambio más nuevo recibido
+  enUltimo: Set<string> // los que ya llegaron con ese mismo ts
 }
 
 export function crearRepeticion(): Repeticion {
   return {
+    sembrada: false,
+    valores: {},
     eventos: [],
     desfase: null,
     ultimo: null,
-    paso: null,
-    iniciada: false,
+    enUltimo: new Set(),
   }
 }
 
-export type PuntoPaso = { ts: string; valor: number }
+// Los valores de partida (la lectura más reciente de cada nodo) y hasta cuándo llegan.
+export function sembrar(rep: Repeticion, valores: Valores, hastaMs: number) {
+  rep.valores = { ...valores }
+  rep.ultimo = hastaMs
+  rep.enUltimo = new Set()
+  rep.sembrada = true
+}
 
-// Agrega los cambios que llegaron en una consulta. ahora: reloj del gemelo, en segundos.
-export function recibirPasos(
+// Desde dónde pedir la siguiente consulta (incluido: los repetidos se descartan aquí).
+export const desdeParaConsulta = (rep: Repeticion): Date | null =>
+  rep.ultimo === null ? null : new Date(rep.ultimo)
+
+const clave = (c: { nodo: string; valor: number }) => `${c.nodo}=${c.valor}`
+
+// Agrega los cambios de una consulta. ahora: reloj del gemelo, en segundos.
+export function recibirCambios(
   rep: Repeticion,
-  puntos: readonly PuntoPaso[],
+  cambios: readonly Cambio[],
   ahora: number,
 ) {
-  const nuevos = puntos
-    .map((p) => ({ ms: Date.parse(p.ts), paso: Math.round(p.valor) }))
+  if (!rep.sembrada) return
+  const nuevos = cambios
+    .map((c) => ({ ms: Date.parse(c.ts), nodo: c.nodo, valor: c.valor }))
+    .filter((c) => Number.isFinite(c.ms))
     .filter(
-      (e) =>
-        Number.isFinite(e.ms) && (rep.ultimo === null || e.ms > rep.ultimo),
+      (c) =>
+        rep.ultimo === null ||
+        c.ms > rep.ultimo ||
+        (c.ms === rep.ultimo && !rep.enUltimo.has(clave(c))),
     )
     .sort((a, b) => a.ms - b.ms)
+  if (nuevos.length === 0) return
 
-  if (nuevos.length === 0) {
-    rep.iniciada = true
-    return
-  }
-  rep.ultimo = nuevos[nuevos.length - 1].ms
-
-  // la primera consulta trae historia vieja: solo importa en qué paso quedó
-  if (!rep.iniciada) {
-    rep.iniciada = true
-    rep.paso = nuevos[nuevos.length - 1].paso
-    return
-  }
+  const masNuevo = nuevos[nuevos.length - 1].ms
+  if (masNuevo !== rep.ultimo) rep.enUltimo = new Set()
+  rep.ultimo = masNuevo
+  for (const c of nuevos) if (c.ms === masNuevo) rep.enUltimo.add(clave(c))
 
   if (rep.desfase === null) rep.desfase = ahora + COLCHON - nuevos[0].ms / 1000
-  for (const { ms, paso } of nuevos)
-    rep.eventos.push({ t: ms / 1000 + rep.desfase, paso })
+  for (const { ms, nodo, valor } of nuevos)
+    rep.eventos.push({ t: ms / 1000 + rep.desfase, nodo, valor })
+  rep.eventos.sort((a, b) => a.t - b.t)
 
-  // si el más nuevo quedó demasiado lejos (en el futuro o en el pasado), se reancla
-  const masNuevo = rep.eventos[rep.eventos.length - 1]
-  const lejania = masNuevo.t - (ahora + COLCHON)
+  // si el más nuevo quedó demasiado lejos, se reancla
+  const lejania = rep.eventos[rep.eventos.length - 1].t - (ahora + COLCHON)
   if (Math.abs(lejania) > DESVIO_MAXIMO) {
     rep.desfase -= lejania
     for (const evento of rep.eventos) evento.t -= lejania
   }
 }
 
-// El paso que toca mostrar en este momento.
-export function pasoEn(rep: Repeticion, ahora: number): number | null {
-  while (rep.eventos.length > 0 && rep.eventos[0].t <= ahora)
-    rep.paso = (rep.eventos.shift() as Evento).paso
-  return rep.paso
+// Aplica lo que ya toca mostrar y devuelve los valores de ahora.
+export function valoresEn(rep: Repeticion, ahora: number): Valores {
+  while (rep.eventos.length > 0 && rep.eventos[0].t <= ahora) {
+    const { nodo, valor } = rep.eventos.shift() as Evento
+    rep.valores[nodo] = valor
+  }
+  return rep.valores
 }

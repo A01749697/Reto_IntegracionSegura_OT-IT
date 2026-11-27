@@ -18,6 +18,7 @@ export function crearRutasLecturas({
   rutas.get('/ultimas', controlador.ultimas)
   rutas.get('/historial', controlador.historial)
   rutas.get('/indicadores', controlador.indicadores)
+  rutas.get('/cambios', controlador.cambios)
 
   return rutas
 }

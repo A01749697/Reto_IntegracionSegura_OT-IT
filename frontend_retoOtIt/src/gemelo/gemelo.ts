@@ -1,16 +1,30 @@
-// Junta las señales, la planta y los PLC, y los hace avanzar en el tiempo. No hay mandos.
-//   - Simulación: los pistones son un PLC simulado que arranca y se detiene con la torreta
-//     (verde = marcha, roja = paro) y el material de cada pieza es al azar.
-//   - En vivo: los pistones siguen a TAB_PASO, el paso real del S7-1516, unos segundos
-//     después (ver repeticion.ts y seguidor.ts). El material de cada pieza sale de los
-//     contadores TAB_ALUMINIO / TAB_OTRAS; mientras no se sabe, la pieza se ve gris.
-// La garra es simulada en los dos modos y trabaja sola cuando hay pieza en el depósito.
+// Junta las señales, la planta y los PLC, y los hace avanzar en el tiempo.
+// Los pistones y la torreta salen siempre de los valores de los nodos del S7-1516:
+//   - En vivo: los cambios del historian, repetidos unos segundos después (repeticion.ts).
+//   - Simulación: un S7-1516 virtual con la misma secuencia, estados y códigos (s7_1516.ts).
+// La garra es simulada en los dos modos. El material de cada pieza sale de los contadores
+// TAB_ALUMINIO / TAB_OTRAS; en vivo, mientras no se sabe, la pieza se ve gris.
+import {
+  avanzarActuadores,
+  crearActuadores,
+  type Actuadores,
+} from './actuadores'
+import {
+  estadoCelda,
+  lucesTorreta,
+  sinLatido,
+  vigilarLatido,
+  type Latido,
+  type Valores,
+} from './estado'
+import { NODO } from './nodos'
 import {
   avanzarPlanta,
   crearPlanta,
   despejarLinea,
   estaEmpacando,
   identificarEnLinea,
+  piezaSelladaEnTope,
   pintarAlmacen,
   type Planta,
   type Tipo,
@@ -23,13 +37,21 @@ import {
   type Plc,
 } from './plc'
 import {
+  COLCHON,
   crearRepeticion,
-  pasoEn,
-  recibirPasos,
-  type PuntoPaso,
+  recibirCambios,
+  sembrar,
+  valoresEn,
+  type Cambio,
   type Repeticion,
 } from './repeticion'
-import { avanzarSeguidor, crearSeguidor, type Seguidor } from './seguidor'
+import {
+  avanzarPlc1516,
+  crearPlc1516,
+  mandar,
+  type Mando,
+  type Plc1516,
+} from './s7_1516'
 import { senalesIniciales, type Senales } from './senales'
 
 export type Modo = 'vivo' | 'simulacion'
@@ -37,18 +59,23 @@ export type Modo = 'vivo' | 'simulacion'
 export type Gemelo = {
   senales: Senales
   planta: Planta
-  plc: Plc
+  plc: Plc // la garra
+  s7: Plc1516 // el S7-1516 virtual (simulación)
   modo: Modo
   velocidad: number
   acumulado: number
   reloj: number // segundos de tiempo real desde que se creó (no lo afecta la velocidad)
+  valores: Valores // lo que dicen ahora los nodos del S7-1516
+  latido: Latido
+  comunicacion: boolean // simulación: se puede cortar para probar el aviso
+  contadores: { al: number; pl: number } | null
   porEntrar: Tipo[] // en vivo: materiales ya contados que aún no tienen pieza
   repeticion: Repeticion
-  seguidor: Seguidor
+  actuadores: Actuadores
 }
 
 // Lo que necesita la pantalla en cada refresco.
-export type Instantanea = Senales & { empacando: boolean }
+export type Instantanea = Senales & { empacando: boolean; valores: Valores }
 
 const PASO_FIJO = 1 / 120
 
@@ -60,68 +87,97 @@ export function crearGemelo(
     senales: senalesIniciales(),
     planta: crearPlanta(azar),
     plc: crearPlc(),
+    s7: crearPlc1516(),
     modo,
     velocidad: 1,
     acumulado: 0,
     reloj: 0,
+    valores: {},
+    latido: { valor: undefined, cambio: 0 },
+    comunicacion: true,
+    contadores: null,
     porEntrar: [],
     repeticion: crearRepeticion(),
-    seguidor: crearSeguidor(),
+    actuadores: crearActuadores(),
   }
   ponerModo(gemelo, modo)
   return gemelo
 }
 
-// Al cambiar de modo se empieza limpio: la linea vacia y la torreta en rojo.
+// Al cambiar de modo se empieza limpio: la línea vacía y sin datos.
 export function ponerModo(gemelo: Gemelo, modo: Modo) {
   const { senales, planta, plc } = gemelo
-  senales.marcha = false
-  senales.material = ''
-  senales.materialGarra = ''
-  senales.pasoReal = null
-  senales.paso = 0
+  Object.assign(senales, {
+    material: '',
+    materialGarra: '',
+    pasoReal: null,
+    paso: 0,
+  })
   apagarSalidas(senales)
   reiniciarPlc(plc)
   gemelo.modo = modo
   planta.enVivo = modo === 'vivo'
+  planta.atasco = false
   despejarLinea(planta)
   gemelo.porEntrar = []
+  gemelo.contadores = null
   gemelo.repeticion = crearRepeticion()
-  gemelo.seguidor = crearSeguidor()
+  gemelo.actuadores = crearActuadores()
+  gemelo.s7 = crearPlc1516()
+  gemelo.valores = {}
+  gemelo.comunicacion = true
+  // en vivo, el primer cambio tarda COLCHON en mostrarse: no se avisa antes de tiempo
+  gemelo.latido = {
+    valor: undefined,
+    cambio: gemelo.reloj + (modo === 'vivo' ? COLCHON : 0),
+  }
   pintarAlmacen(planta, [])
-  // la simulacion arranca andando; en vivo la torreta real solo prende las luces
-  senales.marcha = modo === 'simulacion'
+  if (modo === 'simulacion') mandar(gemelo.s7, 'marcha')
+  actualizarEstado(gemelo)
 }
 
 export function ponerVelocidad(gemelo: Gemelo, velocidad: number) {
   gemelo.velocidad = velocidad
 }
 
-// La torreta: verde = marcha, roja = paro. En simulación detiene a los pistones (si hay
-// una pieza a medio camino, la terminan); en vivo solo prende las luces.
-export function ponerTorreta(gemelo: Gemelo, verde: boolean) {
-  gemelo.senales.marcha = verde
+// Simulación: los botones del operador.
+export type MandoSimulado = Mando | 'atasco' | 'comunicacion'
+
+export function mandarSimulacion(gemelo: Gemelo, mando: MandoSimulado) {
+  if (gemelo.modo !== 'simulacion') return
+  if (mando === 'atasco') gemelo.planta.atasco = !gemelo.planta.atasco
+  else if (mando === 'comunicacion') gemelo.comunicacion = !gemelo.comunicacion
+  else {
+    // el reset es también cuando el operador destraba lo que se atoró
+    if (mando === 'reset') gemelo.planta.atasco = false
+    mandar(gemelo.s7, mando)
+  }
 }
 
-// Los cambios de TAB_PASO que trajo la última consulta al historial.
-export function recibirPasosReales(
+// En vivo: los valores de partida (la lectura más reciente de cada nodo del S7-1516).
+export function sembrarValores(
   gemelo: Gemelo,
-  puntos: readonly PuntoPaso[],
+  valores: Valores,
+  hastaMs: number,
+) {
+  if (gemelo.modo !== 'vivo' || gemelo.repeticion.sembrada) return
+  sembrar(gemelo.repeticion, valores, hastaMs)
+  // la torreta y el letrero muestran la última lectura sin esperar al siguiente cuadro
+  gemelo.valores = gemelo.repeticion.valores
+  actualizarEstado(gemelo)
+}
+
+// En vivo: los cambios que trajo la última consulta.
+export function recibirCambiosReales(
+  gemelo: Gemelo,
+  cambios: readonly Cambio[],
 ) {
   if (gemelo.modo !== 'vivo') return
-  recibirPasos(gemelo.repeticion, puntos, gemelo.reloj)
+  recibirCambios(gemelo.repeticion, cambios, gemelo.reloj)
 }
 
-// El paso en que está la celda según la última lectura. Solo sirve mientras el historial
-// todavía no dice nada: así el gemelo muestra dónde quedó aunque la celda no se mueva.
-export function ponerPasoInicial(gemelo: Gemelo, paso: number | null) {
-  if (gemelo.modo !== 'vivo' || paso === null) return
-  if (gemelo.repeticion.paso === null && gemelo.repeticion.eventos.length === 0)
-    gemelo.repeticion.paso = paso
-}
-
-// Las piezas que el S7-1516 contó desde la consulta anterior. Si ya hay una pieza gris en
-// la línea, toma ese material; si no, lo toma la siguiente que salga del almacén.
+// Las piezas que el S7-1516 contó. Si ya hay una pieza gris en la línea, toma ese material;
+// si no, lo toma la siguiente que salga del almacén.
 export const MAXIMO_POR_ENTRAR = 6
 
 export function meterPiezas(gemelo: Gemelo, tipos: readonly Tipo[]) {
@@ -133,13 +189,46 @@ export function meterPiezas(gemelo: Gemelo, tipos: readonly Tipo[]) {
   pintarAlmacen(gemelo.planta, gemelo.porEntrar)
 }
 
+// En vivo, cada vez que sube un contador entra una pieza de ese material. La primera vez
+// solo se toma la referencia; si un contador baja, se reinició.
+function contarPiezas(gemelo: Gemelo) {
+  const al = gemelo.valores[NODO.aluminio]
+  const pl = gemelo.valores[NODO.otras]
+  if (al === undefined && pl === undefined) return
+  const ahora = { al: Math.round(al ?? 0), pl: Math.round(pl ?? 0) }
+  const antes = gemelo.contadores
+  gemelo.contadores = ahora
+  if (antes === null) return
+  const nuevas: Tipo[] = [
+    ...Array<Tipo>(Math.max(0, ahora.al - antes.al)).fill('al'),
+    ...Array<Tipo>(Math.max(0, ahora.pl - antes.pl)).fill('pl'),
+  ]
+  if (nuevas.length) meterPiezas(gemelo, nuevas.slice(-MAXIMO_POR_ENTRAR))
+}
+
 const contarAlmacen = (planta: Planta) =>
   planta.piezas.filter((p) => p.estado === 'almacen').length
 
-// El material de la pieza que está en proceso, si ya se sabe.
-function materialEnProceso(planta: Planta): Tipo | null {
-  const pieza = planta.ultimaSacada
-  return pieza && pieza.conocida ? pieza.tipo : null
+// Letrero, torreta y vigilancia del latido.
+function actualizarEstado(gemelo: Gemelo) {
+  const { senales: s, valores } = gemelo
+  gemelo.latido = vigilarLatido(
+    gemelo.latido,
+    valores[NODO.latido],
+    gemelo.reloj,
+  )
+  const sinComunicacion = sinLatido(gemelo.latido, gemelo.reloj)
+  s.estado = estadoCelda(valores, sinComunicacion)
+  s.codFalla = valores[NODO.codFalla] ?? 0
+  const luces = lucesTorreta(
+    valores[NODO.torreta],
+    sinComunicacion,
+    gemelo.reloj,
+  )
+  s.torreVerde = luces.verde
+  s.torreAmarilla = luces.amarilla
+  s.torreRoja = luces.roja
+  s.torreGris = luces.gris
 }
 
 // Avanza con paso fijo para que la secuencia salga igual sin importar los cuadros por segundo.
@@ -152,18 +241,25 @@ export function avanzarGemelo(gemelo: Gemelo, segundos: number) {
     gemelo.acumulado + segundos * (vivo ? 1 : gemelo.velocidad),
     0.5,
   )
-  const objetivo = vivo ? pasoEn(gemelo.repeticion, gemelo.reloj) : null
+  if (vivo) {
+    gemelo.valores = valoresEn(gemelo.repeticion, gemelo.reloj)
+    contarPiezas(gemelo)
+  }
   while (gemelo.acumulado >= PASO_FIJO) {
-    if (vivo)
-      avanzarSeguidor(
-        gemelo.seguidor,
-        objetivo,
-        senales,
-        materialEnProceso(planta),
-        PASO_FIJO,
-      )
+    if (!vivo && gemelo.comunicacion) {
+      // sin comunicación el S7-1516 virtual deja de publicar: todo se queda como estaba
+      avanzarPlc1516(gemelo.s7, senales, PASO_FIJO)
+      gemelo.valores = gemelo.s7.valores
+    }
+    avanzarActuadores(
+      gemelo.actuadores,
+      gemelo.valores,
+      senales,
+      piezaSelladaEnTope(planta),
+      PASO_FIJO,
+    )
     const enAlmacen = contarAlmacen(planta)
-    avanzarPlc(plc, senales, planta.carriles, PASO_FIJO, !vivo)
+    avanzarPlc(plc, senales, planta.carriles, PASO_FIJO)
     avanzarPlanta(planta, senales, PASO_FIJO)
     // salió una pieza del almacén: si ya se había contado, se lleva ese material
     if (vivo && contarAlmacen(planta) < enAlmacen && gemelo.porEntrar.length) {
@@ -172,8 +268,13 @@ export function avanzarGemelo(gemelo: Gemelo, segundos: number) {
     }
     gemelo.acumulado -= PASO_FIJO
   }
+  actualizarEstado(gemelo)
 }
 
 export function tomarInstantanea(gemelo: Gemelo): Instantanea {
-  return { ...gemelo.senales, empacando: estaEmpacando(gemelo.planta) }
+  return {
+    ...gemelo.senales,
+    empacando: estaEmpacando(gemelo.planta),
+    valores: { ...gemelo.valores },
+  }
 }

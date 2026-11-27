@@ -16,6 +16,7 @@ function crearDependenciasFalsas() {
       .fn()
       .mockResolvedValue({ puntos: [], truncado: false }),
     obtenerSerie: vi.fn().mockResolvedValue({ puntos: [], truncado: false }),
+    obtenerCambios: vi.fn().mockResolvedValue({ cambios: [], truncado: false }),
     ahora: () => Date.parse('2026-11-25T06:00:00Z'),
   }
 }
@@ -103,7 +104,7 @@ describe('indicadores', () => {
     cubeta: 'hora',
   }
 
-  it('lee los cinco nodos del S7-1516 y entrega un tramo por hora', async () => {
+  it('lee los nodos del S7-1516 y entrega un tramo por hora', async () => {
     const dependencias = crearDependenciasFalsas()
     dependencias.obtenerSerie.mockImplementation(
       async (_plc: string, nodo: string) => ({
@@ -125,7 +126,15 @@ describe('indicadores', () => {
     expect(resultado.truncado).toBe(true)
     const nodos = dependencias.obtenerSerie.mock.calls.map((c) => c[1])
     expect(nodos.sort()).toEqual(
-      ['LATIDO', 'TAB_ALUMINIO', 'TAB_OTRAS', 'TAB_PASO', 'TAB_TORRETA'].sort(),
+      [
+        'LATIDO',
+        'TAB_ALUMINIO',
+        'TAB_COD_FALLA',
+        'TAB_FALLA',
+        'TAB_OTRAS',
+        'TAB_PASO',
+        'TAB_TORRETA',
+      ].sort(),
     )
     expect(dependencias.obtenerSerie).toHaveBeenCalledWith(
       'S7-1500',
@@ -142,5 +151,45 @@ describe('indicadores', () => {
     const resultado = await servicio.indicadores({ ...consulta, cubeta: 'x' })
     expect(resultado.ok).toBe(false)
     expect(dependencias.obtenerSerie).not.toHaveBeenCalled()
+  })
+})
+
+describe('cambios', () => {
+  it('valida y pide los cambios con el tope', async () => {
+    const dependencias = crearDependenciasFalsas()
+    const cambio = {
+      nodo: 'TAB_PASO',
+      ts: new Date('2026-11-25T20:00:01Z'),
+      valor: 2,
+    }
+    dependencias.obtenerCambios.mockResolvedValue({
+      cambios: [cambio],
+      truncado: false,
+    })
+    const servicio = crearServicioLecturas(dependencias)
+    const resultado = await servicio.cambios({
+      plc: 'S7-1500',
+      nodos: 'TAB_PASO,TAB_SELLO',
+      desde: '2026-11-25T20:00:00Z',
+    })
+    expect(resultado).toEqual({ ok: true, cambios: [cambio], truncado: false })
+    expect(dependencias.obtenerCambios).toHaveBeenCalledWith(
+      'S7-1500',
+      ['TAB_PASO', 'TAB_SELLO'],
+      new Date('2026-11-25T20:00:00Z'),
+      seguridad.lecturas.maximoCambios,
+    )
+  })
+
+  it('con una consulta inválida no toca la base', async () => {
+    const dependencias = crearDependenciasFalsas()
+    const servicio = crearServicioLecturas(dependencias)
+    const resultado = await servicio.cambios({
+      plc: 'S7-1500',
+      nodos: 'a b',
+      desde: 'x',
+    })
+    expect(resultado.ok).toBe(false)
+    expect(dependencias.obtenerCambios).not.toHaveBeenCalled()
   })
 })

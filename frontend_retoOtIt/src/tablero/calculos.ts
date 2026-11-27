@@ -152,3 +152,70 @@ export function segundosLegibles(segundos: number): string {
   const resto = minutos % 60
   return resto === 0 ? `${horas} h` : `${horas} h ${resto} min`
 }
+
+// Estado de la celda en cada momento, combinando TAB_TORRETA y TAB_FALLA:
+//   1 marcha · 2 mantenimiento · 3 paro · 4 reset · 5 falla (torreta en 3 con TAB_FALLA)
+export const ESTADO_FALLA = 5
+
+export function estadosDeLaCelda(
+  torreta: readonly Punto[],
+  falla: readonly Punto[],
+): Punto[] {
+  const eventos = [
+    ...torreta.map((p) => ({ ms: ms(p), torreta: p.valor })),
+    ...falla.map((p) => ({ ms: ms(p), falla: p.valor })),
+  ].sort((a, b) => a.ms - b.ms)
+  let t: number | null = null
+  let f = 0
+  const estados: Punto[] = []
+  for (const e of eventos) {
+    if ('torreta' in e) t = e.torreta
+    else f = e.falla
+    if (t === null) continue
+    const estado = t === 3 && f === 1 ? ESTADO_FALLA : t
+    estados.push({ ts: new Date(e.ms).toISOString(), valor: estado })
+  }
+  return estados
+}
+
+export type Falla = {
+  inicio: number
+  fin: number | null
+  codigo: number | null
+}
+
+// Cada vez que TAB_FALLA se activó en la ventana, con su código y cuándo se borró.
+// El código puede llegar en la misma lectura o un poco después: se toma el de 2 s después.
+export function fallasEnVentana(
+  falla: readonly Punto[],
+  codigos: readonly Punto[],
+  ventana: Ventana,
+): Falla[] {
+  const codigoEn = (t: number) => {
+    let codigo: number | null = null
+    for (const p of codigos) {
+      if (ms(p) > t + 2000) break
+      codigo = p.valor
+    }
+    return codigo
+  }
+  const lista: Falla[] = []
+  let anterior: number | null = null
+  for (const p of falla) {
+    const t = ms(p)
+    if (t > ventana.hasta) break
+    if (anterior !== 1 && p.valor === 1 && t > ventana.desde)
+      lista.push({ inicio: t, fin: null, codigo: codigoEn(t) })
+    const ultima = lista[lista.length - 1]
+    if (anterior === 1 && p.valor !== 1 && ultima && ultima.fin === null)
+      ultima.fin = t
+    anterior = p.valor
+  }
+  return lista
+}
+
+// Los valores que llegaron dentro de la ventana (un valor por ciclo, como TAB_T_CICLO_S).
+export const valoresEnVentana = (puntos: readonly Punto[], ventana: Ventana) =>
+  puntos.filter(
+    (p) => ms(p) > ventana.desde && ms(p) <= ventana.hasta && p.valor > 0,
+  )

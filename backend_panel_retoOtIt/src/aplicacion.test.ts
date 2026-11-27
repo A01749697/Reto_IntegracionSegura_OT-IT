@@ -83,6 +83,7 @@ function prepararApp() {
       .fn()
       .mockResolvedValue({ puntos: [], truncado: false }),
     obtenerSerie: vi.fn().mockResolvedValue({ puntos: [], truncado: false }),
+    obtenerCambios: vi.fn().mockResolvedValue({ cambios: [], truncado: false }),
   }
   const bitacora = {
     insertarEvento: vi.fn().mockResolvedValue(undefined),
@@ -783,7 +784,42 @@ describe('API del panel', { timeout: 20000 }, () => {
       expect(respuesta.status).toBe(200)
       expect(respuesta.body.cubetas).toHaveLength(7)
       expect(respuesta.body.truncado).toBe(false)
-      expect(lecturas.obtenerSerie).toHaveBeenCalledTimes(5)
+      expect(lecturas.obtenerSerie).toHaveBeenCalledTimes(7)
+      expect(respuesta.body.fallas).toEqual([])
+    })
+
+    it('cambios exige sesión y entrega los cambios en orden', async () => {
+      const { app, sesion, lecturas } = prepararApp()
+      const ruta =
+        '/lecturas/cambios?plc=S7-1500&nodos=TAB_PASO,TAB_SELLO&desde=2026-11-25T20:00:00Z'
+      expect((await consultar(app, ruta)).status).toBe(401)
+
+      sesion.buscarSesionActiva.mockResolvedValue(sesionUsuario)
+      lecturas.obtenerCambios.mockResolvedValue({
+        cambios: [
+          { nodo: 'TAB_PASO', ts: new Date('2026-11-25T20:00:01Z'), valor: 2 },
+        ],
+        truncado: false,
+      })
+      const respuesta = await consultar(app, ruta).set('Cookie', COOKIE)
+      expect(respuesta.status).toBe(200)
+      expect(respuesta.body).toEqual({
+        cambios: [
+          { nodo: 'TAB_PASO', ts: '2026-11-25T20:00:01.000Z', valor: 2 },
+        ],
+        truncado: false,
+      })
+    })
+
+    it('cambios responde 400 con nodos inválidos', async () => {
+      const { app, sesion, lecturas } = prepararApp()
+      sesion.buscarSesionActiva.mockResolvedValue(sesionUsuario)
+      const respuesta = await consultar(
+        app,
+        `/lecturas/cambios?plc=S7-1500&nodos=${encodeURIComponent("TAB';--")}&desde=2026-11-25T20:00:00Z`,
+      ).set('Cookie', COOKIE)
+      expect(respuesta.status).toBe(400)
+      expect(lecturas.obtenerCambios).not.toHaveBeenCalled()
     })
 
     it('indicadores responde 400 con un periodo inválido', async () => {

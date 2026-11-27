@@ -1,7 +1,8 @@
 // Indicadores de la celda por tramo (hora o día) para la vista de dirección.
 // Todo sale de los cambios que guarda el historian del S7-1516:
 //   TAB_ALUMINIO / TAB_OTRAS: contadores de piezas (cuenta lo que suben; una bajada es un reinicio)
-//   TAB_TORRETA: 1 = verde (marcha); cualquier otro valor = paro
+//   TAB_TORRETA: 1 = marcha, 2 = mantenimiento (paro planeado), 3 = paro o falla, 4 = reset
+//   TAB_FALLA / TAB_COD_FALLA: cada vez que la falla se activa es una falla, con su código
 //   TAB_PASO: la secuencia 0..9; un ciclo va de que sale del reposo a que vuelve a empezar
 //   LATIDO: solo sirve para saber que la celda sigue mandando datos
 //
@@ -16,6 +17,8 @@ export type Series = {
   pasos: Punto[]
   torreta: Punto[]
   latido: Punto[]
+  falla: Punto[]
+  codFalla: Punto[]
 }
 
 export type CubetaIndicadores = {
@@ -23,9 +26,11 @@ export type CubetaIndicadores = {
   aluminio: number
   plastico: number
   marcha: number // segundos con la torreta en verde
-  paro: number // segundos con la torreta en otro estado, con la celda mandando datos
+  mantenimiento: number // segundos en mantenimiento (torreta amarilla fija): paro planeado
+  paro: number // segundos en paro, falla o reset, con la celda mandando datos
   sinRegistro: number // segundos sin ningún dato
-  paros: number // veces que la torreta salió de verde
+  paros: number // veces que la celda dejó la marcha (sin contar la entrada a mantenimiento)
+  fallas: number // veces que se activó TAB_FALLA
   ciclos: number // ciclos completos que terminaron en el tramo
   segundosCiclo: number // suma de sus duraciones
 }
@@ -42,6 +47,7 @@ export type Opciones = {
 export const HUECO_SEGUNDOS = 5 * 60
 
 const VERDE = 1
+const MANTENIMIENTO = 2
 
 export function calcularIndicadores(
   series: Series,
@@ -64,9 +70,11 @@ export function calcularIndicadores(
       aluminio: 0,
       plastico: 0,
       marcha: 0,
+      mantenimiento: 0,
       paro: 0,
       sinRegistro: 0,
       paros: 0,
+      fallas: 0,
       ciclos: 0,
       segundosCiclo: 0,
     }),
@@ -97,7 +105,7 @@ export function calcularIndicadores(
   const sumarTiempo = (
     inicio: number,
     fin: number,
-    campo: 'marcha' | 'paro' | 'sinRegistro',
+    campo: 'marcha' | 'mantenimiento' | 'paro' | 'sinRegistro',
   ) => {
     let a = Math.max(inicio, t0)
     const b = Math.min(fin, t1)
@@ -116,6 +124,8 @@ export function calcularIndicadores(
     ...series.pasos,
     ...series.torreta,
     ...series.latido,
+    ...series.falla,
+    ...series.codFalla,
   ]
     .map((p) => p.ts.getTime())
     .sort((a, b) => a - b)
@@ -136,21 +146,36 @@ export function calcularIndicadores(
     const finCubierto = Math.min(siguiente, e + hueco)
     if (e > cubierto) sumarTiempo(cubierto, e, 'sinRegistro')
     const campo =
-      estado === null ? 'sinRegistro' : estado === VERDE ? 'marcha' : 'paro'
+      estado === null
+        ? 'sinRegistro'
+        : estado === VERDE
+          ? 'marcha'
+          : estado === MANTENIMIENTO
+            ? 'mantenimiento'
+            : 'paro'
     sumarTiempo(Math.max(e, cubierto), finCubierto, campo)
     cubierto = Math.max(cubierto, finCubierto)
   }
   if (cubierto < limite) sumarTiempo(cubierto, limite, 'sinRegistro')
 
-  // paros: cada vez que la torreta sale de verde
+  // paros: cada vez que la torreta sale de verde (entrar a mantenimiento es un paro planeado)
   let anterior: number | null = null
   for (const p of torreta) {
     const t = p.ts.getTime()
     if (t > t1) break
-    if (dentro(t) && anterior === VERDE && p.valor !== VERDE)
+    if (
+      dentro(t) &&
+      anterior === VERDE &&
+      p.valor !== VERDE &&
+      p.valor !== MANTENIMIENTO
+    )
       cubetaEn(t).paros++
     anterior = p.valor
   }
+
+  // fallas: cada vez que TAB_FALLA pasa a verdadero
+  for (const { ts } of eventosDeFalla(series, { desde, hasta }))
+    cubetaEn(ts.getTime()).fallas++
 
   // ciclos completos: de que el paso sale del reposo (0 o 1) a que la secuencia vuelve a empezar
   let pasoAnterior: number | null = null
@@ -179,4 +204,39 @@ export function calcularIndicadores(
   }
 
   return cubetas
+}
+
+export type EventoFalla = { ts: Date; codigo: number | null }
+
+// Cada activación de TAB_FALLA en la ventana, con el código que tenía TAB_COD_FALLA. El código
+// puede llegar en la misma lectura o un poco después: se toma el que haya 2 s después.
+export function eventosDeFalla(
+  series: Pick<Series, 'falla' | 'codFalla'>,
+  { desde, hasta }: { desde: Date; hasta: Date },
+): EventoFalla[] {
+  const t0 = desde.getTime()
+  const t1 = hasta.getTime()
+  const codigos = [...series.codFalla].sort(
+    (a, b) => a.ts.getTime() - b.ts.getTime(),
+  )
+  const codigoEn = (t: number) => {
+    let codigo: number | null = null
+    for (const p of codigos) {
+      if (p.ts.getTime() > t + 2000) break
+      codigo = p.valor
+    }
+    return codigo
+  }
+  const eventos: EventoFalla[] = []
+  let anterior: number | null = null
+  for (const p of [...series.falla].sort(
+    (a, b) => a.ts.getTime() - b.ts.getTime(),
+  )) {
+    const t = p.ts.getTime()
+    if (t > t1) break
+    if (t > t0 && anterior !== 1 && p.valor === 1)
+      eventos.push({ ts: p.ts, codigo: codigoEn(t) })
+    anterior = p.valor
+  }
+  return eventos
 }

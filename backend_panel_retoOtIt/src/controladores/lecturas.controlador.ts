@@ -24,7 +24,20 @@ export function crearControladorLecturas(servicio: ServicioLecturas) {
         res.status(400).json({ error: resultado.error })
         return
       }
-      res.json({ cubetas: resultado.cubetas, truncado: resultado.truncado })
+      res.json({
+        cubetas: resultado.cubetas,
+        fallas: resultado.fallas,
+        truncado: resultado.truncado,
+      })
+    },
+
+    async cambios(req: Request, res: Response) {
+      const resultado = await servicio.cambios(req.query)
+      if (!resultado.ok) {
+        res.status(400).json({ error: resultado.error })
+        return
+      }
+      res.json({ cambios: resultado.cambios, truncado: resultado.truncado })
     },
   }
 }

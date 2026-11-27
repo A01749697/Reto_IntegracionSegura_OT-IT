@@ -35,9 +35,11 @@ export type Totales = {
   plastico: number
   piezas: number
   marcha: number
+  mantenimiento: number
   paro: number
   sinRegistro: number
   paros: number
+  fallas: number
   ciclos: number
   segundosCiclo: number
 }
@@ -48,9 +50,11 @@ export function sumar(tramos: readonly Tramo[]): Totales {
     plastico: 0,
     piezas: 0,
     marcha: 0,
+    mantenimiento: 0,
     paro: 0,
     sinRegistro: 0,
     paros: 0,
+    fallas: 0,
     ciclos: 0,
     segundosCiclo: 0,
   }
@@ -58,9 +62,11 @@ export function sumar(tramos: readonly Tramo[]): Totales {
     t.aluminio += tramo.aluminio
     t.plastico += tramo.plastico
     t.marcha += tramo.marcha
+    t.mantenimiento += tramo.mantenimiento
     t.paro += tramo.paro
     t.sinRegistro += tramo.sinRegistro
     t.paros += tramo.paros
+    t.fallas += tramo.fallas
     t.ciclos += tramo.ciclos
     t.segundosCiclo += tramo.segundosCiclo
   }
@@ -68,7 +74,7 @@ export function sumar(tramos: readonly Tramo[]): Totales {
   return t
 }
 
-// Disponibilidad: del tiempo que se sabe qué hacía la celda, cuánto estuvo en marcha.
+// Disponibilidad: marcha / (marcha + paro). El mantenimiento es paro planeado y no cuenta.
 export const disponibilidad = (t: {
   marcha: number
   paro: number
@@ -83,9 +89,6 @@ export const cicloPromedio = (t: {
   ciclos: number
   segundosCiclo: number
 }): number | null => (t.ciclos > 0 ? t.segundosCiclo / t.ciclos : null)
-
-export const mezclaAluminio = (t: Totales): number | null =>
-  t.piezas > 0 ? (t.aluminio / t.piezas) * 100 : null
 
 // Cambio contra el periodo anterior: en porcentaje para cantidades, en puntos para
 // porcentajes. null si no hay con qué comparar.
@@ -119,13 +122,27 @@ export function csvDeTramos(
       t.plastico,
       t.aluminio + t.plastico,
       (t.marcha / 3600).toFixed(2),
+      (t.mantenimiento / 3600).toFixed(2),
       (t.paro / 3600).toFixed(2),
       (t.sinRegistro / 3600).toFixed(2),
       disp === null ? '' : disp.toFixed(1),
       t.paros,
+      t.fallas,
       t.ciclos,
       ciclo === null ? '' : ciclo.toFixed(1),
     ].join(',')
   })
   return [encabezados.join(','), ...filas].join('\r\n') + '\r\n'
+}
+
+// Cuántas veces salió cada código de falla, de la más frecuente a la menos.
+export function fallasPorCodigo(
+  fallas: readonly { codigo: number | null }[],
+): { codigo: number | null; veces: number }[] {
+  const conteo = new Map<number | null, number>()
+  for (const { codigo } of fallas)
+    conteo.set(codigo, (conteo.get(codigo) ?? 0) + 1)
+  return [...conteo.entries()]
+    .map(([codigo, veces]) => ({ codigo, veces }))
+    .sort((a, b) => b.veces - a.veces || (a.codigo ?? 0) - (b.codigo ?? 0))
 }

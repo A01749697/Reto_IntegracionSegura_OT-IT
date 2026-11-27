@@ -1,64 +1,100 @@
 import { describe, expect, it } from 'vitest'
-import { COLCHON, crearRepeticion, pasoEn, recibirPasos } from './repeticion'
+import {
+  COLCHON,
+  crearRepeticion,
+  desdeParaConsulta,
+  recibirCambios,
+  sembrar,
+  valoresEn,
+} from './repeticion'
 
-const T0 = Date.parse('2026-11-24T20:00:00.000Z')
-const punto = (segundos: number, valor: number) => ({
+const T0 = Date.parse('2026-11-26T20:00:00.000Z')
+const en = (segundos: number, nodo: string, valor: number) => ({
+  nodo,
   ts: new Date(T0 + segundos * 1000).toISOString(),
   valor,
 })
 
-// Una repetición que ya pasó por la primera consulta.
-function iniciada(ahora = 100) {
+function sembrada(ahora = 100) {
   const rep = crearRepeticion()
-  recibirPasos(rep, [punto(-60, 0)], ahora)
-  return rep
+  sembrar(rep, { TAB_PASO: 0, TAB_SELLO: 0 }, T0 - 1000)
+  return { rep, ahora }
 }
 
-describe('recibirPasos y pasoEn', () => {
-  it('la primera consulta solo deja el último paso, sin repetir la historia', () => {
+describe('repetición de cambios', () => {
+  it('sin sembrar no recibe nada ni sabe desde dónde pedir', () => {
     const rep = crearRepeticion()
-    recibirPasos(rep, [punto(0, 2), punto(1, 3), punto(2, 9)], 100)
+    expect(desdeParaConsulta(rep)).toBeNull()
+    recibirCambios(rep, [en(0, 'TAB_PASO', 2)], 0)
     expect(rep.eventos).toEqual([])
-    expect(pasoEn(rep, 100)).toBe(9)
   })
 
-  it('repite cada cambio con la misma distancia que tuvo en la celda, unos segundos después', () => {
-    const rep = iniciada()
-    recibirPasos(rep, [punto(0, 2), punto(1.5, 3), punto(4, 4)], 100)
-    expect(pasoEn(rep, 100 + COLCHON - 0.01)).toBe(0)
-    expect(pasoEn(rep, 100 + COLCHON)).toBe(2)
-    expect(pasoEn(rep, 100 + COLCHON + 1.49)).toBe(2)
-    expect(pasoEn(rep, 100 + COLCHON + 1.5)).toBe(3)
-    expect(pasoEn(rep, 100 + COLCHON + 4)).toBe(4)
+  it('parte de los valores sembrados y pide desde su fecha', () => {
+    const { rep } = sembrada()
+    expect(valoresEn(rep, 0)).toEqual({ TAB_PASO: 0, TAB_SELLO: 0 })
+    expect(desdeParaConsulta(rep)?.getTime()).toBe(T0 - 1000)
   })
 
-  it('los de la siguiente consulta guardan el mismo desfase', () => {
-    const rep = iniciada()
-    recibirPasos(rep, [punto(0, 2)], 100)
-    recibirPasos(rep, [punto(5, 3)], 105)
-    expect(pasoEn(rep, 100 + COLCHON + 4.9)).toBe(2)
-    expect(pasoEn(rep, 100 + COLCHON + 5)).toBe(3)
+  it('repite cada cambio con la misma distancia que tuvo, unos segundos después', () => {
+    const { rep, ahora } = sembrada()
+    recibirCambios(
+      rep,
+      [en(0, 'TAB_PASO', 6), en(0, 'TAB_SELLO', 1), en(0.4, 'TAB_SELLO', 0)],
+      ahora,
+    )
+    expect(valoresEn(rep, ahora + COLCHON - 0.01).TAB_SELLO).toBe(0)
+    expect(valoresEn(rep, ahora + COLCHON)).toEqual({
+      TAB_PASO: 6,
+      TAB_SELLO: 1,
+    })
+    expect(valoresEn(rep, ahora + COLCHON + 0.41).TAB_SELLO).toBe(0)
   })
 
-  it('no repite lo que ya recibió', () => {
-    const rep = iniciada()
-    recibirPasos(rep, [punto(0, 2), punto(1, 3)], 100)
-    recibirPasos(rep, [punto(0, 2), punto(1, 3), punto(2, 4)], 105)
-    expect(rep.eventos.map((e) => e.paso)).toEqual([2, 3, 4])
+  it('el siguiente lote guarda el mismo desfase', () => {
+    const { rep, ahora } = sembrada()
+    recibirCambios(rep, [en(0, 'TAB_PASO', 2)], ahora)
+    recibirCambios(rep, [en(2, 'TAB_PASO', 3)], ahora + 2)
+    expect(valoresEn(rep, ahora + COLCHON + 1.9).TAB_PASO).toBe(2)
+    expect(valoresEn(rep, ahora + COLCHON + 2.01).TAB_PASO).toBe(3)
   })
 
-  it('el orden lo da la fecha, no el orden en que llegan', () => {
-    const rep = iniciada()
-    recibirPasos(rep, [punto(2, 4), punto(0, 2), punto(1, 3)], 100)
-    expect(rep.eventos.map((e) => e.paso)).toEqual([2, 3, 4])
+  it('no repite lo que ya recibió, aunque la consulta lo vuelva a traer', () => {
+    const { rep, ahora } = sembrada()
+    recibirCambios(rep, [en(0, 'TAB_PASO', 2), en(1, 'TAB_SELLO', 1)], ahora)
+    expect(desdeParaConsulta(rep)?.getTime()).toBe(T0 + 1000)
+    // la siguiente pide desde el último ts (incluido): llega repetido y uno nuevo con el mismo ts
+    recibirCambios(
+      rep,
+      [en(1, 'TAB_SELLO', 1), en(1, 'TAB_PASO', 6)],
+      ahora + 2,
+    )
+    expect(rep.eventos.map((e) => `${e.nodo}=${e.valor}`)).toEqual([
+      'TAB_PASO=2',
+      'TAB_SELLO=1',
+      'TAB_PASO=6',
+    ])
   })
 
-  it('si la animación se quedó muy atrás (pestaña dormida), se reancla', () => {
-    const rep = iniciada()
-    recibirPasos(rep, [punto(0, 2)], 100)
-    pasoEn(rep, 200)
-    // diez minutos después en la celda, pero el reloj del gemelo apenas avanzó
-    recibirPasos(rep, [punto(600, 5)], 110)
-    expect(rep.eventos[0].t).toBeCloseTo(110 + COLCHON)
+  it('el orden lo da la fecha, no el orden de llegada', () => {
+    const { rep, ahora } = sembrada()
+    recibirCambios(
+      rep,
+      [en(2, 'TAB_PASO', 4), en(0, 'TAB_PASO', 2), en(1, 'TAB_PASO', 3)],
+      ahora,
+    )
+    expect(rep.eventos.map((e) => e.valor)).toEqual([2, 3, 4])
+  })
+
+  it('si quedó muy atrás (pestaña dormida), lo atrasado se aplica de golpe', () => {
+    const { rep, ahora } = sembrada()
+    recibirCambios(rep, [en(0, 'TAB_PASO', 2)], ahora)
+    // diez minutos de la celda en una sola consulta
+    recibirCambios(
+      rep,
+      [en(300, 'TAB_PASO', 5), en(600, 'TAB_PASO', 9)],
+      ahora + 1,
+    )
+    expect(valoresEn(rep, ahora + 1).TAB_PASO).toBe(5)
+    expect(valoresEn(rep, ahora + 1 + COLCHON).TAB_PASO).toBe(9)
   })
 })

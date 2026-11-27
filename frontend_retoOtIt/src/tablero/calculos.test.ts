@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import {
   duracionesDeCiclo,
+  ESTADO_FALLA,
+  estadosDeLaCelda,
+  fallasEnVentana,
+  segundosLegibles,
+  valoresEnVentana,
   piezasPorTramo,
   resumir,
   tiempoPorValor,
@@ -93,5 +98,49 @@ it('resumir', () => {
     promedio: 20,
     minimo: 10,
     maximo: 30,
+  })
+})
+
+describe('estados, fallas y valores por ciclo', () => {
+  it('combina la torreta y la falla: 3 con TAB_FALLA es falla', () => {
+    const estados = estadosDeLaCelda(
+      [en(0, 1), en(10, 3), en(20, 3)],
+      [en(0, 0), en(10, 1), en(15, 0)],
+    )
+    expect(
+      tramos(estados, ventana(0, 30)).map((t) => [
+        t.valor,
+        (t.fin - t.inicio) / 1000,
+      ]),
+    ).toEqual([
+      [1, 10],
+      [ESTADO_FALLA, 5],
+      [3, 15],
+    ])
+  })
+
+  it('cada falla con su código y cuándo se borró', () => {
+    const fallas = fallasEnVentana(
+      [en(-5, 1), en(2, 0), en(10, 1), en(20, 0), en(25, 1)],
+      [en(-5, 9), en(10.5, 4), en(25, 6)],
+      ventana(0, 30),
+    )
+    // la de antes de la ventana no cuenta; la última sigue activa
+    expect(fallas).toEqual([
+      { inicio: T0 + 10_000, fin: T0 + 20_000, codigo: 4 },
+      { inicio: T0 + 25_000, fin: null, codigo: 6 },
+    ])
+  })
+
+  it('valores por ciclo dentro de la ventana, sin ceros', () => {
+    expect(
+      valoresEnVentana([en(-1, 9), en(5, 0), en(6, 10)], ventana(0, 30)),
+    ).toEqual([en(6, 10)])
+  })
+
+  it('segundosLegibles', () => {
+    expect(segundosLegibles(45)).toBe('45 s')
+    expect(segundosLegibles(200)).toBe('3 min 20 s')
+    expect(segundosLegibles(3600 * 2 + 300)).toBe('2 h 5 min')
   })
 })

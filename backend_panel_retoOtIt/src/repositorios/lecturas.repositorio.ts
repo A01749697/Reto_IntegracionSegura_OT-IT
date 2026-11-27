@@ -230,3 +230,30 @@ export async function obtenerSerie(
   const enVentana = resultado.rows.filter((f) => !f.antes).length
   return { puntos, truncado: enVentana >= limite }
 }
+
+export type Cambio = { nodo: string; ts: Date; valor: number }
+
+// Los cambios de varios nodos desde una fecha (incluida), del más viejo al más nuevo.
+// Usa el índice (nodo, ts_plc) de la tabla: nunca recorre la tabla completa.
+export async function obtenerCambios(
+  pool: Pool,
+  plc: PlcHistorian,
+  nodos: string[],
+  desde: Date,
+  limite: number,
+): Promise<{ cambios: Cambio[]; truncado: boolean }> {
+  const resultado = await pool.query<{ nodo: string; ts: Date; valor: string }>(
+    `SELECT nodo, ts_plc AS ts, valor
+     FROM ${TABLAS_POR_PLC[plc]}
+     WHERE nodo = ANY($1::text[]) AND ts_plc >= $2
+     ORDER BY ts_plc, nodo
+     LIMIT $3`,
+    [nodos, desde.toISOString(), limite + 1],
+  )
+  const cambios: Cambio[] = []
+  for (const fila of resultado.rows.slice(0, limite)) {
+    const valor = valorNumerico(fila.valor)
+    if (valor !== null) cambios.push({ nodo: fila.nodo, ts: fila.ts, valor })
+  }
+  return { cambios, truncado: resultado.rows.length > limite }
+}

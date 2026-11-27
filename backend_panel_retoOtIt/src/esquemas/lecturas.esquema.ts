@@ -140,3 +140,55 @@ export function validarConsultaIndicadores(
   }
   return { ok: true, consulta: { desde, hasta, cubetaSegundos } }
 }
+
+// Cambios de varios nodos de una estación desde una fecha (los repite el gemelo).
+// nodos va separado por comas: ?plc=S7-1500&nodos=TAB_PASO,TAB_SELLO&desde=...
+export type ConsultaCambios = {
+  plc: PlcHistorian
+  nodos: string[]
+  desde: Date
+}
+
+export type ResultadoCambios =
+  { ok: true; consulta: ConsultaCambios } | { ok: false; error: string }
+
+const CAMPOS_CAMBIOS = ['plc', 'nodos', 'desde']
+
+export function validarConsultaCambios(
+  consulta: unknown,
+  maximoNodos: number,
+): ResultadoCambios {
+  if (!esObjeto(consulta))
+    return { ok: false, error: 'La consulta no es válida' }
+  const claves = Object.keys(consulta)
+  if (
+    claves.length !== CAMPOS_CAMBIOS.length ||
+    !claves.every((c) => CAMPOS_CAMBIOS.includes(c))
+  ) {
+    return { ok: false, error: 'Se necesitan exactamente plc, nodos y desde' }
+  }
+  const { plc, nodos } = consulta
+  if (!esPlcHistorian(plc)) return { ok: false, error: 'plc no es válido' }
+  if (typeof nodos !== 'string')
+    return { ok: false, error: 'nodos no es válido' }
+  const lista = [...new Set(nodos.split(','))]
+  if (
+    lista.length === 0 ||
+    lista.length > maximoNodos ||
+    !lista.every((n) => FORMATO_NODO.test(n))
+  ) {
+    return {
+      ok: false,
+      error: `nodos debe ser una lista de 1 a ${maximoNodos} nombres separados por comas`,
+    }
+  }
+  const desde = leerFecha(consulta.desde)
+  if (!desde) {
+    return {
+      ok: false,
+      error:
+        'desde debe ser una fecha ISO en UTC, por ejemplo 2026-10-28T16:00:00Z',
+    }
+  }
+  return { ok: true, consulta: { plc, nodos: lista, desde } }
+}
