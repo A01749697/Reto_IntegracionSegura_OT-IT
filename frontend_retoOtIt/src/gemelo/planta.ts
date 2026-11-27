@@ -176,6 +176,30 @@ function reciclar(planta: Planta, pieza: Pieza) {
 
 // En vivo: las piezas de abajo del almacén toman, en orden, los materiales que el S7-1516
 // ya contó; las demás quedan grises porque todavía no se sabe qué son.
+// En vivo la garra real puede tomar piezas que el gemelo no vio llegar: se pone una en el
+// depósito, tomada de lo alto del almacén (la parte que no se ve de la pila).
+export function ponerEnDeposito(planta: Planta, tipo: Tipo) {
+  const ocupado = planta.piezas.some(
+    (p) => p.estado === 'linea' && p.x > X_TOMA - 0.03,
+  )
+  const pila = enAlmacen(planta)
+  if (ocupado || pila.length === 0) return
+  const pieza = pila.reduce((a, b) => (b.fila > a.fila ? b : a))
+  Object.assign(pieza, {
+    estado: 'linea',
+    tipo,
+    conocida: true,
+    marcada: false,
+    sello: null,
+    x: X_TOMA,
+    y: Y_PIEZA_TOMA,
+    z: Z_LINEA,
+    v: 0,
+    vy: 0,
+    giro: 0,
+  })
+}
+
 export function pintarAlmacen(planta: Planta, tipos: readonly Tipo[]) {
   const fila = enAlmacen(planta).sort((a, b) => a.fila - b.fila)
   fila.forEach((pieza, i) => {

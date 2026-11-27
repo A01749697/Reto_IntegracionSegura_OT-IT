@@ -30,6 +30,13 @@ export const NODOS = {
 
 export type ClaveNodo = keyof typeof NODOS
 
+// Salidas del empujador (PD-1, doble efecto). Se repiten junto con TAB_PASO para que el
+// pistón se mueva con su salida real, aunque el historian no alcance a ver el paso 2.
+export const NODOS_EMPUJADOR = {
+  ext: { plc: 'S7-1500', nodo: 'TAB_EMPUJA_EXT' },
+  ret: { plc: 'S7-1500', nodo: 'TAB_EMPUJA_RET' },
+} satisfies Record<string, NodoConocido>
+
 // Valores de TAB_TORRETA:
 //   1 verde fijo          MARCHA y no FALLA
 //   2 amarilla fija       mantenimiento (botón enclavado en el S7-1200; bloquea el arranque)

@@ -5,7 +5,7 @@
 //     después (ver repeticion.ts y seguidor.ts). El material de cada pieza sale de los
 //     contadores TAB_ALUMINIO / TAB_OTRAS; mientras no se sabe, la pieza se ve gris.
 // La garra es simulada en los dos modos y trabaja sola cuando hay pieza en el depósito.
-import { ESTADOS_TORRETA } from './nodos'
+import { ESTADOS_TORRETA, NODOS_EMPUJADOR } from './nodos'
 import {
   avanzarPlanta,
   crearPlanta,
@@ -26,10 +26,18 @@ import {
 import {
   crearRepeticion,
   pasoEn,
+  recibirNodo,
   recibirPasos,
+  valoresEn,
   type PuntoPaso,
   type Repeticion,
 } from './repeticion'
+import {
+  crearGarraReal,
+  hayDatosDeGarra,
+  seguirGarra,
+  type GarraReal,
+} from './garraReal'
 import { avanzarSeguidor, crearSeguidor, type Seguidor } from './seguidor'
 import { senalesIniciales, type Senales } from './senales'
 
@@ -46,6 +54,7 @@ export type Gemelo = {
   porEntrar: Tipo[] // en vivo: materiales ya contados que aún no tienen pieza
   repeticion: Repeticion
   seguidor: Seguidor
+  garraReal: GarraReal // en vivo, la garra sigue al S7-300
 }
 
 // Lo que necesita la pantalla en cada refresco.
@@ -68,6 +77,7 @@ export function crearGemelo(
     porEntrar: [],
     repeticion: crearRepeticion(),
     seguidor: crearSeguidor(),
+    garraReal: crearGarraReal(),
   }
   ponerModo(gemelo, modo)
   return gemelo
@@ -89,6 +99,7 @@ export function ponerModo(gemelo: Gemelo, modo: Modo) {
   gemelo.porEntrar = []
   gemelo.repeticion = crearRepeticion()
   gemelo.seguidor = crearSeguidor()
+  gemelo.garraReal = crearGarraReal()
   pintarAlmacen(planta, [])
   // la simulación arranca en verde; en vivo la torreta real solo prende las luces
   ponerTorreta(gemelo, modo === 'simulacion' ? ESTADOS_TORRETA.verde : null)
@@ -113,6 +124,16 @@ export function recibirPasosReales(
 ) {
   if (gemelo.modo !== 'vivo') return
   recibirPasos(gemelo.repeticion, puntos, gemelo.reloj)
+}
+
+// Los cambios de otro nodo que se repite junto con el paso (las salidas del empujador).
+export function recibirNodoReal(
+  gemelo: Gemelo,
+  nodo: string,
+  puntos: readonly PuntoPaso[],
+) {
+  if (gemelo.modo !== 'vivo') return
+  recibirNodo(gemelo.repeticion, nodo, puntos, gemelo.reloj)
 }
 
 // El paso en que está la celda según la última lectura. Solo sirve mientras el historial
@@ -156,6 +177,11 @@ export function avanzarGemelo(gemelo: Gemelo, segundos: number) {
     0.5,
   )
   const objetivo = vivo ? pasoEn(gemelo.repeticion, gemelo.reloj) : null
+  const valores = vivo ? valoresEn(gemelo.repeticion, gemelo.reloj) : {}
+  const empujador = {
+    ext: valores[NODOS_EMPUJADOR.ext.nodo],
+    ret: valores[NODOS_EMPUJADOR.ret.nodo],
+  }
   while (gemelo.acumulado >= PASO_FIJO) {
     if (vivo)
       avanzarSeguidor(
@@ -164,9 +190,12 @@ export function avanzarGemelo(gemelo: Gemelo, segundos: number) {
         senales,
         materialEnProceso(planta),
         PASO_FIJO,
+        empujador,
       )
     const enAlmacen = contarAlmacen(planta)
-    avanzarPlc(plc, senales, planta.carriles, PASO_FIJO, !vivo)
+    const garraReal = vivo && hayDatosDeGarra(valores)
+    avanzarPlc(plc, senales, planta.carriles, PASO_FIJO, !vivo, !garraReal)
+    if (garraReal) seguirGarra(gemelo.garraReal, valores, senales, planta)
     avanzarPlanta(planta, senales, PASO_FIJO)
     // salió una pieza del almacén: si ya se había contado, se lleva ese material
     if (vivo && contarAlmacen(planta) < enAlmacen && gemelo.porEntrar.length) {

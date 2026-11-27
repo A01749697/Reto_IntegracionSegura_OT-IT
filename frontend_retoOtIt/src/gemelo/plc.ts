@@ -249,13 +249,14 @@ export function avanzarPlc(
   carriles: readonly Carril[],
   dt: number,
   conPistones = true,
+  conGarra = true,
 ) {
   plc.reloj += dt
   plc.pistones.t += dt
   plc.garra.t += dt
 
   if (conPistones) avanzarPistones(plc, s)
-  avanzarGarra(plc, s, carriles)
+  if (conGarra) avanzarGarra(plc, s, carriles)
 
   // una luz a la vez según TAB_TORRETA; el reset parpadea en amarillo a 1 Hz
   const parpadeo = plc.reloj % 1 < 0.5

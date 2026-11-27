@@ -393,7 +393,10 @@ describe('PaginaGemelo, pasos reales', () => {
     })
     await vi.advanceTimersByTimeAsync(5000) // esta trae el cambio
     await vi.advanceTimersByTimeAsync(5000) // y esta pide desde él
-    const desde = props.obtenerHistorial.mock.calls[2][2] as Date
+    const delPaso = props.obtenerHistorial.mock.calls.filter(
+      (c) => c[1] === 'TAB_PASO',
+    )
+    const desde = delPaso[2][2] as Date
     expect(desde.toISOString()).toBe('2026-11-24T20:00:05.000Z')
   })
 
@@ -431,7 +434,8 @@ describe('PaginaGemelo, pasos reales', () => {
     const props = preparar(lecturasDeAhora())
     await vi.advanceTimersByTimeAsync(100)
     elegir('Simulación')
+    const antes = props.obtenerHistorial.mock.calls.length
     await vi.advanceTimersByTimeAsync(20_000)
-    expect(props.obtenerHistorial).toHaveBeenCalledTimes(1)
+    expect(props.obtenerHistorial).toHaveBeenCalledTimes(antes)
   })
 })
