@@ -87,6 +87,8 @@ function iniciar() {
         lecturas.obtenerHistorial(poolLectura, filtros),
       obtenerSerie: (plc, nodo, desde, hasta, limite) =>
         lecturas.obtenerSerie(poolLectura, plc, nodo, desde, hasta, limite),
+      obtenerCambios: (plc, nodos, desde, limite) =>
+        lecturas.obtenerCambios(poolLectura, plc, nodos, desde, limite),
     },
     bitacora: {
       insertarEvento: (evento) => bitacora.insertarEvento(poolPanel, evento),

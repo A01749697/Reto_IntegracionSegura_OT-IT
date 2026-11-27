@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { Pool } from 'pg'
 import {
   obtenerActividadLecturas,
+  obtenerCambios,
   obtenerHistorial,
   obtenerSerie,
   obtenerUltimasLecturas,
@@ -178,5 +179,61 @@ describe('obtenerSerie', () => {
       2,
     )
     expect(serie.truncado).toBe(true)
+  })
+})
+
+describe('obtenerCambios', () => {
+  const desde = new Date('2026-11-25T20:00:00Z')
+
+  it('pide los nodos como parámetro y entrega números en orden', async () => {
+    const query = vi.fn().mockResolvedValue({
+      rows: [
+        {
+          nodo: 'TAB_SELLO',
+          ts: new Date('2026-11-25T20:00:01Z'),
+          valor: 'True',
+        },
+        { nodo: 'TAB_PASO', ts: new Date('2026-11-25T20:00:02Z'), valor: '7' },
+        {
+          nodo: 'TAB_TEXTO',
+          ts: new Date('2026-11-25T20:00:03Z'),
+          valor: 'hola',
+        },
+      ],
+    })
+    const resultado = await obtenerCambios(
+      { query } as unknown as Pool,
+      'S7-1500',
+      ['TAB_SELLO', 'TAB_PASO', 'TAB_TEXTO'],
+      desde,
+      10,
+    )
+    expect(resultado.cambios.map((c) => [c.nodo, c.valor])).toEqual([
+      ['TAB_SELLO', 1],
+      ['TAB_PASO', 7],
+    ])
+    expect(resultado.truncado).toBe(false)
+    const [texto, parametros] = query.mock.calls[0] as [string, unknown[]]
+    expect(texto).toContain('telemetria_1500')
+    expect(texto).not.toContain('TAB_SELLO')
+    expect(parametros).toEqual([
+      ['TAB_SELLO', 'TAB_PASO', 'TAB_TEXTO'],
+      desde.toISOString(),
+      11,
+    ])
+  })
+
+  it('avisa si hay más de los que caben', async () => {
+    const fila = { nodo: 'TAB_PASO', ts: desde, valor: '1' }
+    const query = vi.fn().mockResolvedValue({ rows: [fila, fila, fila] })
+    const resultado = await obtenerCambios(
+      { query } as unknown as Pool,
+      'S7-1500',
+      ['TAB_PASO'],
+      desde,
+      2,
+    )
+    expect(resultado.cambios).toHaveLength(2)
+    expect(resultado.truncado).toBe(true)
   })
 })

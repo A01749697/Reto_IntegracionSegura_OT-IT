@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  validarConsultaCambios,
   validarConsultaHistorial,
   validarConsultaIndicadores,
 } from './lecturas.esquema'
@@ -126,5 +127,40 @@ describe('validarConsultaIndicadores', () => {
     [{ ...base, cubeta: 'hora' }], // 168 tramos de una hora
   ])('rechaza %o', (consulta) => {
     expect(validarConsultaIndicadores(consulta, limites).ok).toBe(false)
+  })
+})
+
+describe('validarConsultaCambios', () => {
+  const base = {
+    plc: 'S7-1500',
+    nodos: 'TAB_PASO,TAB_SELLO,TAB_PASO',
+    desde: '2026-11-25T20:00:00.000Z',
+  }
+
+  it('acepta una lista de nodos sin repetir', () => {
+    expect(validarConsultaCambios(base, 40)).toEqual({
+      ok: true,
+      consulta: {
+        plc: 'S7-1500',
+        nodos: ['TAB_PASO', 'TAB_SELLO'],
+        desde: new Date(base.desde),
+      },
+    })
+  })
+
+  it.each([
+    [{ ...base, plc: 'S7-9' }],
+    [{ ...base, nodos: "TAB_PASO,x';--" }],
+    [{ ...base, nodos: '' }],
+    [
+      {
+        ...base,
+        nodos: Array.from({ length: 41 }, (_, i) => `N${i}`).join(','),
+      },
+    ],
+    [{ ...base, desde: 'ayer' }],
+    [{ plc: base.plc, nodos: base.nodos }],
+  ])('rechaza %o', (consulta) => {
+    expect(validarConsultaCambios(consulta, 40).ok).toBe(false)
   })
 })

@@ -1,23 +1,9 @@
-// Los dos PLC simulados, cada uno como máquina de estados.
-// Leen las entradas de las señales y escriben sus salidas, igual que lo harían los programas reales.
-//   - Pistones (S7-1516): trabajan con marcha (torreta en verde). Solo en simulación:
-//     en vivo los pistones siguen al paso real (ver seguidor.ts).
-//   - Garra (S7-300): no depende de la torreta; atiende el depósito cuando LS-4 ve una pieza.
+// La garra (estación Amatrol, S7-300), simulada en los dos modos como máquina de estados.
+// No depende de la torreta: atiende el depósito cada vez que LS-4 ve una pieza y con SI-3
+// decide a qué carril va. Los pistones son del S7-1516 (ver s7_1516.ts y actuadores.ts).
 import { CARRILES_DE, PIEZAS_POR_CARRIL } from './medidas'
 import type { Carril } from './planta'
 import type { Senales } from './senales'
-
-export type EstadoPistones =
-  | 'REPOSO'
-  | 'A_EXT' // el alimentador empuja una pieza a la guia
-  | 'A_RET' // regresa; la pieza baja sola y pasa por los sensores hasta el tope
-  | 'SUJETA'
-  | 'MARCA'
-  | 'MARCA_ESPERA'
-  | 'MARCA_SUBE'
-  | 'SUELTA'
-  | 'ESPERA_DEPOSITO' // no suelta la pieza mientras el deposito este ocupado
-  | 'ABRE_TOPE' // baja el tope y la pieza cae al deposito
 
 export type EstadoGarra =
   | 'REPOSO'
@@ -33,10 +19,6 @@ export type EstadoGarra =
 type Maquina<E> = { estado: E; t: number } // t: segundos en el estado actual
 
 export type Plc = {
-  pistones: Maquina<EstadoPistones> & {
-    vioPieza: boolean
-    esMetal: boolean
-  }
   garra: Maquina<EstadoGarra> & {
     inicioCiclo: number
     // cuál de sus dos carriles está llenando cada material (0 o 1) y cuántas lleva en él
@@ -44,20 +26,6 @@ export type Plc = {
     puestas: { al: number; pl: number }
   }
   reloj: number
-  ciclos: number // piezas que han empezado en los pistones
-}
-
-// a que paso de la secuencia corresponde cada estado
-const PASO_PISTONES: Partial<Record<EstadoPistones, number>> = {
-  A_EXT: 1,
-  A_RET: 2,
-  SUJETA: 3,
-  MARCA: 3,
-  MARCA_ESPERA: 3,
-  MARCA_SUBE: 3,
-  SUELTA: 3,
-  ESPERA_DEPOSITO: 4,
-  ABRE_TOPE: 4,
 }
 
 const PASO_GARRA: Partial<Record<EstadoGarra, number>> = {
@@ -76,7 +44,6 @@ const ASENTAR_SEGUNDOS = 0.35
 
 export function crearPlc(): Plc {
   return {
-    pistones: { estado: 'REPOSO', t: 0, vioPieza: false, esMetal: false },
     garra: {
       estado: 'REPOSO',
       t: 0,
@@ -85,7 +52,6 @@ export function crearPlc(): Plc {
       puestas: { al: 0, pl: 0 },
     },
     reloj: 0,
-    ciclos: 0,
   }
 }
 
@@ -100,78 +66,9 @@ export function apagarSalidas(s: Senales) {
 }
 
 export function reiniciarPlc(plc: Plc) {
-  irA(plc.pistones, 'REPOSO')
   irA(plc.garra, 'REPOSO')
   plc.garra.carril = { al: 0, pl: 0 }
   plc.garra.puestas = { al: 0, pl: 0 }
-}
-
-function empezarPistones(plc: Plc) {
-  plc.ciclos++
-  irA(plc.pistones, 'A_EXT')
-}
-
-function avanzarPistones(plc: Plc, s: Senales) {
-  const p = plc.pistones
-  // SC-1 dice que hay pieza; SI-1, que es de metal
-  const identificar = () => {
-    if (!s.sc1) return
-    p.vioPieza = true
-    if (s.si1) p.esMetal = true
-  }
-
-  switch (p.estado) {
-    case 'REPOSO':
-      s.yA = s.yB = s.yC = s.yT = false
-      if (s.marcha) empezarPistones(plc)
-      break
-    case 'A_EXT':
-      s.yA = true
-      p.vioPieza = p.esMetal = false
-      s.material = ''
-      if (s.ls2) irA(p, 'A_RET')
-      break
-    case 'A_RET': // SC-2: la pieza llego al tope del marcado
-      s.yA = false
-      identificar()
-      if (s.sc2 && s.ls1) {
-        s.material = p.vioPieza ? (p.esMetal ? 'al' : 'pl') : ''
-        irA(p, 'SUJETA')
-      }
-      break
-    case 'SUJETA': // LS-3 confirma que la pieza quedo sujeta
-      s.yB = p.t > 0.1
-      if (s.ls3) irA(p, 'MARCA')
-      break
-    case 'MARCA':
-      s.yC = true
-      if (s.c1) irA(p, 'MARCA_ESPERA')
-      break
-    case 'MARCA_ESPERA':
-      if (p.t > 0.25) irA(p, 'MARCA_SUBE')
-      break
-    case 'MARCA_SUBE': // el marcador regresa por resorte
-      s.yC = false
-      if (p.t > 0.4) irA(p, 'SUELTA')
-      break
-    case 'SUELTA':
-      s.yB = false
-      if (s.b0) irA(p, 'ESPERA_DEPOSITO')
-      break
-    case 'ESPERA_DEPOSITO':
-      if (!s.ls4) irA(p, 'ABRE_TOPE')
-      break
-    case 'ABRE_TOPE': // la pieza ya salio del marcado: el tope vuelve a subir
-      s.yT = true
-      if (!s.sc2 && p.t > 0.45) {
-        s.yT = false
-        s.material = ''
-        if (s.marcha) empezarPistones(plc)
-        else irA(p, 'REPOSO')
-      }
-      break
-  }
-  s.paso = PASO_PISTONES[p.estado] ?? 0
 }
 
 function avanzarGarra(plc: Plc, s: Senales, carriles: readonly Carril[]) {
@@ -247,16 +144,8 @@ export function avanzarPlc(
   s: Senales,
   carriles: readonly Carril[],
   dt: number,
-  conPistones = true,
 ) {
   plc.reloj += dt
-  plc.pistones.t += dt
   plc.garra.t += dt
-
-  if (conPistones) avanzarPistones(plc, s)
   avanzarGarra(plc, s, carriles)
-
-  // la torreta solo habla del proceso de pistones
-  s.torreVerde = s.marcha
-  s.torreRoja = !s.marcha
 }

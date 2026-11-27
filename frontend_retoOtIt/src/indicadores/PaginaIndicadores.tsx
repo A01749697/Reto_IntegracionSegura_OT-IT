@@ -8,7 +8,12 @@ import { boton, TARJETA } from '../comun/estilos'
 import Segmentos from '../comun/Segmentos'
 import MarcoPanel from '../panel/MarcoPanel'
 import { region } from '../panel/tiempo'
-import type { Cubeta, ResultadoIndicadores, Tramo } from './apiIndicadores'
+import type {
+  Cubeta,
+  EventoFalla,
+  ResultadoIndicadores,
+  Tramo,
+} from './apiIndicadores'
 import { BarrasApiladas, Leyenda, Linea } from './Graficas'
 import {
   cambioEnPuntos,
@@ -16,7 +21,7 @@ import {
   cicloPromedio,
   csvDeTramos,
   disponibilidad,
-  mezclaAluminio,
+  fallasPorCodigo,
   piezasPorHora,
   sumar,
   ventanas,
@@ -42,6 +47,7 @@ type Datos = {
   periodo: Periodo
   actual: Tramo[]
   anterior: Tramo[]
+  fallas: EventoFalla[]
   truncado: boolean
 }
 
@@ -108,6 +114,7 @@ export default function PaginaIndicadores({
           periodo,
           actual: a.tramos,
           anterior: b.ok ? b.tramos : [],
+          fallas: a.fallas,
           truncado: a.truncado,
         },
       })
@@ -132,10 +139,12 @@ export default function PaginaIndicadores({
       t('indicadores.csv.plastico'),
       t('indicadores.csv.piezas'),
       t('indicadores.csv.horasMarcha'),
+      t('indicadores.csv.horasMantenimiento'),
       t('indicadores.csv.horasParo'),
       t('indicadores.csv.horasSinRegistro'),
       t('indicadores.csv.disponibilidad'),
       t('indicadores.csv.paros'),
+      t('indicadores.csv.fallas'),
       t('indicadores.csv.ciclos'),
       t('indicadores.csv.ciclo'),
     ])
@@ -284,11 +293,11 @@ function Contenido({ datos }: { datos: Datos }) {
   const disp = disponibilidad(total)
   const ritmo = piezasPorHora(total)
   const ciclo = cicloPromedio(total)
-  const mezcla = mezclaAluminio(total)
   const etiquetas = datos.actual.map((tramo) =>
     etiquetaTramo(tramo.inicio, cubeta),
   )
-  const tiempoTotal = total.marcha + total.paro + total.sinRegistro
+  const tiempoTotal =
+    total.marcha + total.mantenimiento + total.paro + total.sinRegistro
 
   return (
     <>
@@ -297,7 +306,7 @@ function Contenido({ datos }: { datos: Datos }) {
           {t('indicadores.truncado')}
         </p>
       )}
-      {total.marcha + total.paro === 0 && (
+      {total.marcha + total.paro + total.mantenimiento === 0 && (
         <p
           role="status"
           className="rounded-lg border border-linea bg-panel px-3.5 py-2.5 text-[13px] text-suave"
@@ -358,11 +367,16 @@ function Contenido({ datos }: { datos: Datos }) {
           })}
         />
         <Indicador
-          titulo={t('indicadores.kpi.mezcla')}
-          valor={mezcla === null ? '—' : `${numero(mezcla)} %`}
-          cambio={puntosCambio(mezcla, comparar(mezclaAluminio), t)}
-          mejorSiSube={null}
-          detalle={t('indicadores.kpi.mezclaDetalle')}
+          titulo={t('indicadores.kpi.fallas')}
+          valor={numero(total.fallas)}
+          cambio={porcentajeCambio(
+            total.fallas,
+            comparar((x) => x.fallas),
+          )}
+          mejorSiSube={false}
+          detalle={t('indicadores.kpi.fallasDetalle', {
+            tiempo: horas(total.mantenimiento),
+          })}
         />
       </section>
 
@@ -438,12 +452,20 @@ function Contenido({ datos }: { datos: Datos }) {
         </Tarjeta>
       </div>
 
-      <Tarjeta
-        titulo={t('indicadores.tiempo.titulo')}
-        nota={t('indicadores.tiempo.nota')}
-      >
-        <UsoDelTiempo total={total} tiempoTotal={tiempoTotal} />
-      </Tarjeta>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Tarjeta
+          titulo={t('indicadores.tiempo.titulo')}
+          nota={t('indicadores.tiempo.nota')}
+        >
+          <UsoDelTiempo total={total} tiempoTotal={tiempoTotal} />
+        </Tarjeta>
+        <Tarjeta
+          titulo={t('indicadores.fallas.titulo')}
+          nota={t('indicadores.fallas.nota')}
+        >
+          <FallasPorCodigo fallas={datos.fallas} />
+        </Tarjeta>
+      </div>
 
       <Tarjeta titulo={t('indicadores.tabla.titulo')}>
         <TablaTramos tramos={datos.actual} etiquetas={etiquetas} />
@@ -513,7 +535,45 @@ function CicloPorTramo({
   )
 }
 
-// Una sola barra al 100 %: marcha, paro y sin registro.
+// Las fallas del periodo agrupadas por código, de la más frecuente a la menos (Pareto).
+function FallasPorCodigo({ fallas }: { fallas: EventoFalla[] }) {
+  const { t } = useTranslation()
+  const lista = fallasPorCodigo(fallas)
+  if (lista.length === 0)
+    return (
+      <p className="text-[13px] text-suave">
+        {t('indicadores.fallas.ninguna')}
+      </p>
+    )
+  const maximo = lista[0]?.veces ?? 1
+  return (
+    <ul className="flex flex-col gap-1.5">
+      {lista.map(({ codigo, veces }) => (
+        <li
+          key={codigo ?? 'sin'}
+          className="grid grid-cols-[6.5rem_1fr_4.5rem] items-center gap-2 text-[12.5px]"
+        >
+          <span className="text-suave">
+            {codigo === null
+              ? t('indicadores.fallas.sinCodigo')
+              : t('indicadores.fallas.codigo', { codigo })}
+          </span>
+          <span className="h-3 rounded-r-[4px] bg-linea/40">
+            <span
+              className="block h-full rounded-r-[4px] bg-alerta"
+              style={{ width: `${(veces / maximo) * 100}%` }}
+            />
+          </span>
+          <span className="text-right font-bold tabular-nums">
+            {t('indicadores.fallas.veces', { count: veces })}
+          </span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+// Una sola barra al 100 %: marcha, mantenimiento, paro y sin registro.
 function UsoDelTiempo({
   total,
   tiempoTotal,
@@ -525,6 +585,11 @@ function UsoDelTiempo({
   if (tiempoTotal <= 0) return null
   const partes = [
     { clave: 'marcha', clase: 'bg-ok', segundos: total.marcha },
+    {
+      clave: 'mantenimiento',
+      clase: 'bg-aviso',
+      segundos: total.mantenimiento,
+    },
     { clave: 'paro', clase: 'bg-alerta', segundos: total.paro },
     { clave: 'sinRegistro', clase: 'bg-linea', segundos: total.sinRegistro },
   ] as const
@@ -542,7 +607,7 @@ function UsoDelTiempo({
           ) : null,
         )}
       </div>
-      <ul className="grid gap-2 text-[13px] sm:grid-cols-3">
+      <ul className="grid gap-2 text-[13px] sm:grid-cols-2">
         {partes.map(({ clave, clase, segundos }) => (
           <li key={clave} className="flex items-center gap-2">
             <span
@@ -577,6 +642,7 @@ function TablaTramos({
     'piezas',
     'disponibilidad',
     'paros',
+    'fallas',
     'ciclo',
   ] as const
   return (
@@ -607,6 +673,7 @@ function TablaTramos({
                   {d === null ? '—' : `${numero(d, 1)} %`}
                 </td>
                 <td className="py-1.5 pr-3">{numero(tramo.paros)}</td>
+                <td className="py-1.5 pr-3">{numero(tramo.fallas)}</td>
                 <td className="py-1.5 pr-3">
                   {c === null ? '—' : segundosCiclo(c)}
                 </td>

@@ -30,6 +30,9 @@ export const seguridad = {
     maximoPuntosIndicadores: 300_000,
     maximoDiasIndicadores: 93,
     maximoCubetasIndicadores: 100,
+    // cambios para el gemelo: lo más que se entrega por consulta y cuántos nodos se piden
+    maximoCambios: 2000,
+    maximoNodosCambios: 40,
   },
   sistema: {
     // pasado este tiempo sin lecturas nuevas, el estado dice "retrasado"

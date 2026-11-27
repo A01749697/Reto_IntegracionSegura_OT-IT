@@ -5,41 +5,36 @@ import { TARJETA } from '../comun/estilos'
 import Segmentos from '../comun/Segmentos'
 import MarcoPanel from '../panel/MarcoPanel'
 import { fechaHora } from '../panel/tiempo'
-import type { ResultadoHistorial, ResultadoLecturas } from './apiLecturas'
+import type { ResultadoCambios, ResultadoLecturas } from './apiLecturas'
 import {
-  colorTorreta,
-  compararTorreta,
   estadoEnlace,
-  latidoDetenido,
-  marchaPorTorreta,
-  piezasNuevas,
   resumirLecturas,
-  vigilarLatido,
-  type Contadores,
-  type VigiaLatido,
   type Enlace,
   type LecturasCelda,
 } from './enVivo'
+import type { EstadoCelda } from './estado'
 import {
   crearGemelo,
-  meterPiezas,
-  ponerPasoInicial,
-  recibirPasosReales,
+  mandarSimulacion,
   ponerModo,
-  ponerTorreta,
   ponerVelocidad,
+  recibirCambiosReales,
+  sembrarValores,
   tomarInstantanea,
   type Instantanea,
+  type MandoSimulado,
   type Modo,
 } from './gemelo'
-import { ESTACIONES, ESTADOS_TORRETA, NODOS } from './nodos'
 import {
-  CLAVES_PASOS,
-  ENTRADAS,
-  SALIDAS,
-  type FilaSenal,
-  type Tono,
-} from './senales'
+  ESTACIONES,
+  NODO,
+  NODOS_TABLERO,
+  PASOS,
+  PLC_TABLERO,
+  type ClaveNodo,
+} from './nodos'
+import { desdeParaConsulta } from './repeticion'
+import { SENALES_GARRA, type Tono } from './senales'
 import { NOMBRES_VISTAS, type Vista } from './vistas'
 
 // three.js solo se descarga al abrir esta pantalla
@@ -47,34 +42,20 @@ const VistaCelda = lazy(() => import('./VistaCelda'))
 
 type Props = {
   obtenerLecturas: () => Promise<ResultadoLecturas>
-  obtenerHistorial: (
+  obtenerCambios: (
     plc: string,
-    variable: string,
+    nodos: readonly string[],
     desde: Date,
-    hasta: Date,
-  ) => Promise<ResultadoHistorial>
+  ) => Promise<ResultadoCambios>
   sesionCaducada: () => void
 }
 
-// Los cambios de TAB_PASO se piden desde el último que llegó (la primera vez, los más
-// recientes que haya, sean de cuando sean). Así no importa si el reloj del colector y el
-// del navegador no coinciden. hasta queda lejos en el futuro por la misma razón.
-const INICIO_HISTORIAL = new Date(0)
-const DIAS_ADELANTO = 365
-// Si en este tiempo no llegó ningún cambio de paso, se avisa que la celda está quieta.
-export const SEGUNDOS_PASO_QUIETO = 60
+// En vivo: las lecturas más recientes (enlace y nodos de cada estación) cada 5 s y los
+// cambios del S7-1516 cada 2 s. La repetición va unos segundos atrás (ver repeticion.ts).
+export const SEGUNDOS_LECTURAS = 5
+export const SEGUNDOS_CAMBIOS = 2
 
-type Consulta = {
-  enlace: Enlace
-  lecturas: LecturasCelda | null
-  latidoParado: number | null // segundos sin cambiar, si pasó el límite
-}
-
-// La celda no cambió de paso en un rato: ts del último cambio que hay en el historian
-// (null si no hay ninguno). undefined = sí se está moviendo, o aún no se sabe.
-type PasoQuieto = { ultimo: string | null } | undefined
-
-const SEGUNDOS_ENTRE_CONSULTAS = 5
+type Consulta = { enlace: Enlace; lecturas: LecturasCelda | null }
 
 const MODOS: Modo[] = ['vivo', 'simulacion']
 
@@ -86,37 +67,25 @@ const ENLACES: Record<Enlace, string> = {
   sin_conexion: 'border-alerta/50 bg-alerta/10 text-alerta',
 }
 
+// Color del letrero por estado. El reset parpadea igual que la torreta.
+const LETRERO: Record<EstadoCelda, string> = {
+  marcha: 'border-ok bg-ok/15 text-ok',
+  mantenimiento: 'border-aviso bg-aviso/15 text-aviso',
+  reset: 'border-aviso bg-aviso/15 text-aviso motion-safe:animate-pulse',
+  paro: 'border-alerta bg-alerta/15 text-alerta',
+  falla: 'border-alerta bg-alerta/25 text-alerta',
+  sinDato: 'border-suave/60 bg-black/40 text-white/80',
+  sinComunicacion: 'border-suave/60 bg-black/50 text-white/80',
+}
+
 const FOCO: Record<Tono, string> = {
   ok: 'bg-ok',
   acento: 'bg-acento',
-  aviso: 'bg-[#f2b233]',
+  aviso: 'bg-aviso',
   alerta: 'bg-alerta',
 }
 
-// Lo que pasa en cada paso, dicho sin tecnicismos: del 1 al 4 los pistones, 5 y 6 la garra.
-const FRASES_PASO = [
-  'alimentar',
-  'identificar',
-  'marcar',
-  'soltar',
-  'tomar',
-  'clasificar',
-] as const
-
 const MATERIAL = { al: 'al', pl: 'pl', '': 'ninguna' } as const
-
-type Torreta = 'verde' | 'roja'
-const TORRETAS: Torreta[] = ['verde', 'roja']
-
-const AVISO =
-  'rounded-md border border-alerta/50 bg-alerta/10 px-2.5 py-1.5 text-[12px] leading-snug text-alerta'
-
-function textoTorreta(valor: number | null, t: TFunction): string {
-  const color = colorTorreta(valor)
-  if (color === null) return t('gemelo.lecturas.sinDato')
-  if (color === 'otro') return t('gemelo.lecturas.torretaOtro', { valor })
-  return t(`gemelo.lecturas.torreta_${color}`)
-}
 
 const CHIP =
   'rounded-md border px-2.5 py-1 text-[12px] font-semibold whitespace-nowrap'
@@ -124,80 +93,87 @@ const PANEL = `${TARJETA} mt-3 flex flex-col gap-4 p-4 lg:absolute lg:mt-0 lg:bg
 const SUBTITULO =
   'mb-2 text-[12px] font-bold tracking-wide text-suave uppercase'
 
-// Lo que hacen ahora los dos procesos. Pueden ir al mismo tiempo: los pistones preparan
-// la siguiente pieza mientras la garra clasifica la anterior.
-function frase(
-  i: Instantanea,
-  modo: Modo,
-  enlace: Enlace,
+// Los datos del S7-1516 que se muestran, en orden.
+type Formato = 'numero' | 'bool' | 'segundos'
+const DATOS = [
+  { clave: 'marcha', formato: 'bool' },
+  { clave: 'falla', formato: 'bool' },
+  { clave: 'codFalla', formato: 'numero' },
+  { clave: 'ciclos', formato: 'numero' },
+  { clave: 'aluminio', formato: 'numero' },
+  { clave: 'otras', formato: 'numero' },
+  { clave: 'tCiclo', formato: 'segundos' },
+  { clave: 'tCarreraPd1', formato: 'segundos' },
+] as const satisfies readonly { clave: ClaveNodo; formato: Formato }[]
+const SALIDAS = [
+  'empujaExt',
+  'empujaRet',
+  'aprieta',
+  'suelta',
+  'sello',
+] as const satisfies readonly ClaveNodo[]
+const SENSORES = [
+  'fincEmpujar',
+  'fincApretar',
+  'fincSinApretar',
+  'fincSello',
+  'sensorC',
+  'sensorI',
+  'esAluminio',
+] as const satisfies readonly ClaveNodo[]
+
+function valorDato(
+  valor: number | undefined,
+  formato: Formato,
   t: TFunction,
 ): string {
-  const partes: string[] = []
-  const pistones = FRASES_PASO[i.paso - 1]
-  const garra = FRASES_PASO[i.pasoGarra - 1]
-  if (pistones) partes.push(t(`gemelo.frases.${pistones}`))
-  if (garra) partes.push(t(`gemelo.frases.${garra}`))
-  if (partes.length === 0 && i.empacando)
-    partes.push(t('gemelo.frases.empacando'))
-  if (partes.length > 0) return partes.join(' ')
-  if (i.marcha) return t('gemelo.frases.esperandoPieza')
-  if (modo === 'simulacion') return t('gemelo.frases.paroSimulacion')
-  if (enlace === 'en_vivo' || enlace === 'atrasado')
-    return t('gemelo.frases.paroTorreta')
-  return t('gemelo.frases.sinLecturas')
+  if (valor === undefined) return t('gemelo.sinDato')
+  if (formato === 'bool') return valor === 1 ? t('gemelo.si') : t('gemelo.no')
+  if (formato === 'segundos') return `${valor.toFixed(1)} s`
+  return String(valor)
 }
 
-function chipTorreta(i: Instantanea, t: TFunction) {
-  return i.marcha
-    ? {
-        texto: t('gemelo.estadoCelda.marcha'),
-        clases: 'border-ok/50 bg-ok/10 text-ok',
-      }
-    : {
-        texto: t('gemelo.estadoCelda.paro'),
-        clases: 'border-alerta/50 bg-alerta/10 text-alerta',
-      }
+function Foco({ encendido, tono }: { encendido: boolean; tono: Tono }) {
+  return (
+    <span
+      aria-hidden="true"
+      className={`h-2 w-2 shrink-0 rounded-full ${encendido ? FOCO[tono] : 'bg-suave/35'}`}
+    />
+  )
 }
 
-function chipGarra(i: Instantanea, t: TFunction) {
-  return i.pasoGarra > 0
-    ? {
-        texto: t('gemelo.estadoCelda.garraTrabajando'),
-        clases: 'border-acento/50 bg-acento/10 text-acento',
-      }
-    : {
-        texto: t('gemelo.estadoCelda.garraEspera'),
-        clases: 'border-linea text-suave',
-      }
-}
-
-function ListaSenales({
+// Una lista de nodos Bool con su foco, su nombre y el nodo.
+function ListaNodos({
   titulo,
   filas,
-  i,
+  tono,
+  valores,
 }: {
   titulo: string
-  filas: FilaSenal[]
-  i: Instantanea
+  filas: { clave: ClaveNodo; texto: string }[]
+  tono: Tono
+  valores: Instantanea['valores']
 }) {
   const { t } = useTranslation()
   return (
     <div>
       <h2 className={SUBTITULO}>{titulo}</h2>
       <ul className="flex flex-col gap-1">
-        {filas.map(({ clave, tono }) => (
-          <li key={clave} className="flex items-center gap-2 text-[12.5px]">
-            <span
-              aria-hidden="true"
-              className={`h-2 w-2 shrink-0 rounded-full ${i[clave] ? FOCO[tono] : 'bg-suave/35'}`}
-            />
-            <span className="flex-1">{t(`gemelo.senales.${clave}`)}</span>
-            <span className="sr-only">
-              {i[clave] ? t('gemelo.encendida') : t('gemelo.apagada')}
-            </span>
-            <span className="text-[11px] text-suave">{clave}</span>
-          </li>
-        ))}
+        {filas.map(({ clave, texto }) => {
+          const encendido = valores[NODO[clave]] === 1
+          return (
+            <li key={clave} className="flex items-center gap-2 text-[12.5px]">
+              <Foco encendido={encendido} tono={tono} />
+              <span className="flex-1">{texto}</span>
+              <span className="sr-only">
+                {encendido ? t('gemelo.encendida') : t('gemelo.apagada')}
+              </span>
+              <span className="font-mono text-[10.5px] text-suave">
+                {NODO[clave]}
+              </span>
+            </li>
+          )
+        })}
       </ul>
     </div>
   )
@@ -208,18 +184,25 @@ function Valores({
   valores,
 }: {
   titulo: string
-  valores: [nombre: string, valor: string][]
+  valores: [nombre: string, valor: string, nodo?: string][]
 }) {
   return (
     <div>
       <h2 className={SUBTITULO}>{titulo}</h2>
       <dl className="flex flex-col gap-1">
-        {valores.map(([nombre, valor]) => (
+        {valores.map(([nombre, valor, nodo]) => (
           <div
             key={nombre}
             className="flex items-baseline justify-between gap-3 text-[12.5px]"
           >
-            <dt className="text-suave">{nombre}</dt>
+            <dt className="min-w-0 text-suave">
+              {nombre}
+              {nodo && (
+                <span className="block font-mono text-[10.5px] text-suave/80">
+                  {nodo}
+                </span>
+              )}
+            </dt>
             <dd className="font-bold tabular-nums">{valor}</dd>
           </div>
         ))}
@@ -228,114 +211,63 @@ function Valores({
   )
 }
 
-// Lo que manda la celda real. Es de solo lectura: desde aquí no se le ordena nada.
-function LecturasReales({
-  consulta,
-  pasoQuieto,
-}: {
-  consulta: Consulta
-  pasoQuieto: PasoQuieto
-}) {
+function SenalesGarra({ i }: { i: Instantanea }) {
+  const { t } = useTranslation()
+  return (
+    <ul className="flex flex-col gap-1">
+      {SENALES_GARRA.map(({ clave, tono }) => (
+        <li key={clave} className="flex items-center gap-2 text-[12.5px]">
+          <Foco encendido={Boolean(i[clave])} tono={tono} />
+          <span className="flex-1">{t(`gemelo.senales.${clave}`)}</span>
+          <span className="sr-only">
+            {i[clave] ? t('gemelo.encendida') : t('gemelo.apagada')}
+          </span>
+          <span className="text-[11px] text-suave">{clave}</span>
+        </li>
+      ))}
+    </ul>
+  )
+}
+
+// Lo que llega del historian. De solo lectura: desde aquí no se le ordena nada a la celda.
+function Enlace({ consulta }: { consulta: Consulta }) {
   const { t } = useTranslation()
   const { lecturas } = consulta
-
   if (!lecturas || lecturas.ultima === null) {
     return (
       <div>
-        <h2 className={SUBTITULO}>{t('gemelo.lecturas.titulo')}</h2>
+        <h2 className={SUBTITULO}>{t('gemelo.enlace.titulo')}</h2>
         <p className="text-[12.5px] leading-snug text-suave">
           {consulta.enlace === 'sin_conexion'
-            ? t('gemelo.lecturas.sinConexion')
-            : t('gemelo.lecturas.sinLectura')}
+            ? t('gemelo.enlace.sinConexion')
+            : consulta.enlace === 'conectando'
+              ? t('gemelo.enlaces.conectando')
+              : t('gemelo.enlace.sinLecturas')}
         </p>
       </div>
     )
   }
-  const sinDato = t('gemelo.lecturas.sinDato')
-  const comparacion = compararTorreta(lecturas)
   return (
-    <>
-      <Valores
-        titulo={t('gemelo.lecturas.titulo')}
-        valores={[
-          [t('gemelo.lecturas.torreta'), textoTorreta(lecturas.torreta, t)],
-          [
-            t('gemelo.lecturas.torretaReal'),
-            lecturas.torretaReal === null
-              ? t('gemelo.lecturas.torretaRealPendiente')
-              : textoTorreta(lecturas.torretaReal, t),
-          ],
-          [
-            t('gemelo.lecturas.piezasAluminio'),
-            lecturas.piezasAluminio === null
-              ? sinDato
-              : String(lecturas.piezasAluminio),
-          ],
-          [
-            t('gemelo.lecturas.piezasOtras'),
-            lecturas.piezasOtras === null
-              ? sinDato
-              : String(lecturas.piezasOtras),
-          ],
-          [
-            t('gemelo.lecturas.paso'),
-            lecturas.paso === null
-              ? sinDato
-              : t('gemelo.lecturas.pasoValor', {
-                  paso: lecturas.paso,
-                  nombre: t(`gemelo.pasosReales.${lecturas.paso}`, {
-                    defaultValue: '—',
-                  }),
-                }),
-          ],
-          [
-            t('gemelo.lecturas.latido'),
-            lecturas.latido === null ? sinDato : String(lecturas.latido),
-          ],
-        ]}
-      />
-      {pasoQuieto && (
-        <p role="status" className={AVISO}>
-          {pasoQuieto.ultimo
-            ? t('gemelo.lecturas.pasoQuieto', {
-                fecha: fechaHora(pasoQuieto.ultimo),
-              })
-            : t('gemelo.lecturas.pasoSinRegistros')}
-        </p>
-      )}
-      {consulta.latidoParado !== null && (
-        <p role="alert" className={AVISO}>
-          {t('gemelo.lecturas.alertaLatido', {
-            segundos: consulta.latidoParado,
-          })}
-        </p>
-      )}
-      {comparacion === 'luces' && (
-        <p role="alert" className={AVISO}>
-          {t('gemelo.lecturas.alertaLuces')}
-        </p>
-      )}
-      {comparacion === 'distinta' && (
-        <p role="alert" className={AVISO}>
-          {t('gemelo.lecturas.alertaDistinta', {
-            real: textoTorreta(lecturas.torretaReal, t),
-            tablero: textoTorreta(lecturas.torreta, t),
-          })}
-        </p>
-      )}
+    <div>
+      <h2 className={SUBTITULO}>{t('gemelo.enlace.titulo')}</h2>
+      <p className="mb-2 text-[12px] text-suave">
+        {t('gemelo.enlace.ultima', { fecha: fechaHora(lecturas.ultima) })}
+      </p>
       <div className="flex flex-col gap-1.5">
         {ESTACIONES.map((estacion) => {
           const nodos = lecturas.estaciones[estacion]
           return (
             <details key={estacion} className="text-[12.5px]">
               <summary className="cursor-pointer text-suave">
-                {t(`gemelo.lecturas.estaciones.${estacion}`)} ·{' '}
-                {t('gemelo.lecturas.nodos', { count: nodos.length })}
+                {t(`gemelo.enlace.estaciones.${estacion}`)} ·{' '}
+                {t('gemelo.enlace.nodos', { count: nodos.length })}
               </summary>
               <dl className="mt-1 flex max-h-40 flex-col gap-0.5 overflow-y-auto pl-2">
                 {nodos.map(({ nodo, valor }) => (
                   <div key={nodo} className="flex justify-between gap-3">
-                    <dt className="truncate text-suave">{nodo}</dt>
+                    <dt className="truncate font-mono text-[11px] text-suave">
+                      {nodo}
+                    </dt>
                     <dd className="font-bold tabular-nums">{valor}</dd>
                   </div>
                 ))}
@@ -344,22 +276,92 @@ function LecturasReales({
           )
         })}
       </div>
-      <p className="text-[12px] leading-snug text-suave">
-        {t('gemelo.lecturas.ultima', { fecha: fechaHora(lecturas.ultima) })}
-      </p>
-      <p className="text-[11px] leading-snug text-suave">
-        {t('gemelo.lecturas.nodoTorreta', {
-          nodo: NODOS.torreta.nodo,
-          ...ESTADOS_TORRETA,
-        })}
-      </p>
-    </>
+    </div>
+  )
+}
+
+const MANDOS: { mando: MandoSimulado; clases: string }[] = [
+  { mando: 'marcha', clases: 'border-ok text-ok hover:bg-ok/10' },
+  { mando: 'paro', clases: 'border-alerta text-alerta hover:bg-alerta/10' },
+  {
+    mando: 'mantenimiento',
+    clases: 'border-aviso text-aviso hover:bg-aviso/10',
+  },
+  { mando: 'reset', clases: 'border-linea text-texto hover:border-acento' },
+]
+
+const BOTON_MANDO =
+  'cursor-pointer rounded-md border-[1.5px] px-2 py-1.5 text-[12.5px] font-bold focus-visible:ring-[3px] focus-visible:ring-acento/45 focus-visible:outline-none aria-pressed:bg-current/15'
+
+function Mandos({
+  i,
+  mantenimiento,
+  atasco,
+  sinRed,
+  mandar,
+}: {
+  i: Instantanea
+  mantenimiento: boolean
+  atasco: boolean
+  sinRed: boolean
+  mandar: (mando: MandoSimulado) => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <div className="flex flex-col gap-3">
+      <div>
+        <h2 className={SUBTITULO}>{t('gemelo.mandos.titulo')}</h2>
+        <div className="grid grid-cols-2 gap-1.5">
+          {MANDOS.map(({ mando, clases }) => (
+            <button
+              key={mando}
+              type="button"
+              aria-pressed={
+                mando === 'mantenimiento' ? mantenimiento : undefined
+              }
+              onClick={() => mandar(mando)}
+              className={`${BOTON_MANDO} ${clases}`}
+            >
+              {t(`gemelo.mandos.${mando}`)}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div>
+        <h2 className={SUBTITULO}>{t('gemelo.mandos.pruebas')}</h2>
+        <div className="flex flex-col gap-1.5">
+          <button
+            type="button"
+            aria-pressed={atasco}
+            onClick={() => mandar('atasco')}
+            className={`${BOTON_MANDO} border-linea text-texto hover:border-acento`}
+          >
+            {t('gemelo.mandos.atasco')}
+          </button>
+          <button
+            type="button"
+            aria-pressed={sinRed}
+            onClick={() => mandar('comunicacion')}
+            className={`${BOTON_MANDO} border-linea text-texto hover:border-acento`}
+          >
+            {t('gemelo.mandos.comunicacion')}
+          </button>
+        </div>
+        {i.estado === 'falla' && (
+          <p className="mt-2 text-[12px] leading-snug text-alerta">
+            {t(`gemelo.fallasSimuladas.${i.codFalla}`, {
+              defaultValue: t('gemelo.codigoFalla', { codigo: i.codFalla }),
+            })}
+          </p>
+        )}
+      </div>
+    </div>
   )
 }
 
 export default function PaginaGemelo({
   obtenerLecturas,
-  obtenerHistorial,
+  obtenerCambios,
   sesionCaducada,
 }: Props) {
   const { t, i18n } = useTranslation()
@@ -369,87 +371,61 @@ export default function PaginaGemelo({
   const [consulta, setConsulta] = useState<Consulta>({
     enlace: 'conectando',
     lecturas: null,
-    latidoParado: null,
   })
-  const [pasoQuieto, setPasoQuieto] = useState<PasoQuieto>(undefined)
   const [vista, setVista] = useState<Vista>('General')
   const [conEtiquetas, setConEtiquetas] = useState(true)
   const [velocidad, setVelocidad] = useState(1)
-  const [torretaSimulada, setTorretaSimulada] = useState<Torreta>('verde')
+  const [pruebas, setPruebas] = useState({
+    mantenimiento: false,
+    atasco: false,
+    sinRed: false,
+  })
   const marco = useRef<HTMLDivElement>(null)
 
-  // En vivo se consulta la nube cada pocos segundos.
   useEffect(() => {
     if (modo !== 'vivo') return
     let vigente = true
-    let vigia: VigiaLatido | null = null
-    let contadores: Contadores | null = null
-    let ultimoPaso: string | null = null // ts del último TAB_PASO recibido
-    let cambioLocal = Date.now() // hora del navegador del último cambio nuevo
-    // los cambios de TAB_PASO desde la última consulta, para repetirlos en orden
-    const consultarPasos = () => {
-      const ahora = Date.now()
-      const desde = ultimoPaso ? new Date(ultimoPaso) : INICIO_HISTORIAL
-      const hasta = new Date(ahora + DIAS_ADELANTO * 24 * 3600 * 1000)
-      obtenerHistorial(NODOS.paso.plc, NODOS.paso.nodo, desde, hasta).then(
-        (resultado) => {
-          if (!vigente || !resultado.ok) return
-          const nuevos = resultado.puntos.filter(
-            (p) =>
-              ultimoPaso === null || Date.parse(p.ts) > Date.parse(ultimoPaso),
-          )
-          if (nuevos.length && ultimoPaso !== null) cambioLocal = Date.now()
-          if (nuevos.length) ultimoPaso = nuevos[nuevos.length - 1].ts
-          recibirPasosReales(gemelo, resultado.puntos)
-          setPasoQuieto(
-            Date.now() - cambioLocal >= SEGUNDOS_PASO_QUIETO * 1000
-              ? { ultimo: ultimoPaso }
-              : undefined,
-          )
-        },
-      )
-    }
-    const consultar = () =>
+    let pidiendo = false
+    const consultarLecturas = () =>
       obtenerLecturas().then((resultado) => {
         if (!vigente) return
         if (!resultado.ok) {
           if (resultado.motivo === 'sesion') sesionCaducada()
-          else
-            setConsulta({
-              enlace: 'sin_conexion',
-              lecturas: null,
-              latidoParado: null,
-            })
+          else setConsulta({ enlace: 'sin_conexion', lecturas: null })
           return
         }
-        const ahora = Date.now()
         const lecturas = resumirLecturas(resultado.lecturas)
-        vigia = vigilarLatido(vigia, lecturas.latido, ahora)
-        const latidoParado = latidoDetenido(vigia, ahora)
-        // cada pieza que contó el S7-1516 entra al gemelo con su material real
-        const conteo = piezasNuevas(contadores, lecturas)
-        contadores = conteo.contadores
-        meterPiezas(gemelo, conteo.nuevas)
-        // mientras el historial no diga nada, al menos se muestra el paso en que está
-        ponerPasoInicial(gemelo, lecturas.paso)
-        ponerTorreta(gemelo, marchaPorTorreta(lecturas))
-        setConsulta({
-          enlace: estadoEnlace(lecturas, ahora),
-          lecturas,
-          latidoParado,
-        })
+        // la primera vez, el gemelo arranca con lo último que dijo el S7-1516
+        if (lecturas.ultimaTablero !== null)
+          sembrarValores(gemelo, lecturas.tablero, lecturas.ultimaTablero)
+        setConsulta({ enlace: estadoEnlace(lecturas, Date.now()), lecturas })
       })
-    const ambas = () => {
-      consultar()
-      consultarPasos()
+    // los cambios del S7-1516 desde el último que llegó, para repetirlos en orden
+    const consultarCambios = () => {
+      const desde = desdeParaConsulta(gemelo.repeticion)
+      if (desde === null || pidiendo) return
+      pidiendo = true
+      obtenerCambios(PLC_TABLERO, NODOS_TABLERO, desde).then((resultado) => {
+        pidiendo = false
+        if (!vigente) return
+        if (!resultado.ok) {
+          if (resultado.motivo === 'sesion') sesionCaducada()
+          return
+        }
+        recibirCambiosReales(gemelo, resultado.cambios)
+        // venía recortado: se pide lo que sigue sin esperar
+        if (resultado.truncado) consultarCambios()
+      })
     }
-    ambas()
-    const reloj = setInterval(ambas, SEGUNDOS_ENTRE_CONSULTAS * 1000)
+    consultarLecturas()
+    const lecturas = setInterval(consultarLecturas, SEGUNDOS_LECTURAS * 1000)
+    const cambios = setInterval(consultarCambios, SEGUNDOS_CAMBIOS * 1000)
     return () => {
       vigente = false
-      clearInterval(reloj)
+      clearInterval(lecturas)
+      clearInterval(cambios)
     }
-  }, [modo, gemelo, obtenerLecturas, obtenerHistorial, sesionCaducada])
+  }, [modo, gemelo, obtenerLecturas, obtenerCambios, sesionCaducada])
 
   const refrescar = useCallback(
     () => setInstantanea(tomarInstantanea(gemelo)),
@@ -466,22 +442,25 @@ export default function PaginaGemelo({
 
   function cambiarModo(nuevo: Modo) {
     ponerModo(gemelo, nuevo)
-    setTorretaSimulada('verde')
-    setConsulta({ enlace: 'conectando', lecturas: null, latidoParado: null })
-    setPasoQuieto(undefined)
+    setPruebas({ mantenimiento: false, atasco: false, sinRed: false })
+    setConsulta({ enlace: 'conectando', lecturas: null })
     setModo(nuevo)
+    refrescar()
   }
 
-  function cambiarTorreta(torreta: Torreta) {
-    ponerTorreta(gemelo, torreta === 'verde')
-    setTorretaSimulada(torreta)
+  function mandar(mando: MandoSimulado) {
+    mandarSimulacion(gemelo, mando)
+    setPruebas({
+      mantenimiento: gemelo.s7.mantenimiento,
+      atasco: gemelo.planta.atasco,
+      sinRed: !gemelo.comunicacion,
+    })
+    refrescar()
   }
 
   const i = instantanea
   const enVivo = modo === 'vivo'
-  const torreta = chipTorreta(i, t)
-  const garra = chipGarra(i, t)
-  const enlace = ENLACES[consulta.enlace]
+  const paso = i.pasoReal
 
   return (
     <MarcoPanel titulo={t('gemelo.titulo')}>
@@ -495,43 +474,49 @@ export default function PaginaGemelo({
           valor={modo}
           alCambiar={cambiarModo}
         />
-        <span className={`${CHIP} ${torreta.clases}`}>{torreta.texto}</span>
-        <span className={`${CHIP} ${garra.clases}`}>{garra.texto}</span>
         <span
-          className={`${CHIP} ${enVivo ? enlace : 'border-linea text-suave'}`}
+          className={`${CHIP} ${enVivo ? ENLACES[consulta.enlace] : 'border-linea text-suave'}`}
         >
           {enVivo
             ? t(`gemelo.enlaces.${consulta.enlace}`)
             : t('gemelo.datosSimulados')}
         </span>
-        <p className="min-w-0 basis-full text-[14px] text-suave xl:basis-auto">
-          {frase(i, modo, consulta.enlace, t)}
-        </p>
+        <span
+          className={`${CHIP} ${
+            i.pasoGarra > 0
+              ? 'border-acento/50 bg-acento/10 text-acento'
+              : 'border-linea text-suave'
+          }`}
+        >
+          {i.pasoGarra > 0
+            ? t('gemelo.garra.trabajando')
+            : t('gemelo.garra.espera')}
+        </span>
+        {i.empacando && (
+          <span className={`${CHIP} border-linea text-suave`}>
+            {t('gemelo.empacando')}
+          </span>
+        )}
       </div>
 
       <ol
         aria-label={t('gemelo.secuencia')}
         className={`${TARJETA} flex overflow-x-auto`}
       >
-        {CLAVES_PASOS.map((clave, indice) => {
-          const activo =
-            indice === 6
-              ? i.empacando
-              : i.paso === indice + 1 || i.pasoGarra === indice + 1
+        {PASOS.map((n) => {
+          const activo = paso === n
           return (
             <li
-              key={clave}
+              key={n}
               aria-current={activo ? 'step' : undefined}
-              className={`flex shrink-0 items-baseline gap-2 border-b-[3px] px-3.5 py-2.5 text-[12.5px] whitespace-nowrap ${
+              className={`flex shrink-0 items-baseline gap-2 border-b-[3px] px-3 py-2.5 text-[12.5px] whitespace-nowrap ${
                 activo
                   ? 'border-acento bg-acento/10 font-bold text-texto'
                   : 'border-transparent text-suave'
               }`}
             >
-              <span className={activo ? 'text-acento' : undefined}>
-                {indice + 1}
-              </span>
-              {t(`gemelo.pasos.${clave}`)}
+              <span className={activo ? 'text-acento' : undefined}>{n}</span>
+              {t(`gemelo.pasos.${n}`, { defaultValue: String(n) })}
             </li>
           )
         })}
@@ -555,35 +540,45 @@ export default function PaginaGemelo({
               alRefrescar={refrescar}
             />
           </Suspense>
+          <div
+            data-obstaculo
+            role="status"
+            aria-label={t('gemelo.letrero')}
+            className={`pointer-events-none absolute top-3 left-1/2 -translate-x-1/2 rounded-md border-2 px-4 py-1.5 text-center font-bold tracking-wider whitespace-nowrap backdrop-blur ${LETRERO[i.estado]}`}
+          >
+            <span className="text-[15px]">
+              {t(`gemelo.estado.${i.estado}`)}
+            </span>
+            {i.estado === 'falla' && (
+              <span className="ml-2 text-[13px]">
+                {t('gemelo.codigoFalla', { codigo: i.codFalla })}
+              </span>
+            )}
+          </div>
         </div>
 
         <section
           data-obstaculo
           aria-label={
-            enVivo
-              ? t('gemelo.paneles.lecturasVista')
-              : t('gemelo.paneles.torretaVista')
+            enVivo ? t('gemelo.paneles.enlace') : t('gemelo.paneles.mandos')
           }
           className={`${PANEL} lg:top-3 lg:left-3 lg:w-[236px]`}
         >
           {enVivo ? (
-            <LecturasReales consulta={consulta} pasoQuieto={pasoQuieto} />
+            <Enlace consulta={consulta} />
           ) : (
-            <div>
-              <h2 className={SUBTITULO}>{t('gemelo.torreta.titulo')}</h2>
-              <Segmentos
-                etiqueta={t('gemelo.torreta.titulo')}
-                opciones={TORRETAS.map((valor) => ({
-                  valor,
-                  texto: t(`gemelo.torreta.${valor}`),
-                }))}
-                valor={torretaSimulada}
-                alCambiar={cambiarTorreta}
-              />
-              <p className="mt-2 text-[12px] leading-snug text-suave">
-                {t('gemelo.torreta.nota')}
-              </p>
-            </div>
+            <Mandos
+              i={i}
+              mantenimiento={pruebas.mantenimiento}
+              atasco={pruebas.atasco}
+              sinRed={pruebas.sinRed}
+              mandar={mandar}
+            />
+          )}
+          {enVivo && i.estado === 'sinComunicacion' && consulta.lecturas && (
+            <p className="text-[12px] leading-snug text-alerta">
+              {t('gemelo.enlace.sinLatido')}
+            </p>
           )}
 
           <div>
@@ -619,7 +614,7 @@ export default function PaginaGemelo({
                 max="3"
                 step="0.25"
                 value={velocidad}
-                disabled={modo === 'vivo'}
+                disabled={enVivo}
                 onChange={(evento) => {
                   const nueva = Number(evento.target.value)
                   ponerVelocidad(gemelo, nueva)
@@ -628,7 +623,7 @@ export default function PaginaGemelo({
                 className="w-full accent-acento disabled:opacity-40"
               />
             </label>
-            {modo === 'vivo' && (
+            {enVivo && (
               <p className="mt-1 text-[11px] leading-snug text-suave">
                 {t('gemelo.ajustes.velocidadVivo')}
               </p>
@@ -647,50 +642,70 @@ export default function PaginaGemelo({
 
         <section
           data-obstaculo
-          aria-label={t('gemelo.paneles.senales')}
+          aria-label={t('gemelo.paneles.datos')}
           className={`${PANEL} lg:top-3 lg:right-3 lg:bottom-3 lg:w-[272px] lg:overflow-y-auto`}
         >
-          {enVivo && (
-            <p className="text-[12px] leading-snug text-suave">
-              {t('gemelo.notaEnVivo')}
-            </p>
-          )}
           <Valores
-            titulo={t('gemelo.valores.titulo')}
+            titulo={t('gemelo.datos.titulo')}
             valores={[
               [
-                t('gemelo.valores.material'),
-                t(`gemelo.material.${MATERIAL[i.material]}`),
+                t('gemelo.datos.paso'),
+                paso === null
+                  ? t('gemelo.sinDato')
+                  : `${paso} · ${t(`gemelo.pasos.${paso}`, { defaultValue: '—' })}`,
+                NODO.paso,
               ],
-              [
-                t('gemelo.valores.materialGarra'),
-                t(`gemelo.material.${MATERIAL[i.materialGarra]}`),
-              ],
-              [
-                t('gemelo.valores.destinoCarro'),
-                i.posX
-                  ? t('gemelo.valores.carril', { n: i.posX })
-                  : t('gemelo.valores.deposito'),
-              ],
-              [t('gemelo.valores.posicionCarro'), `${Math.round(i.posMm)} mm`],
-              [t('gemelo.valores.piezasAl'), String(i.piezasAl)],
-              [t('gemelo.valores.piezasPl'), String(i.piezasPl)],
-              [t('gemelo.valores.cajasAl'), String(i.cajasAl)],
-              [t('gemelo.valores.cajasPl'), String(i.cajasPl)],
-              [t('gemelo.valores.ultimoCiclo'), `${i.tCiclo.toFixed(1)} s`],
-              [t('gemelo.valores.presion'), `${i.presion.toFixed(2)} bar`],
+              ...DATOS.map(
+                ({ clave, formato }) =>
+                  [
+                    t(`gemelo.datos.${clave}`),
+                    valorDato(i.valores[NODO[clave]], formato, t),
+                    NODO[clave],
+                  ] as [string, string, string],
+              ),
             ]}
           />
-          <ListaSenales
-            titulo={t('gemelo.listas.salidas')}
-            filas={SALIDAS}
-            i={i}
+          <ListaNodos
+            titulo={t('gemelo.salidas.titulo')}
+            filas={SALIDAS.map((clave) => ({
+              clave,
+              texto: t(`gemelo.salidas.${clave}`),
+            }))}
+            tono="acento"
+            valores={i.valores}
           />
-          <ListaSenales
-            titulo={t('gemelo.listas.entradas')}
-            filas={ENTRADAS}
-            i={i}
+          <ListaNodos
+            titulo={t('gemelo.sensores.titulo')}
+            filas={SENSORES.map((clave) => ({
+              clave,
+              texto: t(`gemelo.sensores.${clave}`),
+            }))}
+            tono="ok"
+            valores={i.valores}
           />
+          <div>
+            <Valores
+              titulo={t('gemelo.garra.titulo')}
+              valores={[
+                [
+                  t('gemelo.garra.material'),
+                  t(`gemelo.material.${MATERIAL[i.materialGarra]}`),
+                ],
+                [
+                  t('gemelo.garra.destino'),
+                  i.posX
+                    ? t('gemelo.garra.carril', { n: i.posX })
+                    : t('gemelo.garra.deposito'),
+                ],
+                [t('gemelo.garra.piezasAl'), String(i.piezasAl)],
+                [t('gemelo.garra.piezasPl'), String(i.piezasPl)],
+                [t('gemelo.garra.cajas'), `${i.cajasAl} / ${i.cajasPl}`],
+              ]}
+            />
+            <div className="mt-2">
+              <SenalesGarra i={i} />
+            </div>
+          </div>
         </section>
       </div>
     </MarcoPanel>

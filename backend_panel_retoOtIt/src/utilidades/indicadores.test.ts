@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { calcularIndicadores, type Punto, type Series } from './indicadores'
+import {
+  calcularIndicadores,
+  eventosDeFalla,
+  type Punto,
+  type Series,
+} from './indicadores'
 
 const T0 = Date.parse('2026-11-24T06:00:00.000Z')
 // minuto m desde T0
@@ -13,6 +18,8 @@ const vacias = (): Series => ({
   pasos: [],
   torreta: [],
   latido: [],
+  falla: [],
+  codFalla: [],
 })
 // dos tramos de una hora
 const opciones = {
@@ -84,5 +91,34 @@ describe('calcularIndicadores', () => {
     expect(a.paro).toBe(3600)
     expect(b.paro).toBe(3600)
     expect(a.sinRegistro + b.sinRegistro).toBe(0)
+  })
+})
+
+describe('mantenimiento y fallas', () => {
+  it('el mantenimiento se cuenta aparte y entrar a él no es un paro', () => {
+    const series = vacias()
+    series.torreta = [en(-10, 1), en(10, 2), en(40, 1), en(50, 3)]
+    series.latido = Array.from({ length: 15 }, (_, i) => en(i * 4, i))
+    const [a] = calcularIndicadores(series, opciones)
+    expect(a?.mantenimiento).toBe(30 * 60)
+    expect(a?.marcha).toBe(20 * 60)
+    expect(a?.paros).toBe(1) // solo la de las 50
+  })
+
+  it('cada activación de TAB_FALLA es una falla con su código', () => {
+    const series = vacias()
+    series.falla = [en(-5, 0), en(10, 1), en(12, 0), en(70, 1)]
+    // el código llega un segundo después de la falla
+    series.codFalla = [en(-5, 0), en(10 + 1 / 60, 7), en(70, 3)]
+    const eventos = eventosDeFalla(series, opciones)
+    expect(eventos.map((e) => e.codigo)).toEqual([7, 3])
+    const [a, b] = calcularIndicadores(series, opciones)
+    expect([a?.fallas, b?.fallas]).toEqual([1, 1])
+  })
+
+  it('una falla que ya estaba activa al empezar no se cuenta otra vez', () => {
+    const series = vacias()
+    series.falla = [en(-5, 1), en(10, 1)]
+    expect(eventosDeFalla(series, opciones)).toEqual([])
   })
 })

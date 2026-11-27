@@ -4,48 +4,44 @@ import type {
   ResultadoHistorial,
   ResultadoLecturas,
 } from '../gemelo/apiLecturas'
-import { NODOS } from '../gemelo/nodos'
+import { NODO } from '../gemelo/nodos'
 import PaginaTablero, { SEGUNDOS_ENTRE_CONSULTAS } from './PaginaTablero'
 
 // La última lectura de la celda; la ventana termina aquí.
-const FIN = Date.parse('2026-11-24T20:00:00.000Z')
+const FIN = Date.parse('2026-11-26T20:00:00.000Z')
 const en = (minutos: number, valor: number) => ({
   ts: new Date(FIN + minutos * 60_000).toISOString(),
   valor,
 })
 
+const lectura = (variable: string, valor: number, ms = FIN) => ({
+  plc: 'S7-1500',
+  variable,
+  valor,
+  ts: new Date(ms).toISOString(),
+})
+
 const LECTURAS: ResultadoLecturas = {
   ok: true,
   lecturas: [
-    {
-      plc: 'S7-1500',
-      variable: NODOS.torreta.nodo,
-      valor: 1,
-      ts: new Date(FIN).toISOString(),
-    },
-    {
-      plc: 'S7-1500',
-      variable: NODOS.paso.nodo,
-      valor: 8,
-      ts: new Date(FIN - 5000).toISOString(),
-    },
+    lectura(NODO.torreta, 3),
+    lectura(NODO.falla, 1),
+    lectura(NODO.codFalla, 4),
+    lectura(NODO.paso, 8, FIN - 5000),
   ],
 }
 
 // Lo que el historian tiene de cada nodo en la última hora.
 const HISTORIAL: Record<string, { ts: string; valor: number }[]> = {
-  [NODOS.piezasAluminio.nodo]: [en(-90, 40), en(-30, 41), en(-20, 43)],
-  [NODOS.piezasOtras.nodo]: [en(-90, 200), en(-10, 201)],
-  [NODOS.paso.nodo]: [
-    en(-61, 0),
-    en(-50, 2),
-    en(-49, 9),
-    en(-48, 0),
-    en(-40, 2),
-    en(-39.5, 9),
-    en(-39, 0),
-  ],
-  [NODOS.torreta.nodo]: [en(-120, 3), en(-30, 1)],
+  [NODO.aluminio]: [en(-90, 40), en(-30, 41), en(-20, 43)],
+  [NODO.otras]: [en(-90, 200), en(-10, 201)],
+  [NODO.paso]: [en(-61, 0), en(-50, 2), en(-49, 9), en(-48, 0)],
+  // 20 min en marcha, 10 en mantenimiento, 10 en marcha, 10 en falla, 10 en paro
+  [NODO.torreta]: [en(-120, 1), en(-40, 2), en(-30, 1), en(-20, 3)],
+  [NODO.falla]: [en(-120, 0), en(-20, 1), en(-10, 0)],
+  [NODO.codFalla]: [en(-120, 0), en(-20, 4)],
+  [NODO.tCiclo]: [en(-45, 9.5), en(-35, 10.5)],
+  [NODO.tCarreraPd1]: [en(-45, 0.4), en(-35, 0.6)],
 }
 
 function preparar(lecturas: ResultadoLecturas = LECTURAS) {
@@ -72,17 +68,52 @@ beforeEach(() => vi.clearAllMocks())
 afterEach(() => vi.useRealTimers())
 
 describe('PaginaTablero', () => {
-  it('muestra las piezas, el ciclo y el tiempo en marcha de la última hora', async () => {
+  it('muestra el estado actual con el mismo letrero que el gemelo', async () => {
+    preparar()
+    const ahora = await screen.findByRole('region', { name: 'Estado actual' })
+    expect(ahora).toHaveTextContent('FALLA · Código 4')
+    expect(ahora).toHaveTextContent('8 · Suelta')
+  })
+
+  it('calcula los indicadores de la última hora', async () => {
     preparar()
     await screen.findByText('Piezas por tramo')
     expect(tarjeta('Piezas')).toHaveTextContent('4')
-    expect(tarjeta('Piezas')).toHaveTextContent('75 % aluminio · 25 % plástico')
-    expect(tarjeta('Aluminio')).toHaveTextContent('3')
-    expect(tarjeta('Plástico')).toHaveTextContent('1')
-    // dos ciclos: 2 min y 1 min
-    expect(tarjeta('Ciclo promedio')).toHaveTextContent('1 min 30 s')
-    expect(tarjeta('En marcha')).toHaveTextContent('50 %')
-    expect(tarjeta('Ahora')).toHaveTextContent('8 · Suelta')
+    expect(tarjeta('Piezas')).toHaveTextContent('3 aluminio · 1 plástico')
+    // 30 min en marcha de 50 sin contar el mantenimiento
+    expect(tarjeta('Disponibilidad')).toHaveTextContent('60 %')
+    expect(tarjeta('Tiempo de ciclo')).toHaveTextContent('10 s')
+    expect(tarjeta('Carrera PD-1')).toHaveTextContent('0.50 s')
+    expect(tarjeta('Fallas')).toHaveTextContent('1')
+    expect(tarjeta('Fallas')).toHaveTextContent('código 4')
+    expect(tarjeta('Mantenimiento')).toHaveTextContent('10 min')
+  })
+
+  it('el estado de la celda reparte el tiempo entre los cinco estados', async () => {
+    preparar()
+    const estados = (
+      await screen.findByRole('heading', {
+        name: 'Estado de la celda',
+      })
+    ).closest('section') as HTMLElement
+    expect(estados).toHaveTextContent('Marcha30 min')
+    expect(estados).toHaveTextContent('Mantenimiento10 min')
+    expect(estados).toHaveTextContent('Falla10 min')
+    expect(estados).toHaveTextContent('Paro10 min')
+  })
+
+  it('lista las fallas con su código y cuánto duraron', async () => {
+    preparar()
+    const fallas = await screen.findByRole('heading', {
+      name: 'Fallas recientes',
+    })
+    await waitFor(() =>
+      expect(screen.getAllByRole('table').length).toBeGreaterThan(0),
+    )
+    const tabla = screen.getByRole('table')
+    expect(tabla).toHaveTextContent('4')
+    expect(tabla).toHaveTextContent('10 min')
+    expect(fallas).toBeInTheDocument()
   })
 
   it('la ventana termina en la lectura más reciente de la celda, no en el reloj', async () => {
@@ -92,7 +123,9 @@ describe('PaginaTablero', () => {
     expect(hasta.getTime()).toBe(FIN + 1000)
     // una hora de ventana y otra antes, para saber cómo estaba todo al empezar
     expect(desde.getTime()).toBe(FIN - 2 * 3600_000)
-    expect(screen.getByText(/no envía lecturas desde hace/)).toBeInTheDocument()
+    expect(
+      screen.getByText(/Sin lecturas nuevas desde hace/),
+    ).toBeInTheDocument()
   })
 
   it('al cambiar el periodo vuelve a pedir el historial con la nueva ventana', async () => {
@@ -105,13 +138,12 @@ describe('PaginaTablero', () => {
     })
   })
 
-  it('cada tramo de la gráfica tiene su detalle y también hay tabla', async () => {
+  it('cada tramo de la gráfica de piezas tiene su detalle', async () => {
     preparar()
     await screen.findByText('Piezas por tramo')
     expect(
-      screen.getAllByRole('button', { name: /de aluminio, .* de plástico/ }),
+      screen.getAllByRole('button', { name: /piezas \(.* aluminio/ }),
     ).toHaveLength(12)
-    expect(screen.getByText('Ver como tabla')).toBeInTheDocument()
   })
 
   it('se actualiza solo', async () => {
@@ -131,7 +163,7 @@ describe('PaginaTablero', () => {
   it('si no se pudo consultar, lo dice', async () => {
     preparar({ ok: false, motivo: 'fallo' })
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'No se pudieron consultar',
+      'No se pudieron leer',
     )
   })
 })

@@ -10,9 +10,11 @@ const tramo = (inicio: Date, cambios: Partial<Tramo>): Tramo => ({
   aluminio: 0,
   plastico: 0,
   marcha: 0,
+  mantenimiento: 0,
   paro: 0,
   sinRegistro: 0,
   paros: 0,
+  fallas: 0,
   ciclos: 0,
   segundosCiclo: 0,
   ...cambios,
@@ -26,6 +28,7 @@ function preparar(
     marcha: 3 * 3600,
     paro: 3600,
     paros: 2,
+    fallas: 3,
     ciclos: 30,
     segundosCiclo: 450,
   },
@@ -56,7 +59,14 @@ function preparar(
             : {},
         ),
       )
-      return { ok: true, tramos, truncado: false }
+      const fallas = esActual
+        ? [
+            { ts: desde.toISOString(), codigo: 3 },
+            { ts: desde.toISOString(), codigo: 3 },
+            { ts: desde.toISOString(), codigo: 1 },
+          ]
+        : []
+      return { ok: true, tramos, fallas, truncado: false }
     },
   )
   const props = {
@@ -94,14 +104,18 @@ describe('PaginaIndicadores', () => {
     expect(tarjeta('Tiempo de ciclo')).toHaveTextContent('15.0 s')
     // menos paros es mejor: la baja se pinta como buena
     expect(tarjeta('Paros')).toHaveTextContent('−50 %')
-    expect(tarjeta('Aluminio en la mezcla')).toHaveTextContent('40 %')
+    expect(tarjeta('Fallas')).toHaveTextContent('3')
+    // el código 3 salió dos veces: va primero
+    const pareto = screen.getByRole('heading', { name: 'Fallas por código' })
+      .parentElement?.parentElement?.parentElement as HTMLElement
+    expect(pareto).toHaveTextContent(/Código 3.*2 veces.*Código 1.*1 vez/)
   })
 
   it('cada día de la gráfica tiene su detalle y hay tabla', async () => {
     preparar()
     await screen.findByText('Producción por día')
     expect(
-      screen.getAllByRole('button', { name: /piezas \(.* de aluminio/ }),
+      screen.getAllByRole('button', { name: /piezas \(.* aluminio/ }),
     ).toHaveLength(7)
     expect(screen.getByText('Detalle por tramo')).toBeInTheDocument()
   })
@@ -128,7 +142,7 @@ describe('PaginaIndicadores', () => {
   it('sin actividad lo dice en lugar de mostrar ceros sin explicación', async () => {
     preparar({})
     expect(
-      await screen.findByText(/no registró actividad en este periodo/),
+      await screen.findByText(/Sin actividad registrada/),
     ).toBeInTheDocument()
   })
 

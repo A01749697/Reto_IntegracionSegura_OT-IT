@@ -5,8 +5,8 @@ import {
   cambioRelativo,
   cicloPromedio,
   csvDeTramos,
+  fallasPorCodigo,
   disponibilidad,
-  mezclaAluminio,
   piezasPorHora,
   sumar,
   ventanas,
@@ -17,9 +17,11 @@ const tramo = (cambios: Partial<Tramo>): Tramo => ({
   aluminio: 0,
   plastico: 0,
   marcha: 0,
+  mantenimiento: 0,
   paro: 0,
   sinRegistro: 0,
   paros: 0,
+  fallas: 0,
   ciclos: 0,
   segundosCiclo: 0,
   ...cambios,
@@ -82,10 +84,9 @@ describe('indicadores', () => {
     expect(disponibilidad(tramo({}))).toBeNull()
   })
 
-  it('piezas por hora en marcha, ciclo promedio y mezcla', () => {
+  it('piezas por hora en marcha y ciclo promedio', () => {
     expect(piezasPorHora(total)).toBe(10)
     expect(cicloPromedio(total)).toBe(16)
-    expect(mezclaAluminio(total)).toBe(40)
     expect(cicloPromedio(tramo({}))).toBeNull()
   })
 
@@ -102,7 +103,22 @@ describe('indicadores', () => {
     expect(filas).toHaveLength(3)
     expect(filas[0]).toBe('a,b')
     expect(filas[1]).toBe(
-      '2026-11-24T06:00:00.000Z,3,5,8,0.50,0.17,0.00,75.0,0,2,15.0',
+      '2026-11-24T06:00:00.000Z,3,5,8,0.50,0.00,0.17,0.00,75.0,0,0,2,15.0',
     )
   })
+})
+
+it('fallasPorCodigo cuenta y ordena de la más frecuente a la menos', () => {
+  expect(
+    fallasPorCodigo([
+      { codigo: 2 },
+      { codigo: 5 },
+      { codigo: 5 },
+      { codigo: null },
+    ]),
+  ).toEqual([
+    { codigo: 5, veces: 2 },
+    { codigo: null, veces: 1 },
+    { codigo: 2, veces: 1 },
+  ])
 })
