@@ -5,7 +5,12 @@ import { TARJETA } from '../comun/estilos'
 import Segmentos from '../comun/Segmentos'
 import MarcoPanel from '../panel/MarcoPanel'
 import { fechaHora } from '../panel/tiempo'
-import type { ResultadoHistorial, ResultadoLecturas } from './apiLecturas'
+import type {
+  PuntoHistorial,
+  ResultadoCambios,
+  ResultadoHistorial,
+  ResultadoLecturas,
+} from './apiLecturas'
 import {
   colorTorreta,
   compararTorreta,
@@ -51,6 +56,11 @@ type Props = {
     desde: Date,
     hasta: Date,
   ) => Promise<ResultadoHistorial>
+  obtenerCambios: (
+    plc: string,
+    nodos: readonly string[],
+    desde: Date,
+  ) => Promise<ResultadoCambios>
   sesionCaducada: () => void
 }
 
@@ -71,7 +81,23 @@ type Consulta = {
 // (null si no hay ninguno). undefined = sí se está moviendo, o aún no se sabe.
 type PasoQuieto = { ultimo: string | null } | undefined
 
-const SEGUNDOS_ENTRE_CONSULTAS = 5
+// Cada cuántos segundos se piden las lecturas más recientes y, si no hay /lecturas/cambios,
+// el historial de cada nodo.
+const SEGUNDOS_LECTURAS = 5
+const SEGUNDOS_HISTORIAL = 2
+
+// Los nodos que se repiten en el gemelo, agrupados por estación: una consulta por estación.
+type Grupo = { plc: string; nodos: string[] }
+const GRUPOS: Grupo[] = [
+  {
+    plc: NODOS.paso.plc,
+    nodos: [
+      NODOS.paso.nodo,
+      ...Object.values(NODOS_EMPUJADOR).map((n) => n.nodo),
+    ],
+  },
+  { plc: 'S7-300', nodos: Object.values(NODOS_GARRA).map((n) => n.nodo) },
+]
 
 const MODOS: Modo[] = ['vivo', 'simulacion']
 
@@ -366,6 +392,7 @@ function LecturasReales({
 export default function PaginaGemelo({
   obtenerLecturas,
   obtenerHistorial,
+  obtenerCambios,
   sesionCaducada,
 }: Props) {
   const { t, i18n } = useTranslation()
@@ -383,53 +410,83 @@ export default function PaginaGemelo({
   const [torretaSimulada, setTorretaSimulada] = useState<Torreta>('verde')
   const marco = useRef<HTMLDivElement>(null)
 
-  // En vivo se consulta la nube cada pocos segundos.
+  // En vivo: las lecturas más recientes (torreta, contadores, nodos de cada estación) cada
+  // 5 s, y los cambios del paso, del empujador y de la garra cada segundo, para repetirlos
+  // en orden casi al mismo tiempo que la celda.
   useEffect(() => {
     if (modo !== 'vivo') return
     let vigente = true
     let contadores: Contadores | null = null
     let ultimoPaso: string | null = null // ts del último TAB_PASO recibido
     let cambioLocal = Date.now() // hora del navegador del último cambio nuevo
-    // los cambios de TAB_PASO desde la última consulta, para repetirlos en orden
-    const consultarPasos = () => {
-      const ahora = Date.now()
-      const desde = ultimoPaso ? new Date(ultimoPaso) : INICIO_HISTORIAL
-      const hasta = new Date(ahora + DIAS_ADELANTO * 24 * 3600 * 1000)
-      obtenerHistorial(NODOS.paso.plc, NODOS.paso.nodo, desde, hasta).then(
-        (resultado) => {
-          if (!vigente || !resultado.ok) return
-          const nuevos = resultado.puntos.filter(
-            (p) =>
-              ultimoPaso === null || Date.parse(p.ts) > Date.parse(ultimoPaso),
-          )
-          if (nuevos.length && ultimoPaso !== null) cambioLocal = Date.now()
-          if (nuevos.length) ultimoPaso = nuevos[nuevos.length - 1].ts
-          recibirPasosReales(gemelo, resultado.puntos)
-          setPasoQuieto(
-            Date.now() - cambioLocal >= SEGUNDOS_PASO_QUIETO * 1000
-              ? { ultimo: ultimoPaso }
-              : undefined,
-          )
-        },
+    let quieto: string | null | undefined = undefined
+    let vuelta = 0
+    // /lecturas/cambios trae los de una estación en una sola consulta; si no responde
+    // (un backend sin ese endpoint), se sigue con /historial nodo por nodo
+    let usarCambios = true
+    let fallos = 0
+    const desdeNodo: Record<string, string> = {} // último ts recibido de cada nodo
+    const desdeGrupo: Record<string, string> = {} // y de cada estación
+    const pidiendo: Record<string, boolean> = {}
+
+    const recibir = (nodo: string, puntos: PuntoHistorial[]) => {
+      if (puntos.length) {
+        const ts = puntos[puntos.length - 1].ts
+        desdeNodo[nodo] = ts
+        const plc = GRUPOS.find((g) => g.nodos.includes(nodo))?.plc
+        if (plc && (!desdeGrupo[plc] || ts > desdeGrupo[plc]))
+          desdeGrupo[plc] = ts
+      }
+      if (nodo !== NODOS.paso.nodo) {
+        recibirNodoReal(gemelo, nodo, puntos)
+        return
+      }
+      const nuevos = puntos.filter(
+        (p) => ultimoPaso === null || Date.parse(p.ts) > Date.parse(ultimoPaso),
       )
+      if (nuevos.length && ultimoPaso !== null) cambioLocal = Date.now()
+      if (nuevos.length) ultimoPaso = nuevos[nuevos.length - 1].ts
+      recibirPasosReales(gemelo, puntos)
     }
-    // las salidas del empujador y las señales de la garra, cada una desde su último cambio
-    const ultimos: Record<string, string> = {}
-    const consultarEmpujador = () => {
+
+    const porHistorial = (grupo: Grupo) => {
       const hasta = new Date(Date.now() + DIAS_ADELANTO * 24 * 3600 * 1000)
-      for (const { plc, nodo } of [
-        ...Object.values(NODOS_EMPUJADOR),
-        ...Object.values(NODOS_GARRA),
-      ]) {
-        const desde = ultimos[nodo] ? new Date(ultimos[nodo]) : INICIO_HISTORIAL
-        obtenerHistorial(plc, nodo, desde, hasta).then((resultado) => {
-          if (!vigente || !resultado.ok) return
-          const { puntos } = resultado
-          if (puntos.length) ultimos[nodo] = puntos[puntos.length - 1].ts
-          recibirNodoReal(gemelo, nodo, puntos)
+      for (const nodo of grupo.nodos) {
+        const desde = desdeNodo[nodo]
+          ? new Date(desdeNodo[nodo])
+          : INICIO_HISTORIAL
+        obtenerHistorial(grupo.plc, nodo, desde, hasta).then((resultado) => {
+          if (vigente && resultado.ok) recibir(nodo, resultado.puntos)
         })
       }
     }
+
+    const porCambios = (grupo: Grupo) => {
+      if (pidiendo[grupo.plc]) return
+      pidiendo[grupo.plc] = true
+      obtenerCambios(
+        grupo.plc,
+        grupo.nodos,
+        new Date(desdeGrupo[grupo.plc]),
+      ).then((resultado) => {
+        pidiendo[grupo.plc] = false
+        if (!vigente) return
+        if (!resultado.ok) {
+          if (resultado.motivo === 'sesion') sesionCaducada()
+          else if (++fallos >= 3) usarCambios = false
+          return
+        }
+        fallos = 0
+        const porNodo: Record<string, PuntoHistorial[]> = {}
+        for (const { nodo, ts, valor } of resultado.cambios)
+          (porNodo[nodo] ??= []).push({ ts, valor })
+        for (const [nodo, puntos] of Object.entries(porNodo))
+          recibir(nodo, puntos)
+        // venía recortado: se pide lo que sigue sin esperar
+        if (resultado.truncado) porCambios(grupo)
+      })
+    }
+
     const consultar = () =>
       obtenerLecturas().then((resultado) => {
         if (!vigente) return
@@ -452,18 +509,39 @@ export default function PaginaGemelo({
           lecturas,
         })
       })
-    const ambas = () => {
-      consultar()
-      consultarPasos()
-      consultarEmpujador()
+
+    const cadaSegundo = () => {
+      vuelta++
+      if (vuelta % SEGUNDOS_LECTURAS === 0) consultar()
+      for (const grupo of GRUPOS) {
+        // la primera vez (o sin /lecturas/cambios) se pide por /historial
+        if (usarCambios && desdeGrupo[grupo.plc]) porCambios(grupo)
+        else if (vuelta % SEGUNDOS_HISTORIAL === 0) porHistorial(grupo)
+      }
+      const ahoraQuieto =
+        Date.now() - cambioLocal >= SEGUNDOS_PASO_QUIETO * 1000
+          ? ultimoPaso
+          : undefined
+      if (ahoraQuieto !== quieto) {
+        quieto = ahoraQuieto
+        setPasoQuieto(quieto === undefined ? undefined : { ultimo: quieto })
+      }
     }
-    ambas()
-    const reloj = setInterval(ambas, SEGUNDOS_ENTRE_CONSULTAS * 1000)
+    consultar()
+    for (const grupo of GRUPOS) porHistorial(grupo)
+    const reloj = setInterval(cadaSegundo, 1000)
     return () => {
       vigente = false
       clearInterval(reloj)
     }
-  }, [modo, gemelo, obtenerLecturas, obtenerHistorial, sesionCaducada])
+  }, [
+    modo,
+    gemelo,
+    obtenerLecturas,
+    obtenerHistorial,
+    obtenerCambios,
+    sesionCaducada,
+  ])
 
   const refrescar = useCallback(
     () => setInstantanea(tomarInstantanea(gemelo)),

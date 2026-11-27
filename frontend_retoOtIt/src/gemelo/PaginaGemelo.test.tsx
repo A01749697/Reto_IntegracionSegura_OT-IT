@@ -41,6 +41,9 @@ function preparar(respuesta: ResultadoLecturas) {
   const props = {
     obtenerLecturas: vi.fn().mockResolvedValue(respuesta),
     obtenerHistorial: vi.fn().mockResolvedValue({ ok: true, puntos: [] }),
+    obtenerCambios: vi
+      .fn()
+      .mockResolvedValue({ ok: true, cambios: [], truncado: false }),
     sesionCaducada: vi.fn(),
   }
   render(<PaginaGemelo {...props} />)
@@ -383,21 +386,28 @@ describe('PaginaGemelo, pasos reales', () => {
     expect(desde.getTime()).toBeLessThan(hasta.getTime())
   })
 
-  it('la siguiente consulta pide desde el último cambio que llegó', async () => {
+  it('después de la primera, pide los cambios de cada estación cada segundo desde el último', async () => {
     vi.useFakeTimers()
     const props = preparar(lecturasDeAhora())
-    await vi.advanceTimersByTimeAsync(100)
-    props.obtenerHistorial.mockResolvedValueOnce({
+    props.obtenerHistorial.mockImplementation(async (_plc, nodo) => ({
       ok: true,
-      puntos: [{ ts: '2026-11-24T20:00:05.000Z', valor: 2 }],
-    })
-    await vi.advanceTimersByTimeAsync(5000) // esta trae el cambio
-    await vi.advanceTimersByTimeAsync(5000) // y esta pide desde él
-    const delPaso = props.obtenerHistorial.mock.calls.filter(
-      (c) => c[1] === 'TAB_PASO',
-    )
-    const desde = delPaso[2][2] as Date
-    expect(desde.toISOString()).toBe('2026-11-24T20:00:05.000Z')
+      puntos:
+        nodo === 'TAB_PASO'
+          ? [{ ts: '2026-11-24T20:00:05.000Z', valor: 2 }]
+          : [],
+    }))
+    // la segunda vuelta del historial ya trae el paso; desde ahí, /lecturas/cambios
+    await vi.advanceTimersByTimeAsync(3100)
+    const llamada = props.obtenerCambios.mock.calls.find(
+      (c) => c[0] === 'S7-1500',
+    ) as [string, string[], Date]
+    expect(llamada[1]).toContain('TAB_PASO')
+    expect(llamada[1]).toContain('TAB_EMPUJA_EXT')
+    expect(llamada[2].toISOString()).toBe('2026-11-24T20:00:05.000Z')
+    await vi.advanceTimersByTimeAsync(3000)
+    expect(
+      props.obtenerCambios.mock.calls.filter((c) => c[0] === 'S7-1500').length,
+    ).toBeGreaterThanOrEqual(3)
   })
 
   it('la primera consulta no depende del reloj: pide los cambios más recientes que haya', async () => {

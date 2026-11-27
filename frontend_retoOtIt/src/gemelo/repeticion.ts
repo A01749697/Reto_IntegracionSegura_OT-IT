@@ -6,8 +6,14 @@
 // fija el desfase entre los dos y los siguientes guardan la distancia que tenían entre sí.
 
 // Segundos que la animación va detrás de la llegada del primer cambio. Tiene que cubrir el
-// tiempo entre consultas, para que el siguiente cambio llegue antes de que toque mostrarlo.
-export const COLCHON = 7
+// tiempo entre consultas (1 s), para que el siguiente cambio llegue antes de mostrarlo.
+export const COLCHON = 2.5
+
+// Si un lote llega cuando ya tocaba mostrarlo (el colector o la red se tardaron), todo se
+// recorre para que quede este margen, en lugar de aplicarlo de golpe. Después, con cada lote
+// que llega a tiempo, se recupera a lo más RECUPERA segundos de ese atraso.
+const MARGEN = 0.4
+const RECUPERA = 0.3
 
 // Si la animación queda más atrás o más adelante que esto (pestaña dormida, relojes que se
 // mueven), se vuelve a anclar en lugar de reproducir minutos de historia.
@@ -75,8 +81,24 @@ export function recibirPasos(
   if (rep.desfase === null) rep.desfase = ahora + COLCHON - nuevos[0].ms / 1000
   for (const { ms, paso } of nuevos)
     rep.eventos.push({ t: ms / 1000 + rep.desfase, paso })
+  ajustar(rep, nuevos[0].ms / 1000 + rep.desfase, ahora)
 
   reanclar(rep, ahora)
+}
+
+// primero: cuándo toca mostrar el primer cambio del lote que acaba de llegar.
+function ajustar(rep: Repeticion, primero: number, ahora: number) {
+  const tarde = ahora + MARGEN - primero
+  if (tarde > 0) return mover(rep, tarde)
+  // el primero del lote acaba de pasar en la celda: no debería ir más de COLCHON adelante
+  const sobra = primero - ahora - COLCHON
+  if (sobra > 0.5) mover(rep, -Math.min(sobra - 0.5, RECUPERA))
+}
+
+function mover(rep: Repeticion, segundos: number) {
+  if (rep.desfase !== null) rep.desfase += segundos
+  for (const evento of rep.eventos) evento.t += segundos
+  for (const evento of rep.eventosOtros) evento.t += segundos
 }
 
 // Si el más nuevo quedó demasiado lejos (en el futuro o en el pasado), se reancla todo.
@@ -123,6 +145,7 @@ export function recibirNodo(
   for (const { ms, valor } of nuevos)
     rep.eventosOtros.push({ t: ms / 1000 + desfase, nodo, valor })
   rep.eventosOtros.sort((a, b) => a.t - b.t)
+  ajustar(rep, nuevos[0].ms / 1000 + desfase, ahora)
   reanclar(rep, ahora)
 }
 
