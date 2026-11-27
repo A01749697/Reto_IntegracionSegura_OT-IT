@@ -29,7 +29,8 @@ vi.mock('./VistaCelda', () => ({
     <button
       type="button"
       onClick={() => {
-        avanzarGemelo(gemelo, 0.2)
+        avanzarGemelo(gemelo, 0.1)
+        avanzarGemelo(gemelo, 0.1)
         alRefrescar()
       }}
     >

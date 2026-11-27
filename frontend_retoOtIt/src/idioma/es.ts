@@ -575,7 +575,11 @@ export const es = {
       sinConexion: 'El panel no responde. Reintentando.',
       sinLecturas: 'El historian no tiene lecturas.',
       ultima: 'Última lectura: {{fecha}}',
-      sinLatido: 'LATIDO no cambia. Revisar que el colector lo guarde.',
+      retraso: 'Retraso aprox.: {{segundos}} s',
+      latidoQuieto:
+        'LATIDO sin cambios (último registro: {{fecha}}). No se vigila la comunicación hasta que llegue.',
+      latidoAusente:
+        'El historian no tiene LATIDO. No se vigila la comunicación hasta que llegue.',
       estaciones: {
         'S7-1200': 'S7-1200 · torreta',
         'S7-1500': 'S7-1516 · tablero',

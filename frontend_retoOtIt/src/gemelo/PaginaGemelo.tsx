@@ -1,4 +1,12 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
+import {
+  lazy,
+  memo,
+  Suspense,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from 'react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
 import { TARJETA } from '../comun/estilos'
@@ -16,6 +24,7 @@ import type { EstadoCelda } from './estado'
 import {
   crearGemelo,
   mandarSimulacion,
+  ponerEnlace,
   ponerModo,
   ponerVelocidad,
   recibirCambiosReales,
@@ -54,6 +63,10 @@ type Props = {
 // cambios del S7-1516 cada 2 s. La repetición va unos segundos atrás (ver repeticion.ts).
 export const SEGUNDOS_LECTURAS = 5
 export const SEGUNDOS_CAMBIOS = 2
+// Si /lecturas/cambios no responde en este tiempo, la celda queda sin comunicación.
+export const SEGUNDOS_SIN_ENLACE = 6
+// Si LATIDO no ha cambiado en este rato, se avisa que no se puede vigilar la comunicación.
+const SEGUNDOS_AVISO_LATIDO = 15
 
 type Consulta = { enlace: Enlace; lecturas: LecturasCelda | null }
 
@@ -230,7 +243,8 @@ function SenalesGarra({ i }: { i: Instantanea }) {
 }
 
 // Lo que llega del historian. De solo lectura: desde aquí no se le ordena nada a la celda.
-function Enlace({ consulta }: { consulta: Consulta }) {
+// Solo cambia con cada consulta: memo evita redibujarlo en cada refresco de la vista.
+const Enlace = memo(function Enlace({ consulta }: { consulta: Consulta }) {
   const { t } = useTranslation()
   const { lecturas } = consulta
   if (!lecturas || lecturas.ultima === null) {
@@ -278,6 +292,14 @@ function Enlace({ consulta }: { consulta: Consulta }) {
       </div>
     </div>
   )
+})
+
+// Último registro de LATIDO en el historian, para el aviso cuando no cambia.
+function ultimoLatido(lecturas: LecturasCelda | null): string | null {
+  const nodo = lecturas?.estaciones['S7-1500'].find(
+    (n) => n.nodo === NODO.latido,
+  )
+  return nodo ? nodo.ts : null
 }
 
 const MANDOS: { mando: MandoSimulado; clases: string }[] = [
@@ -359,6 +381,36 @@ function Mandos({
   )
 }
 
+// En vivo: cuánto va detrás de la celda y si se está vigilando la comunicación con LATIDO.
+function AvisosVivo({
+  i,
+  lecturas,
+}: {
+  i: Instantanea
+  lecturas: LecturasCelda
+}) {
+  const { t } = useTranslation()
+  const latido = ultimoLatido(lecturas)
+  const avisarLatido =
+    !i.vigilaLatido && i.segundosSinLatido > SEGUNDOS_AVISO_LATIDO
+  return (
+    <div className="flex flex-col gap-1.5 text-[12px] leading-snug">
+      {i.retraso !== null && (
+        <p className="text-suave">
+          {t('gemelo.enlace.retraso', { segundos: Math.round(i.retraso) })}
+        </p>
+      )}
+      {avisarLatido && (
+        <p className="text-alerta">
+          {latido
+            ? t('gemelo.enlace.latidoQuieto', { fecha: fechaHora(latido) })
+            : t('gemelo.enlace.latidoAusente')}
+        </p>
+      )}
+    </div>
+  )
+}
+
 export default function PaginaGemelo({
   obtenerLecturas,
   obtenerCambios,
@@ -386,6 +438,7 @@ export default function PaginaGemelo({
     if (modo !== 'vivo') return
     let vigente = true
     let pidiendo = false
+    let respondio = Date.now() // última vez que /lecturas/cambios contestó
     const consultarLecturas = () =>
       obtenerLecturas().then((resultado) => {
         if (!vigente) return
@@ -402,6 +455,8 @@ export default function PaginaGemelo({
       })
     // los cambios del S7-1516 desde el último que llegó, para repetirlos en orden
     const consultarCambios = () => {
+      // sin respuesta en un rato (red caída o consulta colgada): sin comunicación
+      ponerEnlace(gemelo, Date.now() - respondio < SEGUNDOS_SIN_ENLACE * 1000)
       const desde = desdeParaConsulta(gemelo.repeticion)
       if (desde === null || pidiendo) return
       pidiendo = true
@@ -412,6 +467,8 @@ export default function PaginaGemelo({
           if (resultado.motivo === 'sesion') sesionCaducada()
           return
         }
+        respondio = Date.now()
+        ponerEnlace(gemelo, true)
         recibirCambiosReales(gemelo, resultado.cambios)
         // venía recortado: se pide lo que sigue sin esperar
         if (resultado.truncado) consultarCambios()
@@ -575,10 +632,8 @@ export default function PaginaGemelo({
               mandar={mandar}
             />
           )}
-          {enVivo && i.estado === 'sinComunicacion' && consulta.lecturas && (
-            <p className="text-[12px] leading-snug text-alerta">
-              {t('gemelo.enlace.sinLatido')}
-            </p>
+          {enVivo && consulta.lecturas && (
+            <AvisosVivo i={i} lecturas={consulta.lecturas} />
           )}
 
           <div>

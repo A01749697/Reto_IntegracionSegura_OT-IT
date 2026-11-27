@@ -304,10 +304,12 @@ export function crearEscena({
   let sinRefrescar = 0
   let cuadroPendiente = 0
   function cuadro(ahora: number) {
-    const segundos = Math.min((ahora - anterior) / 1000, 0.1)
+    const real = (ahora - anterior) / 1000
+    const segundos = Math.min(real, 0.1)
     anterior = ahora
     ajustarTamano()
-    avanzarGemelo(gemelo, segundos)
+    // el gemelo recibe el tiempo real: si los cuadros van lentos, la repetición no se atrasa
+    avanzarGemelo(gemelo, real)
     pintar()
 
     if (vuelo) {

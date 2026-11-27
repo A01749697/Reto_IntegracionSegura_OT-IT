@@ -26,6 +26,7 @@ export type Senales = {
   torreAmarilla: boolean
   torreRoja: boolean
   torreGris: boolean // sin comunicación: la torreta se ve apagada y gris
+  vigilaLatido: boolean // LATIDO ya cambió: se vigila la comunicación con él
   // entradas
   ls1: boolean
   ls2: boolean
@@ -72,6 +73,7 @@ export function senalesIniciales(): Senales {
     torreAmarilla: false,
     torreRoja: false,
     torreGris: false,
+    vigilaLatido: false,
     ls1: true,
     ls2: false,
     ls3: false,

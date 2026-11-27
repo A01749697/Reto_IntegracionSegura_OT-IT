@@ -16,7 +16,13 @@ export const DESVIO_MAXIMO = 20
 
 export type Cambio = { nodo: string; ts: string; valor: number }
 
-type Evento = { t: number; nodo: string; valor: number } // t: reloj del gemelo (s)
+type Evento = { t: number; ms: number; nodo: string; valor: number } // t: reloj del gemelo (s)
+
+// Si un lote llega cuando ya tocaba mostrarlo (el colector o la red se tardaron), la
+// repetición se recorre para que quede al menos este margen, en lugar de aplicarlo de golpe.
+const MARGEN = 0.5
+// Lo más que se recupera de un atraso por cada lote que llega a tiempo (s).
+const RECUPERA = 0.5
 
 export type Repeticion = {
   sembrada: boolean // ya se tomaron los valores de partida
@@ -25,6 +31,7 @@ export type Repeticion = {
   desfase: number | null // reloj del gemelo - reloj del PLC (s)
   ultimo: number | null // ts (ms) del cambio más nuevo recibido
   enUltimo: Set<string> // los que ya llegaron con ese mismo ts
+  aplicado: number | null // ts (ms) del último cambio que ya se mostró
 }
 
 export function crearRepeticion(): Repeticion {
@@ -35,6 +42,7 @@ export function crearRepeticion(): Repeticion {
     desfase: null,
     ultimo: null,
     enUltimo: new Set(),
+    aplicado: null,
   }
 }
 
@@ -77,23 +85,42 @@ export function recibirCambios(
   for (const c of nuevos) if (c.ms === masNuevo) rep.enUltimo.add(clave(c))
 
   if (rep.desfase === null) rep.desfase = ahora + COLCHON - nuevos[0].ms / 1000
-  for (const { ms, nodo, valor } of nuevos)
-    rep.eventos.push({ t: ms / 1000 + rep.desfase, nodo, valor })
+  const desfase = rep.desfase
+  const llegados = nuevos.map(({ ms, nodo, valor }) => ({
+    t: ms / 1000 + desfase,
+    ms,
+    nodo,
+    valor,
+  }))
+  rep.eventos.push(...llegados)
   rep.eventos.sort((a, b) => a.t - b.t)
 
-  // si el más nuevo quedó demasiado lejos, se reancla
-  const lejania = rep.eventos[rep.eventos.length - 1].t - (ahora + COLCHON)
-  if (Math.abs(lejania) > DESVIO_MAXIMO) {
-    rep.desfase -= lejania
-    for (const evento of rep.eventos) evento.t -= lejania
+  // llegó tarde: todo se recorre para no saltarse lo que trae
+  const tarde = ahora + MARGEN - llegados[0].t
+  if (tarde > 0) mover(rep, tarde)
+  else {
+    // llegó a tiempo y sobra colchón (un atraso de antes ya pasó): se recupera poco a poco.
+    // El primero del lote acaba de pasar en la celda: no debería ir más de COLCHON adelante.
+    const sobra = llegados[0].t - ahora - COLCHON
+    if (sobra > 1) mover(rep, -Math.min(sobra - 1, RECUPERA))
   }
+
+  // si el más nuevo quedó demasiado lejos, se reancla: lo atrasado se aplica de golpe
+  const lejania = rep.eventos[rep.eventos.length - 1].t - (ahora + COLCHON)
+  if (lejania > DESVIO_MAXIMO) mover(rep, -lejania)
+}
+
+function mover(rep: Repeticion, segundos: number) {
+  if (rep.desfase !== null) rep.desfase += segundos
+  for (const evento of rep.eventos) evento.t += segundos
 }
 
 // Aplica lo que ya toca mostrar y devuelve los valores de ahora.
 export function valoresEn(rep: Repeticion, ahora: number): Valores {
   while (rep.eventos.length > 0 && rep.eventos[0].t <= ahora) {
-    const { nodo, valor } = rep.eventos.shift() as Evento
+    const { nodo, valor, ms } = rep.eventos.shift() as Evento
     rep.valores[nodo] = valor
+    rep.aplicado = ms
   }
   return rep.valores
 }
