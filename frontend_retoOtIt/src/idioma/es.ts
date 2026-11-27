@@ -175,7 +175,6 @@ export const es = {
       bitacora: 'Bitácora',
       datos: 'Datos',
       estado: 'Estado',
-      indicadores: 'Indicadores',
       tablero: 'Tablero',
       gemelo: 'Gemelo',
       cuenta: 'Mi cuenta',
@@ -458,7 +457,7 @@ export const es = {
     },
   },
   tablero: {
-    titulo: 'Tablero de operación',
+    titulo: 'Tablero de la celda',
     rango: 'Periodo',
     rangos: { '1h': 'Última hora', '8h': '8 horas', '24h': '24 horas' },
     actualizar: 'Actualizar',
@@ -467,6 +466,7 @@ export const es = {
     sinLecturas: 'Sin lecturas del S7-1516.',
     celdaQuieta: 'Sin lecturas nuevas desde hace {{hace}}.',
     ahora: 'Estado actual',
+    operacion: { titulo: 'Operación reciente' },
     estadoCelda: {
       marcha: 'EN MARCHA',
       mantenimiento: 'MANTENIMIENTO',
@@ -491,6 +491,9 @@ export const es = {
       rango: 'Mín {{minimo}} · máx {{maximo}}',
       sinCiclos: 'Sin ciclos completos',
       carrera: 'Carrera PD-1',
+      cicloCelda: 'Ciclo del S7-1516',
+      garraPiezas: 'Clasificadas por la garra',
+      cicloGarra: 'Ciclo de la garra',
       sinDato: 'Sin dato',
       fallas: 'Fallas',
       ultimaFalla: 'Última: código {{codigo}}, {{hora}}',
@@ -515,6 +518,8 @@ export const es = {
       cicloNota: 'TAB_T_CICLO_S, un punto por ciclo',
       carrera: 'Tendencia de la carrera PD-1',
       carreraNota: 'TAB_T_CARRERA_PD1_S. Si sube, revisar presión y cilindro.',
+      garra: 'Tendencia del ciclo de la garra',
+      garraNota: 'TIEMPO_CICLO_S del S7-300',
     },
     pasos: { titulo: 'Tiempo en cada paso', nota: 'TAB_PASO' },
     fallas: {
@@ -925,10 +930,8 @@ export const es = {
         'Las tablas de cuentas y bitácora, solo para leer. Cada consulta queda anotada.',
       estado:
         'Si la API, las bases de datos y la llegada de datos están al día.',
-      indicadores:
-        'Producción, disponibilidad, ciclo y fallas por día, contra el periodo anterior.',
       tablero:
-        'Estado de la celda, piezas, tiempos de ciclo y fallas de las últimas horas.',
+        'Estado de la celda, producción y disponibilidad contra el periodo anterior, tiempos de ciclo y fallas.',
       gemelo:
         'La celda en 3D: en vivo con sus datos o en simulación con mandos de operador.',
       cuenta: 'Tus datos y el cambio de tu contraseña.',

@@ -1,114 +1,63 @@
-// Tablero de operación de la celda (S7-1516): la última hora, 8 h o 24 h sacadas del
-// historian. Se actualiza solo cada 30 s.
-//
-// La ventana termina en la lectura más reciente de la celda, no en la hora del navegador:
-// si la celda está apagada, se ve su última actividad en lugar de gráficas vacías.
+// Tablero de la celda, todo en una pantalla:
+//   1. Cómo está la celda ahora (torreta, falla, paso).
+//   2. El periodo (hoy, 7 o 30 días) contra el anterior: producción, disponibilidad, ritmo,
+//      ciclo, paros y fallas. Lo calcula el panel con todo el historian (/lecturas/indicadores).
+//   3. La operación reciente (1, 8 o 24 h): estado de la celda, tiempos que mide el PLC,
+//      pasos, fallas y lo que clasifica la garra (ver Operacion.tsx).
+//   4. El detalle por tramo, para descargar.
 import type { TFunction } from 'i18next'
-import { useCallback, useEffect, useState, type ReactNode } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
 import { boton, TARJETA } from '../comun/estilos'
 import Segmentos from '../comun/Segmentos'
-import type {
-  ResultadoHistorial,
-  ResultadoLecturas,
-} from '../gemelo/apiLecturas'
-import { SEGUNDOS_ATRASO } from '../gemelo/enVivo'
-import { BarrasApiladas, Leyenda, Linea } from '../indicadores/Graficas'
 import MarcoPanel from '../panel/MarcoPanel'
-import { fechaHora, hace, region } from '../panel/tiempo'
+import { region } from '../panel/tiempo'
+import type { ResultadoLecturas } from '../gemelo/apiLecturas'
+import type {
+  Cubeta,
+  EventoFalla,
+  ResultadoIndicadores,
+  Tramo,
+} from '../indicadores/apiIndicadores'
+import { BarrasApiladas, Leyenda, Linea } from '../indicadores/Graficas'
 import {
-  duracionesDeCiclo,
-  ESTADO_FALLA,
-  estadosDeLaCelda,
-  fallasEnVentana,
-  piezasPorTramo,
-  resumir,
-  segundosLegibles,
-  tiempoPorValor,
-  totalContador,
-  tramos,
-  valoresEnVentana,
-  type Punto,
-  type Ventana,
-} from './calculos'
+  cambioEnPuntos,
+  cambioRelativo,
+  cicloPromedio,
+  csvDeTramos,
+  disponibilidad,
+  fallasPorCodigo,
+  piezasPorHora,
+  sumar,
+  ventanas,
+  type Periodo,
+  type Totales,
+} from '../indicadores/resumen'
+import { leerLecturas, type Lecturas } from './lecturas'
+import { Ahora, Operacion, type ObtenerHistorial } from './Operacion'
 
 type Props = {
-  obtenerLecturas: () => Promise<ResultadoLecturas>
-  obtenerHistorial: (
-    plc: string,
-    variable: string,
+  obtener: (
     desde: Date,
     hasta: Date,
-  ) => Promise<ResultadoHistorial>
+    cubeta: Cubeta,
+  ) => Promise<ResultadoIndicadores>
+  obtenerLecturas: () => Promise<ResultadoLecturas>
+  obtenerHistorial: ObtenerHistorial
+  descargar: (nombre: string, contenido: Blob) => void
   sesionCaducada: () => void
+  ahora?: () => Date
 }
 
-// Nodos del S7-1516 (tablero neumático) que usa esta pantalla.
-const PLC = 'S7-1500'
-const NODO = {
-  torreta: 'TAB_TORRETA', // 1 marcha · 2 mantenimiento · 3 paro o falla · 4 reset
-  falla: 'TAB_FALLA',
-  codFalla: 'TAB_COD_FALLA',
-  paso: 'TAB_PASO',
-  aluminio: 'TAB_ALUMINIO',
-  otras: 'TAB_OTRAS',
-  tCiclo: 'TAB_T_CICLO_S',
-  tCarrera: 'TAB_T_CARRERA_PD1_S',
-} as const
-const PASOS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
-
-type Valores = Record<string, number>
-
-type EstadoTablero =
-  'marcha' | 'mantenimiento' | 'reset' | 'paro' | 'falla' | 'sinDato'
-
-// El estado de la celda según TAB_TORRETA (y TAB_FALLA cuando está en paro).
-function estadoActual(v: Valores): EstadoTablero {
-  switch (v[NODO.torreta]) {
-    case 1:
-      return 'marcha'
-    case 2:
-      return 'mantenimiento'
-    case 4:
-      return 'reset'
-    case 3:
-      return v[NODO.falla] === 1 ? 'falla' : 'paro'
-    default:
-      return 'sinDato'
-  }
-}
-
-export type Rango = '1h' | '8h' | '24h'
-const RANGOS: Rango[] = ['1h', '8h', '24h']
-const SEGUNDOS_RANGO: Record<Rango, number> = {
-  '1h': 3600,
-  '8h': 8 * 3600,
-  '24h': 24 * 3600,
-}
-// tramos de la gráfica de piezas: 5 min, 40 min o 2 h
-const TRAMOS_PIEZAS = 12
-// puntos de las tendencias (los más recientes)
-const PUNTOS_TENDENCIA = 40
-export const SEGUNDOS_ENTRE_CONSULTAS = 30
-
-const SERIES = {
-  aluminio: NODO.aluminio,
-  otras: NODO.otras,
-  pasos: NODO.paso,
-  torreta: NODO.torreta,
-  falla: NODO.falla,
-  codFalla: NODO.codFalla,
-  tCiclo: NODO.tCiclo,
-  tCarrera: NODO.tCarrera,
-} as const
-type Serie = keyof typeof SERIES
+const PERIODOS: Periodo[] = ['hoy', '7d', '30d']
+const SEGUNDOS_ENTRE_CONSULTAS = 60
 
 type Datos = {
-  ventana: Ventana
-  ahora: Valores // último valor de cada nodo del S7-1516
-  ultimaCelda: number | null
-  atraso: number | null // segundos desde la última lectura, al consultar
-  series: Record<Serie, Punto[]>
+  periodo: Periodo
+  actual: Tramo[]
+  anterior: Tramo[]
+  fallas: EventoFalla[]
+  truncado: boolean
 }
 
 type Carga =
@@ -116,109 +65,126 @@ type Carga =
   | { estado: 'error' }
   | { estado: 'listo'; datos: Datos }
 
-const hora = (instante: number) =>
-  new Date(instante).toLocaleTimeString(region(), {
-    hour: '2-digit',
-    minute: '2-digit',
+const numero = (valor: number, decimales = 0) =>
+  valor.toLocaleString(region(), {
+    minimumFractionDigits: decimales,
+    maximumFractionDigits: decimales,
   })
 
-const nombrePaso = (paso: number, t: TFunction) =>
-  `${paso} · ${t(`gemelo.pasosReales.${paso}`, { defaultValue: '—' })}`
+const horas = (segundos: number) =>
+  `${numero(segundos / 3600, segundos < 36000 ? 1 : 0)} h`
+
+const segundosCiclo = (segundos: number) =>
+  segundos < 60
+    ? `${numero(segundos, 1)} s`
+    : `${Math.floor(segundos / 60)} min ${Math.round(segundos % 60)} s`
+
+function etiquetaTramo(inicio: string, cubeta: Cubeta): string {
+  const fecha = new Date(inicio)
+  return cubeta === 'hora'
+    ? fecha.toLocaleTimeString(region(), { hour: '2-digit', minute: '2-digit' })
+    : fecha.toLocaleDateString(region(), { day: 'numeric', month: 'short' })
+}
 
 export default function PaginaTablero({
+  obtener,
   obtenerLecturas,
   obtenerHistorial,
+  descargar,
   sesionCaducada,
+  ahora = () => new Date(),
 }: Props) {
   const { t } = useTranslation()
-  const [rango, setRango] = useState<Rango>('1h')
+  const [periodo, setPeriodo] = useState<Periodo>('hoy')
+  const [lecturas, setLecturas] = useState<Lecturas | null>(null)
   const [carga, setCarga] = useState<Carga>({ estado: 'cargando' })
   const [recarga, setRecarga] = useState(0)
 
-  const cargar = useCallback(
-    async (rango: Rango): Promise<Carga | 'sesion'> => {
-      const resultado = await obtenerLecturas()
-      if (!resultado.ok)
-        return resultado.motivo === 'sesion' ? 'sesion' : { estado: 'error' }
-      // el último valor de cada nodo del S7-1516 y la lectura más reciente
-      const ahora: Valores = {}
-      let ultimaCelda: number | null = null
-      for (const l of resultado.lecturas) {
-        const ms = Date.parse(l.ts)
-        if (l.plc !== PLC || Number.isNaN(ms)) continue
-        ahora[l.variable] = l.valor
-        if (ultimaCelda === null || ms > ultimaCelda) ultimaCelda = ms
-      }
-      const hasta = ultimaCelda ?? Date.now()
-      const largo = SEGUNDOS_RANGO[rango] * 1000
-      const ventana = { desde: hasta - largo, hasta }
-      // se pide desde una ventana antes, para saber cómo estaba todo al empezar
-      const claves = Object.keys(SERIES) as Serie[]
-      const historiales = await Promise.all(
-        claves.map((clave) =>
-          obtenerHistorial(
-            PLC,
-            SERIES[clave],
-            new Date(ventana.desde - largo),
-            new Date(hasta + 1000),
-          ),
-        ),
-      )
-      if (historiales.some((h) => !h.ok && h.motivo === 'sesion'))
-        return 'sesion'
-      if (historiales.every((h) => !h.ok)) return { estado: 'error' }
-      const series = Object.fromEntries(
-        claves.map((clave, i) => {
-          const h = historiales[i]
-          return [clave, h.ok ? h.puntos : []]
-        }),
-      ) as Record<Serie, Punto[]>
-      return {
-        estado: 'listo',
-        datos: {
-          ventana,
-          ahora,
-          ultimaCelda,
-          atraso:
-            ultimaCelda === null
-              ? null
-              : Math.max(0, Math.round((Date.now() - hasta) / 1000)),
-          series,
-        },
-      }
-    },
-    [obtenerLecturas, obtenerHistorial],
-  )
-
   useEffect(() => {
     let vigente = true
-    const consultar = () =>
-      cargar(rango).then((nueva) => {
+    const consultar = async () => {
+      // cómo está la celda ahora; también marca el final de la operación reciente
+      obtenerLecturas().then((resultado) => {
         if (!vigente) return
-        if (nueva === 'sesion') sesionCaducada()
-        else setCarga(nueva)
+        if (resultado.ok) setLecturas(leerLecturas(resultado.lecturas))
+        else if (resultado.motivo === 'sesion') sesionCaducada()
       })
+      const { actual, anterior } = ventanas(periodo, ahora())
+      const [a, b] = await Promise.all([
+        obtener(actual.desde, actual.hasta, actual.cubeta),
+        obtener(anterior.desde, anterior.hasta, anterior.cubeta),
+      ])
+      if (!vigente) return
+      if (
+        (!a.ok && a.motivo === 'sesion') ||
+        (!b.ok && b.motivo === 'sesion')
+      ) {
+        sesionCaducada()
+        return
+      }
+      if (!a.ok) {
+        setCarga({ estado: 'error' })
+        return
+      }
+      setCarga({
+        estado: 'listo',
+        datos: {
+          periodo,
+          actual: a.tramos,
+          anterior: b.ok ? b.tramos : [],
+          fallas: a.fallas,
+          truncado: a.truncado,
+        },
+      })
+    }
     consultar()
     const reloj = setInterval(consultar, SEGUNDOS_ENTRE_CONSULTAS * 1000)
     return () => {
       vigente = false
       clearInterval(reloj)
     }
-  }, [cargar, rango, recarga, sesionCaducada])
+    // ahora solo se usa al consultar; cambiarlo no pide otra consulta
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [obtener, obtenerLecturas, periodo, recarga, sesionCaducada])
+
+  const datos = carga.estado === 'listo' ? carga.datos : null
+
+  function exportar() {
+    if (!datos) return
+    const contenido = csvDeTramos(datos.actual, [
+      t('indicadores.csv.inicio'),
+      t('indicadores.csv.aluminio'),
+      t('indicadores.csv.plastico'),
+      t('indicadores.csv.piezas'),
+      t('indicadores.csv.horasMarcha'),
+      t('indicadores.csv.horasMantenimiento'),
+      t('indicadores.csv.horasParo'),
+      t('indicadores.csv.horasSinRegistro'),
+      t('indicadores.csv.disponibilidad'),
+      t('indicadores.csv.paros'),
+      t('indicadores.csv.fallas'),
+      t('indicadores.csv.ciclos'),
+      t('indicadores.csv.ciclo'),
+    ])
+    descargar(
+      `indicadores-${datos.periodo}-${ahora().toISOString().slice(0, 10)}.csv`,
+      new Blob([contenido], { type: 'text/csv;charset=utf-8' }),
+    )
+  }
 
   return (
     <MarcoPanel titulo={t('tablero.titulo')}>
       <div className="flex flex-wrap items-center gap-3">
         <Segmentos
-          etiqueta={t('tablero.rango')}
-          opciones={RANGOS.map((valor) => ({
+          etiqueta={t('indicadores.periodo')}
+          opciones={PERIODOS.map((valor) => ({
             valor,
-            texto: t(`tablero.rangos.${valor}`),
+            texto: t(`indicadores.periodos.${valor}`),
           }))}
-          valor={rango}
+          valor={periodo}
           alCambiar={(valor) => {
             setCarga({ estado: 'cargando' })
-            setRango(valor)
+            setPeriodo(valor)
           }}
         />
         <button
@@ -226,20 +192,16 @@ export default function PaginaTablero({
           className={boton('neutro')}
           onClick={() => setRecarga((n) => n + 1)}
         >
-          {t('tablero.actualizar')}
+          {t('indicadores.actualizar')}
         </button>
-        {carga.estado === 'listo' && (
-          <span className="text-[13px] text-suave">
-            {t('tablero.periodo', {
-              desde: fechaHora(
-                new Date(carga.datos.ventana.desde).toISOString(),
-              ),
-              hasta: fechaHora(
-                new Date(carga.datos.ventana.hasta).toISOString(),
-              ),
-            })}
-          </span>
-        )}
+        <button
+          type="button"
+          className={boton('contorno')}
+          onClick={exportar}
+          disabled={!datos}
+        >
+          {t('indicadores.descargar')}
+        </button>
       </div>
       {carga.estado === 'cargando' && (
         <p role="status" className="text-suave">
@@ -248,15 +210,308 @@ export default function PaginaTablero({
       )}
       {carga.estado === 'error' && (
         <p role="alert" className="text-alerta">
-          {t('tablero.error')}
+          {t('indicadores.error')}
         </p>
       )}
-      {carga.estado === 'listo' && <Contenido datos={carga.datos} />}
+      {lecturas && <Ahora lecturas={lecturas} />}
+      {datos && (
+        <Contenido
+          datos={datos}
+          operacion={
+            <Operacion
+              lecturas={lecturas}
+              obtenerHistorial={obtenerHistorial}
+              sesionCaducada={sesionCaducada}
+              recarga={recarga}
+            />
+          }
+        />
+      )}
     </MarcoPanel>
   )
 }
 
-const SUBTITULO = 'text-[15px] font-bold'
+type Tendencia = 'sube' | 'baja' | 'igual'
+
+function Indicador({
+  titulo,
+  valor,
+  cambio,
+  mejorSiSube = true,
+  detalle,
+}: {
+  titulo: string
+  valor: string
+  cambio?: { texto: string; valor: number } | null
+  mejorSiSube?: boolean | null // null: ni mejor ni peor (la mezcla)
+  detalle?: string
+}) {
+  const { t } = useTranslation()
+  const tendencia: Tendencia | null = cambio
+    ? Math.abs(cambio.valor) < 0.05
+      ? 'igual'
+      : cambio.valor > 0
+        ? 'sube'
+        : 'baja'
+    : null
+  const bueno =
+    tendencia === null || tendencia === 'igual' || mejorSiSube === null
+      ? null
+      : (tendencia === 'sube') === mejorSiSube
+  const flecha = { sube: '▲', baja: '▼', igual: '■' }
+  return (
+    <div className={`${TARJETA} flex flex-col gap-1 p-4`}>
+      <h2 className="text-[12px] font-bold tracking-wide text-suave uppercase">
+        {titulo}
+      </h2>
+      <p className="text-[28px] leading-tight font-bold tabular-nums">
+        {valor}
+      </p>
+      {cambio && tendencia && (
+        <p
+          className={`text-[12.5px] font-semibold tabular-nums ${
+            bueno === null ? 'text-suave' : bueno ? 'text-ok' : 'text-alerta'
+          }`}
+        >
+          <span aria-hidden="true">{flecha[tendencia]} </span>
+          {cambio.texto}{' '}
+          <span className="font-normal text-suave">
+            {t('indicadores.contraAnterior')}
+          </span>
+        </p>
+      )}
+      {detalle && (
+        <p className="text-[12px] leading-snug text-suave">{detalle}</p>
+      )}
+    </div>
+  )
+}
+
+const conSigno = (valor: number, decimales = 0) =>
+  `${valor > 0 ? '+' : valor < 0 ? '−' : ''}${numero(Math.abs(valor), decimales)}`
+
+function porcentajeCambio(
+  actual: number | null,
+  anterior: number | null,
+): { texto: string; valor: number } | null {
+  const c = cambioRelativo(actual, anterior)
+  return c === null ? null : { texto: `${conSigno(c)} %`, valor: c }
+}
+
+function puntosCambio(
+  actual: number | null,
+  anterior: number | null,
+  t: TFunction,
+): { texto: string; valor: number } | null {
+  const c = cambioEnPuntos(actual, anterior)
+  return c === null
+    ? null
+    : {
+        texto: t('indicadores.puntos', { valor: conSigno(c, 1) }),
+        valor: c,
+      }
+}
+
+function Contenido({
+  datos,
+  operacion,
+}: {
+  datos: Datos
+  operacion: ReactNode
+}) {
+  const { t } = useTranslation()
+  const cubeta: Cubeta = datos.periodo === 'hoy' ? 'hora' : 'dia'
+  const total = sumar(datos.actual)
+  const antes = sumar(datos.anterior)
+  const hayAntes = datos.anterior.length > 0
+  const comparar = <T,>(f: (x: Totales) => T | null) =>
+    hayAntes ? f(antes) : null
+
+  const disp = disponibilidad(total)
+  const ritmo = piezasPorHora(total)
+  const ciclo = cicloPromedio(total)
+  const etiquetas = datos.actual.map((tramo) =>
+    etiquetaTramo(tramo.inicio, cubeta),
+  )
+  const tiempoTotal =
+    total.marcha + total.mantenimiento + total.paro + total.sinRegistro
+
+  return (
+    <>
+      {datos.truncado && (
+        <p role="status" className="text-[13px] text-alerta">
+          {t('indicadores.truncado')}
+        </p>
+      )}
+      {total.marcha + total.paro + total.mantenimiento === 0 && (
+        <p
+          role="status"
+          className="rounded-lg border border-linea bg-panel px-3.5 py-2.5 text-[13px] text-suave"
+        >
+          {t('indicadores.sinActividad')}
+        </p>
+      )}
+
+      <section
+        aria-label={t('indicadores.resumen')}
+        className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6"
+      >
+        <Indicador
+          titulo={t('indicadores.kpi.produccion')}
+          valor={numero(total.piezas)}
+          cambio={porcentajeCambio(
+            total.piezas,
+            comparar((x) => x.piezas),
+          )}
+          detalle={t('indicadores.kpi.produccionDetalle', {
+            al: numero(total.aluminio),
+            pl: numero(total.plastico),
+          })}
+        />
+        <Indicador
+          titulo={t('indicadores.kpi.disponibilidad')}
+          valor={disp === null ? '—' : `${numero(disp, 1)} %`}
+          cambio={puntosCambio(disp, comparar(disponibilidad), t)}
+          detalle={t('indicadores.kpi.disponibilidadDetalle', {
+            marcha: horas(total.marcha),
+          })}
+        />
+        <Indicador
+          titulo={t('indicadores.kpi.ritmo')}
+          valor={ritmo === null ? '—' : numero(ritmo, 1)}
+          cambio={porcentajeCambio(ritmo, comparar(piezasPorHora))}
+          detalle={t('indicadores.kpi.ritmoDetalle')}
+        />
+        <Indicador
+          titulo={t('indicadores.kpi.ciclo')}
+          valor={ciclo === null ? '—' : segundosCiclo(ciclo)}
+          cambio={porcentajeCambio(ciclo, comparar(cicloPromedio))}
+          mejorSiSube={false}
+          detalle={t('indicadores.kpi.cicloDetalle', {
+            ciclos: numero(total.ciclos),
+          })}
+        />
+        <Indicador
+          titulo={t('indicadores.kpi.paros')}
+          valor={numero(total.paros)}
+          cambio={porcentajeCambio(
+            total.paros,
+            comparar((x) => x.paros),
+          )}
+          mejorSiSube={false}
+          detalle={t('indicadores.kpi.parosDetalle', {
+            tiempo: horas(total.paro),
+          })}
+        />
+        <Indicador
+          titulo={t('indicadores.kpi.fallas')}
+          valor={numero(total.fallas)}
+          cambio={porcentajeCambio(
+            total.fallas,
+            comparar((x) => x.fallas),
+          )}
+          mejorSiSube={false}
+          detalle={t('indicadores.kpi.fallasDetalle', {
+            tiempo: horas(total.mantenimiento),
+          })}
+        />
+      </section>
+
+      <Tarjeta
+        titulo={t(`indicadores.produccion.titulo_${cubeta}`)}
+        extra={
+          <Leyenda
+            series={[
+              ['bg-serie-al', t('indicadores.aluminio')],
+              ['bg-serie-pl', t('indicadores.plastico')],
+            ]}
+          />
+        }
+      >
+        <BarrasApiladas
+          etiquetas={etiquetas}
+          descripciones={datos.actual.map((tramo, i) =>
+            t('indicadores.produccion.detalle', {
+              tramo: etiquetas[i],
+              al: tramo.aluminio,
+              pl: tramo.plastico,
+              total: tramo.aluminio + tramo.plastico,
+            }),
+          )}
+          series={[
+            {
+              clase: 'bg-serie-al',
+              valores: datos.actual.map((x) => x.aluminio),
+            },
+            {
+              clase: 'bg-serie-pl',
+              valores: datos.actual.map((x) => x.plastico),
+            },
+          ]}
+        />
+      </Tarjeta>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Tarjeta
+          titulo={t(`indicadores.disponibilidad.titulo_${cubeta}`)}
+          nota={t('indicadores.disponibilidad.nota')}
+        >
+          <BarrasApiladas
+            etiquetas={etiquetas}
+            descripciones={datos.actual.map((tramo, i) => {
+              const d = disponibilidad(tramo)
+              return d === null
+                ? t('indicadores.disponibilidad.sinDatos', {
+                    tramo: etiquetas[i],
+                  })
+                : t('indicadores.disponibilidad.detalle', {
+                    tramo: etiquetas[i],
+                    valor: numero(d, 1),
+                    marcha: horas(tramo.marcha),
+                    paro: horas(tramo.paro),
+                  })
+            })}
+            tope={100}
+            unidad=" %"
+            series={[
+              {
+                clase: 'bg-acento',
+                valores: datos.actual.map((x) => disponibilidad(x) ?? 0),
+              },
+            ]}
+          />
+        </Tarjeta>
+        <Tarjeta
+          titulo={t('indicadores.ciclo.titulo')}
+          nota={t('indicadores.ciclo.nota')}
+        >
+          <CicloPorTramo tramos={datos.actual} etiquetas={etiquetas} />
+        </Tarjeta>
+      </div>
+
+      <div className="grid gap-5 lg:grid-cols-2">
+        <Tarjeta
+          titulo={t('indicadores.tiempo.titulo')}
+          nota={t('indicadores.tiempo.nota')}
+        >
+          <UsoDelTiempo total={total} tiempoTotal={tiempoTotal} />
+        </Tarjeta>
+        <Tarjeta
+          titulo={t('indicadores.fallas.titulo')}
+          nota={t('indicadores.fallas.nota')}
+        >
+          <FallasPorCodigo fallas={datos.fallas} />
+        </Tarjeta>
+      </div>
+
+      {operacion}
+
+      <Tarjeta titulo={t('indicadores.tabla.titulo')}>
+        <TablaTramos tramos={datos.actual} etiquetas={etiquetas} />
+      </Tarjeta>
+    </>
+  )
+}
 
 function Tarjeta({
   titulo,
@@ -273,7 +528,7 @@ function Tarjeta({
     <section className={`${TARJETA} flex min-w-0 flex-col gap-3 p-4`}>
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <h2 className={SUBTITULO}>{titulo}</h2>
+          <h2 className="text-[15px] font-bold">{titulo}</h2>
           {nota && <p className="text-[12.5px] text-suave">{nota}</p>}
         </div>
         {extra}
@@ -283,457 +538,189 @@ function Tarjeta({
   )
 }
 
-function Indicador({
-  titulo,
-  valor,
-  detalle,
-  tono,
+function CicloPorTramo({
+  tramos,
+  etiquetas,
 }: {
-  titulo: string
-  valor: string
-  detalle?: string
-  tono?: 'alerta'
+  tramos: Tramo[]
+  etiquetas: string[]
 }) {
+  const { t } = useTranslation()
+  const valores = tramos.map((tramo) => cicloPromedio(tramo))
+  const conValor = valores.filter((v): v is number => v !== null)
+  if (conValor.length === 0)
+    return (
+      <p className="text-[13px] text-suave">{t('indicadores.ciclo.sin')}</p>
+    )
+  // el eje llega a un número redondo arriba del más lento
+  const maximo = Math.max(10, Math.ceil(Math.max(...conValor) / 10) * 10)
   return (
-    <div className={`${TARJETA} flex flex-col gap-1 p-4`}>
-      <h2 className="text-[12px] font-bold tracking-wide text-suave uppercase">
-        {titulo}
-      </h2>
-      <p
-        className={`text-[28px] leading-tight font-bold tabular-nums ${tono === 'alerta' ? 'text-alerta' : ''}`}
-      >
-        {valor}
+    <Linea
+      etiquetas={etiquetas}
+      valores={valores}
+      maximo={maximo}
+      arriba={`${maximo} s`}
+      descripciones={tramos.map((tramo, i) => {
+        const v = valores[i]
+        return v === null || v === undefined
+          ? t('indicadores.ciclo.sinTramo', { tramo: etiquetas[i] })
+          : t('indicadores.ciclo.detalle', {
+              tramo: etiquetas[i],
+              valor: segundosCiclo(v),
+              ciclos: tramo.ciclos,
+            })
+      })}
+    />
+  )
+}
+
+// Las fallas del periodo agrupadas por código, de la más frecuente a la menos (Pareto).
+function FallasPorCodigo({ fallas }: { fallas: EventoFalla[] }) {
+  const { t } = useTranslation()
+  const lista = fallasPorCodigo(fallas)
+  if (lista.length === 0)
+    return (
+      <p className="text-[13px] text-suave">
+        {t('indicadores.fallas.ninguna')}
       </p>
-      {detalle && (
-        <p className="text-[12px] leading-snug text-suave">{detalle}</p>
-      )}
-    </div>
-  )
-}
-
-// Color y textura de cada estado. Reset y falla llevan rayas para no depender solo del color.
-const RAYAS =
-  'repeating-linear-gradient(135deg, transparent 0 4px, rgb(0 0 0 / 0.28) 4px 7px)'
-type EstadoTramo = 'marcha' | 'mantenimiento' | 'reset' | 'paro' | 'falla'
-const ESTADOS: {
-  valor: number
-  estado: EstadoTramo
-  clase: string
-  rayas: boolean
-}[] = [
-  { valor: 1, estado: 'marcha', clase: 'bg-ok', rayas: false },
-  { valor: 2, estado: 'mantenimiento', clase: 'bg-aviso', rayas: false },
-  { valor: 4, estado: 'reset', clase: 'bg-aviso', rayas: true },
-  { valor: 3, estado: 'paro', clase: 'bg-alerta/55', rayas: false },
-  { valor: ESTADO_FALLA, estado: 'falla', clase: 'bg-alerta', rayas: true },
-]
-const estiloEstado = (valor: number) => ESTADOS.find((e) => e.valor === valor)
-
-const LETRERO: Record<EstadoTablero, string> = {
-  marcha: 'border-ok bg-ok/10 text-ok',
-  mantenimiento: 'border-aviso bg-aviso/10 text-aviso',
-  reset: 'border-aviso bg-aviso/10 text-aviso',
-  paro: 'border-alerta bg-alerta/10 text-alerta',
-  falla: 'border-alerta bg-alerta/15 text-alerta',
-  sinDato: 'border-linea text-suave',
-}
-
-function Ahora({ datos }: { datos: Datos }) {
-  const { t } = useTranslation()
-  const { ahora, atraso } = datos
-  const quieta = atraso !== null && atraso > SEGUNDOS_ATRASO
-  const estado = estadoActual(ahora)
-  const paso = ahora[NODO.paso]
+    )
+  const maximo = lista[0]?.veces ?? 1
   return (
-    <section
-      aria-label={t('tablero.ahora')}
-      className={`${TARJETA} flex flex-wrap items-center gap-x-6 gap-y-2 p-4`}
-    >
-      <span
-        className={`rounded-md border-2 px-3 py-1 text-[15px] font-bold tracking-wider ${LETRERO[estado]}`}
-      >
-        {t(`tablero.estadoCelda.${estado}`)}
-        {estado === 'falla' &&
-          ` · ${t('tablero.codigoFalla', { codigo: ahora[NODO.codFalla] ?? 0 })}`}
-      </span>
-      <span className="text-[13px] text-suave">
-        {t('tablero.paso')}{' '}
-        <span className="font-bold text-texto">
-          {paso === undefined ? t('tablero.kpi.sinDato') : nombrePaso(paso, t)}
-        </span>
-      </span>
-      {datos.ultimaCelda === null ? (
-        <span className="text-[13px] text-alerta">
-          {t('tablero.sinLecturas')}
-        </span>
-      ) : (
-        quieta && (
-          <span className="text-[13px] text-alerta">
-            {t('tablero.celdaQuieta', { hace: hace(atraso) })}
+    <ul className="flex flex-col gap-1.5">
+      {lista.map(({ codigo, veces }) => (
+        <li
+          key={codigo ?? 'sin'}
+          className="grid grid-cols-[6.5rem_1fr_4.5rem] items-center gap-2 text-[12.5px]"
+        >
+          <span className="text-suave">
+            {codigo === null
+              ? t('indicadores.fallas.sinCodigo')
+              : t('indicadores.fallas.codigo', { codigo })}
           </span>
-        )
-      )}
-    </section>
+          <span className="h-3 rounded-r-[4px] bg-linea/40">
+            <span
+              className="block h-full rounded-r-[4px] bg-alerta"
+              style={{ width: `${(veces / maximo) * 100}%` }}
+            />
+          </span>
+          <span className="text-right font-bold tabular-nums">
+            {t('indicadores.fallas.veces', { count: veces })}
+          </span>
+        </li>
+      ))}
+    </ul>
   )
 }
 
-function Contenido({ datos }: { datos: Datos }) {
+// Una sola barra al 100 %: marcha, mantenimiento, paro y sin registro.
+function UsoDelTiempo({
+  total,
+  tiempoTotal,
+}: {
+  total: Totales
+  tiempoTotal: number
+}) {
   const { t } = useTranslation()
-  const { ventana, series } = datos
-  const aluminio = totalContador(series.aluminio, ventana)
-  const plastico = totalContador(series.otras, ventana)
-  const total = aluminio + plastico
-
-  const estados = estadosDeLaCelda(series.torreta, series.falla)
-  const tiempos = tiempoPorValor(estados, ventana)
-  const marcha = tiempos.get(1) ?? 0
-  const mantenimiento = tiempos.get(2) ?? 0
-  const detenida =
-    (tiempos.get(3) ?? 0) +
-    (tiempos.get(4) ?? 0) +
-    (tiempos.get(ESTADO_FALLA) ?? 0)
-  const disponible = marcha + detenida
-
-  // el tiempo de ciclo lo mide el PLC; si no llega, se calcula con los pasos
-  const ciclosPlc = valoresEnVentana(series.tCiclo, ventana)
-  const ciclo = resumir(
-    ciclosPlc.length
-      ? ciclosPlc.map((p) => p.valor)
-      : duracionesDeCiclo(series.pasos, ventana),
-  )
-  const carreras = valoresEnVentana(series.tCarrera, ventana)
-  const carrera = resumir(carreras.map((p) => p.valor))
-  const fallas = fallasEnVentana(series.falla, series.codFalla, ventana)
-  const ultimaFalla = fallas[fallas.length - 1]
-
+  if (tiempoTotal <= 0) return null
+  const partes = [
+    { clave: 'marcha', clase: 'bg-ok', segundos: total.marcha },
+    {
+      clave: 'mantenimiento',
+      clase: 'bg-aviso',
+      segundos: total.mantenimiento,
+    },
+    { clave: 'paro', clase: 'bg-alerta', segundos: total.paro },
+    { clave: 'sinRegistro', clase: 'bg-linea', segundos: total.sinRegistro },
+  ] as const
   return (
     <>
-      <Ahora datos={datos} />
-
-      <section
-        aria-label={t('tablero.indicadores')}
-        className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6"
-      >
-        <Indicador
-          titulo={t('tablero.kpi.piezas')}
-          valor={String(total)}
-          detalle={t('tablero.kpi.piezasDetalle', {
-            al: aluminio,
-            pl: plastico,
-          })}
-        />
-        <Indicador
-          titulo={t('tablero.kpi.disponibilidad')}
-          valor={
-            disponible > 0
-              ? `${Math.round((marcha / disponible) * 100)} %`
-              : '—'
-          }
-          detalle={t('tablero.kpi.disponibilidadDetalle', {
-            tiempo: segundosLegibles(marcha),
-          })}
-        />
-        <Indicador
-          titulo={t('tablero.kpi.ciclo')}
-          valor={ciclo ? segundosLegibles(ciclo.promedio) : '—'}
-          detalle={
-            ciclo
-              ? t('tablero.kpi.rango', {
-                  minimo: segundosLegibles(ciclo.minimo),
-                  maximo: segundosLegibles(ciclo.maximo),
-                })
-              : t('tablero.kpi.sinCiclos')
-          }
-        />
-        <Indicador
-          titulo={t('tablero.kpi.carrera')}
-          valor={carrera ? `${carrera.promedio.toFixed(2)} s` : '—'}
-          detalle={
-            carrera
-              ? t('tablero.kpi.rango', {
-                  minimo: `${carrera.minimo.toFixed(2)} s`,
-                  maximo: `${carrera.maximo.toFixed(2)} s`,
-                })
-              : t('tablero.kpi.sinDato')
-          }
-        />
-        <Indicador
-          titulo={t('tablero.kpi.fallas')}
-          valor={String(fallas.length)}
-          tono={fallas.length > 0 ? 'alerta' : undefined}
-          detalle={
-            ultimaFalla
-              ? t('tablero.kpi.ultimaFalla', {
-                  codigo: ultimaFalla.codigo ?? '—',
-                  hora: hora(ultimaFalla.inicio),
-                })
-              : t('tablero.kpi.sinFallas')
-          }
-        />
-        <Indicador
-          titulo={t('tablero.kpi.mantenimiento')}
-          valor={segundosLegibles(mantenimiento)}
-          detalle={t('tablero.kpi.mantenimientoDetalle')}
-        />
-      </section>
-
-      <LineaEstados estados={estados} tiempos={tiempos} ventana={ventana} />
-
-      <GraficaPiezas
-        aluminio={series.aluminio}
-        otras={series.otras}
-        ventana={ventana}
-      />
-
-      <div className="grid gap-5 lg:grid-cols-2">
-        <Tendencia
-          titulo={t('tablero.tendencias.ciclo')}
-          nota={t('tablero.tendencias.cicloNota')}
-          puntos={ciclosPlc}
-          decimales={1}
-        />
-        <Tendencia
-          titulo={t('tablero.tendencias.carrera')}
-          nota={t('tablero.tendencias.carreraNota')}
-          puntos={carreras}
-          decimales={2}
-        />
+      <div className="flex h-8 gap-[2px] overflow-hidden rounded-[4px]">
+        {partes.map(({ clave, clase, segundos }) =>
+          segundos > 0 ? (
+            <span
+              key={clave}
+              title={t(`indicadores.tiempo.${clave}`)}
+              className={clase}
+              style={{ width: `${(segundos / tiempoTotal) * 100}%` }}
+            />
+          ) : null,
+        )}
       </div>
-
-      <div className="grid gap-5 lg:grid-cols-2">
-        <GraficaPasos tiempos={tiempoPorValor(series.pasos, ventana)} />
-        <TablaFallas fallas={fallas} />
-      </div>
+      <ul className="grid gap-2 text-[13px] sm:grid-cols-2">
+        {partes.map(({ clave, clase, segundos }) => (
+          <li key={clave} className="flex items-center gap-2">
+            <span
+              aria-hidden="true"
+              className={`h-3 w-3 shrink-0 rounded-[2px] ${clase}`}
+            />
+            <span className="text-suave">
+              {t(`indicadores.tiempo.${clave}`)}
+            </span>
+            <span className="ml-auto font-bold tabular-nums">
+              {horas(segundos)} · {numero((segundos / tiempoTotal) * 100)} %
+            </span>
+          </li>
+        ))}
+      </ul>
     </>
   )
 }
 
-// El estado de la celda a lo largo de la ventana: una franja con un color por estado.
-function LineaEstados({
-  estados,
-  tiempos,
-  ventana,
+function TablaTramos({
+  tramos,
+  etiquetas,
 }: {
-  estados: Punto[]
-  tiempos: Map<number, number>
-  ventana: Ventana
+  tramos: Tramo[]
+  etiquetas: string[]
 }) {
   const { t } = useTranslation()
-  const lista = tramos(estados, ventana)
-  const largo = ventana.hasta - ventana.desde
+  const columnas = [
+    'tramo',
+    'aluminio',
+    'plastico',
+    'piezas',
+    'disponibilidad',
+    'paros',
+    'fallas',
+    'ciclo',
+  ] as const
   return (
-    <Tarjeta titulo={t('tablero.estados.titulo')}>
-      {lista.length === 0 ? (
-        <p className="text-[13px] text-suave">{t('tablero.sinTorreta')}</p>
-      ) : (
-        <>
-          <div className="relative h-9 overflow-hidden rounded-[4px] bg-linea/40">
-            {lista.map((tramo) => {
-              const estilo = estiloEstado(tramo.valor)
-              return (
-                <span
-                  key={tramo.inicio}
-                  title={`${t(`tablero.estadoCelda.${estilo?.estado ?? 'sinDato'}`)} · ${hora(tramo.inicio)}–${hora(tramo.fin)}`}
-                  className={`absolute inset-y-0 border-r-2 border-panel ${estilo?.clase ?? 'bg-suave'}`}
-                  style={{
-                    left: `${((tramo.inicio - ventana.desde) / largo) * 100}%`,
-                    width: `${((tramo.fin - tramo.inicio) / largo) * 100}%`,
-                    backgroundImage: estilo?.rayas ? RAYAS : undefined,
-                  }}
-                />
-              )
-            })}
-          </div>
-          <div className="flex justify-between text-[11px] text-suave tabular-nums">
-            <span>{hora(ventana.desde)}</span>
-            <span>{hora(ventana.hasta)}</span>
-          </div>
-          <ul className="grid gap-x-6 gap-y-1.5 text-[12.5px] sm:grid-cols-3 lg:grid-cols-5">
-            {ESTADOS.map(({ valor, estado, clase, rayas }) => (
-              <li key={valor} className="flex items-center gap-2">
-                <span
-                  aria-hidden="true"
-                  className={`h-3 w-3 shrink-0 rounded-[2px] ${clase}`}
-                  style={{ backgroundImage: rayas ? RAYAS : undefined }}
-                />
-                <span className="text-suave">
-                  {t(`tablero.estados.${estado}`)}
-                </span>
-                <span className="ml-auto font-bold tabular-nums">
-                  {segundosLegibles(tiempos.get(valor) ?? 0)}
-                </span>
-              </li>
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[36rem] text-left text-[12.5px] tabular-nums">
+        <thead className="text-suave">
+          <tr>
+            {columnas.map((c) => (
+              <th key={c} className="py-1.5 pr-3 font-semibold">
+                {t(`indicadores.tabla.${c}`)}
+              </th>
             ))}
-          </ul>
-        </>
-      )}
-    </Tarjeta>
-  )
-}
-
-function GraficaPiezas({
-  aluminio,
-  otras,
-  ventana,
-}: {
-  aluminio: Punto[]
-  otras: Punto[]
-  ventana: Ventana
-}) {
-  const { t } = useTranslation()
-  const cubetas = piezasPorTramo(aluminio, otras, ventana, TRAMOS_PIEZAS)
-  const etiquetas = cubetas.map((c) => hora(c.inicio))
-  return (
-    <Tarjeta
-      titulo={t('tablero.piezas.titulo')}
-      extra={
-        <Leyenda
-          series={[
-            ['bg-serie-al', t('tablero.aluminio')],
-            ['bg-serie-pl', t('tablero.plastico')],
-          ]}
-        />
-      }
-    >
-      <BarrasApiladas
-        etiquetas={etiquetas}
-        descripciones={cubetas.map((c) =>
-          t('tablero.piezas.detalle', {
-            tramo: `${hora(c.inicio)}–${hora(c.fin)}`,
-            al: c.al,
-            pl: c.pl,
-            total: c.al + c.pl,
-          }),
-        )}
-        series={[
-          { clase: 'bg-serie-al', valores: cubetas.map((c) => c.al) },
-          { clase: 'bg-serie-pl', valores: cubetas.map((c) => c.pl) },
-        ]}
-      />
-    </Tarjeta>
-  )
-}
-
-// Un valor por ciclo (los más recientes), como lo mide el PLC.
-function Tendencia({
-  titulo,
-  nota,
-  puntos,
-  decimales,
-}: {
-  titulo: string
-  nota: string
-  puntos: Punto[]
-  decimales: number
-}) {
-  const { t } = useTranslation()
-  const ultimos = puntos.slice(-PUNTOS_TENDENCIA)
-  if (ultimos.length === 0)
-    return (
-      <Tarjeta titulo={titulo} nota={nota}>
-        <p className="text-[13px] text-suave">{t('tablero.sinDatos')}</p>
-      </Tarjeta>
-    )
-  const maximo = Math.max(...ultimos.map((p) => p.valor))
-  const tope = maximo <= 1 ? 1 : Math.ceil(maximo * 1.15)
-  const etiquetas = ultimos.map((p) => hora(Date.parse(p.ts)))
-  return (
-    <Tarjeta titulo={titulo} nota={nota}>
-      <Linea
-        etiquetas={etiquetas}
-        valores={ultimos.map((p) => p.valor)}
-        maximo={tope}
-        arriba={`${tope} s`}
-        alto={150}
-        descripciones={ultimos.map(
-          (p, i) => `${etiquetas[i]}: ${p.valor.toFixed(decimales)} s`,
-        )}
-      />
-    </Tarjeta>
-  )
-}
-
-// Cuánto tiempo pasó la celda en cada paso; un paso que se alarga se ve de inmediato.
-function GraficaPasos({ tiempos }: { tiempos: Map<number, number> }) {
-  const { t } = useTranslation()
-  const maximo = Math.max(1, ...tiempos.values())
-  return (
-    <Tarjeta titulo={t('tablero.pasos.titulo')} nota={t('tablero.pasos.nota')}>
-      {tiempos.size === 0 ? (
-        <p className="text-[13px] text-suave">{t('tablero.sinDatos')}</p>
-      ) : (
-        <ul className="flex flex-col gap-1.5">
-          {PASOS.map((paso) => {
-            const segundos = tiempos.get(paso) ?? 0
+          </tr>
+        </thead>
+        <tbody>
+          {tramos.map((tramo, i) => {
+            const d = disponibilidad(tramo)
+            const c = cicloPromedio(tramo)
             return (
-              <li
-                key={paso}
-                className="grid grid-cols-[minmax(0,8rem)_1fr_4.5rem] items-center gap-2 text-[12.5px]"
-              >
-                <span className="truncate text-suave">
-                  {nombrePaso(paso, t)}
-                </span>
-                <span className="h-3 rounded-r-[4px] bg-linea/40">
-                  <span
-                    className="block h-full rounded-r-[4px] bg-acento"
-                    style={{ width: `${(segundos / maximo) * 100}%` }}
-                  />
-                </span>
-                <span className="text-right font-bold tabular-nums">
-                  {segundosLegibles(segundos)}
-                </span>
-              </li>
-            )
-          })}
-        </ul>
-      )}
-    </Tarjeta>
-  )
-}
-
-function TablaFallas({
-  fallas,
-}: {
-  fallas: ReturnType<typeof fallasEnVentana>
-}) {
-  const { t } = useTranslation()
-  const recientes = [...fallas].reverse().slice(0, 10)
-  return (
-    <Tarjeta titulo={t('tablero.fallas.titulo')}>
-      {recientes.length === 0 ? (
-        <p className="text-[13px] text-suave">{t('tablero.fallas.ninguna')}</p>
-      ) : (
-        <table className="w-full text-left text-[12.5px] tabular-nums">
-          <thead className="text-suave">
-            <tr>
-              <th className="py-1.5 pr-3 font-semibold">
-                {t('tablero.fallas.hora')}
-              </th>
-              <th className="py-1.5 pr-3 font-semibold">
-                {t('tablero.fallas.codigo')}
-              </th>
-              <th className="py-1.5 font-semibold">
-                {t('tablero.fallas.duracion')}
-              </th>
-            </tr>
-          </thead>
-          <tbody>
-            {recientes.map((falla) => (
-              <tr key={falla.inicio} className="border-t border-linea">
-                <td className="py-1.5 pr-3">{hora(falla.inicio)}</td>
-                <td className="py-1.5 pr-3 font-bold text-alerta">
-                  {falla.codigo ?? '—'}
+              <tr key={tramo.inicio} className="border-t border-linea">
+                <td className="py-1.5 pr-3">{etiquetas[i]}</td>
+                <td className="py-1.5 pr-3">{numero(tramo.aluminio)}</td>
+                <td className="py-1.5 pr-3">{numero(tramo.plastico)}</td>
+                <td className="py-1.5 pr-3 font-bold">
+                  {numero(tramo.aluminio + tramo.plastico)}
                 </td>
-                <td className="py-1.5">
-                  {falla.fin === null
-                    ? t('tablero.fallas.activa')
-                    : segundosLegibles((falla.fin - falla.inicio) / 1000)}
+                <td className="py-1.5 pr-3">
+                  {d === null ? '—' : `${numero(d, 1)} %`}
+                </td>
+                <td className="py-1.5 pr-3">{numero(tramo.paros)}</td>
+                <td className="py-1.5 pr-3">{numero(tramo.fallas)}</td>
+                <td className="py-1.5 pr-3">
+                  {c === null ? '—' : segundosCiclo(c)}
                 </td>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-    </Tarjeta>
+            )
+          })}
+        </tbody>
+      </table>
+    </div>
   )
 }

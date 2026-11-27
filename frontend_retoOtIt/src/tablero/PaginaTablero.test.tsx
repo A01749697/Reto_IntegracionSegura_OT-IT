@@ -1,28 +1,72 @@
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type {
   ResultadoHistorial,
   ResultadoLecturas,
 } from '../gemelo/apiLecturas'
+import type {
+  Cubeta,
+  ResultadoIndicadores,
+  Tramo,
+} from '../indicadores/apiIndicadores'
+import PaginaTablero from './PaginaTablero'
 
-const NODO = {
-  torreta: 'TAB_TORRETA',
-  falla: 'TAB_FALLA',
-  codFalla: 'TAB_COD_FALLA',
-  paso: 'TAB_PASO',
-  aluminio: 'TAB_ALUMINIO',
-  otras: 'TAB_OTRAS',
-  tCiclo: 'TAB_T_CICLO_S',
-  tCarreraPd1: 'TAB_T_CARRERA_PD1_S',
-}
-import PaginaTablero, { SEGUNDOS_ENTRE_CONSULTAS } from './PaginaTablero'
-
-// La última lectura de la celda; la ventana termina aquí.
+const AHORA = new Date(2026, 10, 25, 15, 30)
+// la lectura más reciente de la celda; la operación reciente termina aquí
 const FIN = Date.parse('2026-11-26T20:00:00.000Z')
-const en = (minutos: number, valor: number) => ({
-  ts: new Date(FIN + minutos * 60_000).toISOString(),
-  valor,
+
+const tramo = (inicio: Date, cambios: Partial<Tramo>): Tramo => ({
+  inicio: inicio.toISOString(),
+  aluminio: 0,
+  plastico: 0,
+  marcha: 0,
+  mantenimiento: 0,
+  paro: 0,
+  sinRegistro: 0,
+  paros: 0,
+  fallas: 0,
+  ciclos: 0,
+  segundosCiclo: 0,
+  ...cambios,
 })
+
+// Hoy produce 30 piezas; ayer, 20.
+async function indicadores(
+  desde: Date,
+  _hasta: Date,
+  cubeta: Cubeta,
+): Promise<ResultadoIndicadores> {
+  const esHoy = desde.getTime() >= new Date(2026, 10, 25).getTime()
+  const n = cubeta === 'hora' ? 24 : 7
+  const paso = (cubeta === 'hora' ? 3600 : 86400) * 1000
+  const tramos = Array.from({ length: n }, (_, i) =>
+    tramo(
+      new Date(desde.getTime() + i * paso),
+      i > 0
+        ? {}
+        : esHoy
+          ? {
+              aluminio: 12,
+              plastico: 18,
+              marcha: 3 * 3600,
+              paro: 3600,
+              paros: 2,
+              fallas: 3,
+              ciclos: 30,
+              segundosCiclo: 450,
+            }
+          : { aluminio: 10, plastico: 10, marcha: 3600, paro: 3600 },
+    ),
+  )
+  const fallas = esHoy
+    ? [
+        { ts: desde.toISOString(), codigo: 3 },
+        { ts: desde.toISOString(), codigo: 3 },
+        { ts: desde.toISOString(), codigo: 1 },
+      ]
+    : []
+  return { ok: true, tramos, fallas, truncado: false }
+}
 
 const lectura = (variable: string, valor: number, ms = FIN) => ({
   plc: 'S7-1500',
@@ -34,28 +78,37 @@ const lectura = (variable: string, valor: number, ms = FIN) => ({
 const LECTURAS: ResultadoLecturas = {
   ok: true,
   lecturas: [
-    lectura(NODO.torreta, 3),
-    lectura(NODO.falla, 1),
-    lectura(NODO.codFalla, 4),
-    lectura(NODO.paso, 8, FIN - 5000),
+    lectura('TAB_TORRETA', 3),
+    lectura('TAB_FALLA', 1),
+    lectura('TAB_COD_FALLA', 4),
+    lectura('TAB_PASO', 8, FIN - 5000),
   ],
 }
 
-// Lo que el historian tiene de cada nodo en la última hora.
+// minuto m antes del final de la ventana
+const en = (m: number, valor: number) => ({
+  ts: new Date(FIN + m * 60_000).toISOString(),
+  valor,
+})
 const HISTORIAL: Record<string, { ts: string; valor: number }[]> = {
-  [NODO.aluminio]: [en(-90, 40), en(-30, 41), en(-20, 43)],
-  [NODO.otras]: [en(-90, 200), en(-10, 201)],
-  [NODO.paso]: [en(-61, 0), en(-50, 2), en(-49, 9), en(-48, 0)],
+  TAB_PASO: [en(-61, 0), en(-50, 2), en(-49, 9), en(-48, 0)],
   // 20 min en marcha, 10 en mantenimiento, 10 en marcha, 10 en falla, 10 en paro
-  [NODO.torreta]: [en(-120, 1), en(-40, 2), en(-30, 1), en(-20, 3)],
-  [NODO.falla]: [en(-120, 0), en(-20, 1), en(-10, 0)],
-  [NODO.codFalla]: [en(-120, 0), en(-20, 4)],
-  [NODO.tCiclo]: [en(-45, 9.5), en(-35, 10.5)],
-  [NODO.tCarreraPd1]: [en(-45, 0.4), en(-35, 0.6)],
+  TAB_TORRETA: [en(-60, 1), en(-40, 2), en(-30, 1), en(-20, 3)],
+  TAB_FALLA: [en(-60, 0), en(-20, 1), en(-10, 0)],
+  TAB_COD_FALLA: [en(-60, 0), en(-20, 4)],
+  TAB_T_CICLO_S: [en(-45, 9.5), en(-35, 10.5)],
+  TAB_T_CARRERA_PD1_S: [en(-45, 0.4), en(-35, 0.6)],
+  PIEZAS_ALUMINIO: [en(-90, 100), en(-30, 103)],
+  PIEZAS_OTRAS: [en(-90, 50), en(-25, 51)],
+  TIEMPO_CICLO_S: [en(-30, 6), en(-25, 8)],
 }
 
-function preparar(lecturas: ResultadoLecturas = LECTURAS) {
+function preparar(
+  lecturas: ResultadoLecturas = LECTURAS,
+  obtener = vi.fn(indicadores),
+) {
   const props = {
+    obtener,
     obtenerLecturas: vi.fn().mockResolvedValue(lecturas),
     obtenerHistorial: vi.fn<
       (
@@ -65,7 +118,9 @@ function preparar(lecturas: ResultadoLecturas = LECTURAS) {
         hasta: Date,
       ) => Promise<ResultadoHistorial>
     >(async (_plc, nodo) => ({ ok: true, puntos: HISTORIAL[nodo] ?? [] })),
+    descargar: vi.fn(),
     sesionCaducada: vi.fn(),
+    ahora: () => AHORA,
   }
   render(<PaginaTablero {...props} />)
   return props
@@ -75,94 +130,60 @@ const tarjeta = (titulo: string) =>
   screen.getByRole('heading', { name: titulo }).parentElement as HTMLElement
 
 beforeEach(() => vi.clearAllMocks())
-afterEach(() => vi.useRealTimers())
 
 describe('PaginaTablero', () => {
-  it('muestra el estado actual con el mismo letrero que el gemelo', async () => {
+  it('arriba dice cómo está la celda ahora', async () => {
     preparar()
     const ahora = await screen.findByRole('region', { name: 'Estado actual' })
     expect(ahora).toHaveTextContent('FALLA · Código 4')
     expect(ahora).toHaveTextContent('8 · Suelta')
   })
 
-  it('calcula los indicadores de la última hora', async () => {
-    preparar()
-    await screen.findByText('Piezas por tramo')
-    expect(tarjeta('Piezas')).toHaveTextContent('4')
-    expect(tarjeta('Piezas')).toHaveTextContent('3 aluminio · 1 plástico')
-    // 30 min en marcha de 50 sin contar el mantenimiento
-    expect(tarjeta('Disponibilidad')).toHaveTextContent('60 %')
-    expect(tarjeta('Tiempo de ciclo')).toHaveTextContent('10 s')
-    expect(tarjeta('Carrera PD-1')).toHaveTextContent('0.50 s')
-    expect(tarjeta('Fallas')).toHaveTextContent('1')
-    expect(tarjeta('Fallas')).toHaveTextContent('código 4')
-    expect(tarjeta('Mantenimiento')).toHaveTextContent('10 min')
+  it('abre en hoy, por hora, y compara contra ayer', async () => {
+    const { obtener } = preparar()
+    await screen.findByText('Producción por hora')
+    expect(obtener.mock.calls[0]?.[2]).toBe('hora')
+    expect(tarjeta('Producción')).toHaveTextContent('30')
+    expect(tarjeta('Producción')).toHaveTextContent(
+      '+50 % vs. periodo anterior',
+    )
+    expect(tarjeta('Disponibilidad')).toHaveTextContent('75.0 %')
+    expect(tarjeta('Fallas')).toHaveTextContent('3')
   })
 
-  it('el estado de la celda reparte el tiempo entre los cinco estados', async () => {
+  it('la operación reciente termina en la última lectura de la celda e incluye la garra', async () => {
+    const props = preparar()
+    await screen.findByText('Tendencia de la carrera PD-1')
+    const [, , desde, hasta] = props.obtenerHistorial.mock.calls[0]
+    expect(hasta.getTime()).toBe(FIN + 1000)
+    // 8 h de ventana y otras 8 antes, para saber cómo estaba todo al empezar
+    expect(desde.getTime()).toBe(FIN - 16 * 3600_000)
+    expect(tarjeta('Clasificadas por la garra')).toHaveTextContent('4')
+    expect(tarjeta('Ciclo de la garra')).toHaveTextContent('7 s')
+    expect(tarjeta('Carrera PD-1')).toHaveTextContent('0.50 s')
+  })
+
+  it('reparte el tiempo entre los estados de la celda y lista las fallas', async () => {
     preparar()
     const estados = (
-      await screen.findByRole('heading', {
-        name: 'Estado de la celda',
-      })
+      await screen.findByRole('heading', { name: 'Estado de la celda' })
     ).closest('section') as HTMLElement
     expect(estados).toHaveTextContent('Marcha30 min')
     expect(estados).toHaveTextContent('Mantenimiento10 min')
     expect(estados).toHaveTextContent('Falla10 min')
-    expect(estados).toHaveTextContent('Paro10 min')
+    const fallas = screen
+      .getByRole('heading', { name: 'Fallas recientes' })
+      .closest('section') as HTMLElement
+    expect(fallas).toHaveTextContent('10 min')
   })
 
-  it('lista las fallas con su código y cuánto duraron', async () => {
-    preparar()
-    const fallas = await screen.findByRole('heading', {
-      name: 'Fallas recientes',
-    })
-    await waitFor(() =>
-      expect(screen.getAllByRole('table').length).toBeGreaterThan(0),
-    )
-    const tabla = screen.getByRole('table')
-    expect(tabla).toHaveTextContent('4')
-    expect(tabla).toHaveTextContent('10 min')
-    expect(fallas).toBeInTheDocument()
-  })
-
-  it('la ventana termina en la lectura más reciente de la celda, no en el reloj', async () => {
-    const props = preparar()
-    await screen.findByText('Piezas por tramo')
-    const [, , desde, hasta] = props.obtenerHistorial.mock.calls[0]
-    expect(hasta.getTime()).toBe(FIN + 1000)
-    // una hora de ventana y otra antes, para saber cómo estaba todo al empezar
-    expect(desde.getTime()).toBe(FIN - 2 * 3600_000)
-    expect(
-      screen.getByText(/Sin lecturas nuevas desde hace/),
-    ).toBeInTheDocument()
-  })
-
-  it('al cambiar el periodo vuelve a pedir el historial con la nueva ventana', async () => {
-    const props = preparar()
-    await screen.findByText('Piezas por tramo')
-    fireEvent.click(screen.getByRole('button', { name: '24 horas' }))
-    await waitFor(() => {
-      const ultima = props.obtenerHistorial.mock.calls.at(-1)!
-      expect(ultima[2].getTime()).toBe(FIN - 48 * 3600_000)
-    })
-  })
-
-  it('cada tramo de la gráfica de piezas tiene su detalle', async () => {
-    preparar()
-    await screen.findByText('Piezas por tramo')
-    expect(
-      screen.getAllByRole('button', { name: /piezas \(.* aluminio/ }),
-    ).toHaveLength(12)
-  })
-
-  it('se actualiza solo', async () => {
-    vi.useFakeTimers()
-    const props = preparar()
-    await vi.advanceTimersByTimeAsync(100)
-    expect(props.obtenerLecturas).toHaveBeenCalledTimes(1)
-    await vi.advanceTimersByTimeAsync(SEGUNDOS_ENTRE_CONSULTAS * 1000)
-    expect(props.obtenerLecturas).toHaveBeenCalledTimes(2)
+  it('descarga el detalle como CSV', async () => {
+    const { descargar } = preparar()
+    await screen.findByText('Producción por hora')
+    fireEvent.click(screen.getByRole('button', { name: 'Descargar CSV' }))
+    const [nombre, archivo] = descargar.mock.calls[0] as [string, Blob]
+    expect(nombre).toMatch(/^indicadores-hoy-.*\.csv$/)
+    expect(await archivo.text()).toContain('inicio,aluminio,plastico')
   })
 
   it('si la sesión venció, avisa', async () => {
@@ -170,10 +191,13 @@ describe('PaginaTablero', () => {
     await waitFor(() => expect(props.sesionCaducada).toHaveBeenCalled())
   })
 
-  it('si no se pudo consultar, lo dice', async () => {
-    preparar({ ok: false, motivo: 'fallo' })
+  it('si no se pudieron calcular los indicadores, lo dice', async () => {
+    preparar(
+      LECTURAS,
+      vi.fn().mockResolvedValue({ ok: false, motivo: 'fallo' }),
+    )
     expect(await screen.findByRole('alert')).toHaveTextContent(
-      'No se pudieron leer',
+      'No se pudieron calcular',
     )
   })
 })
