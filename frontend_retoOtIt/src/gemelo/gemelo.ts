@@ -12,8 +12,10 @@ import {
   despejarLinea,
   estaEmpacando,
   identificarEnLinea,
+  limpiarDeposito,
   pintarAlmacen,
   type Planta,
+  prepararDeposito,
   type Tipo,
 } from './planta'
 import {
@@ -33,10 +35,10 @@ import {
   type Repeticion,
 } from './repeticion'
 import {
-  crearGarraReal,
+  crearVigiaGarra,
   hayDatosDeGarra,
-  seguirGarra,
-  type GarraReal,
+  vigilarGarra,
+  type VigiaGarra,
 } from './garraReal'
 import { avanzarSeguidor, crearSeguidor, type Seguidor } from './seguidor'
 import { senalesIniciales, type Senales } from './senales'
@@ -54,7 +56,7 @@ export type Gemelo = {
   porEntrar: Tipo[] // en vivo: materiales ya contados que aún no tienen pieza
   repeticion: Repeticion
   seguidor: Seguidor
-  garraReal: GarraReal // en vivo, la garra sigue al S7-300
+  vigiaGarra: VigiaGarra // en vivo, lo que va haciendo la garra real (S7-300)
 }
 
 // Lo que necesita la pantalla en cada refresco.
@@ -77,7 +79,7 @@ export function crearGemelo(
     porEntrar: [],
     repeticion: crearRepeticion(),
     seguidor: crearSeguidor(),
-    garraReal: crearGarraReal(),
+    vigiaGarra: crearVigiaGarra(),
   }
   ponerModo(gemelo, modo)
   return gemelo
@@ -99,7 +101,7 @@ export function ponerModo(gemelo: Gemelo, modo: Modo) {
   gemelo.porEntrar = []
   gemelo.repeticion = crearRepeticion()
   gemelo.seguidor = crearSeguidor()
-  gemelo.garraReal = crearGarraReal()
+  gemelo.vigiaGarra = crearVigiaGarra()
   pintarAlmacen(planta, [])
   // la simulación arranca en verde; en vivo la torreta real solo prende las luces
   ponerTorreta(gemelo, modo === 'simulacion' ? ESTADOS_TORRETA.verde : null)
@@ -178,6 +180,10 @@ export function avanzarGemelo(gemelo: Gemelo, segundos: number) {
   )
   const objetivo = vivo ? pasoEn(gemelo.repeticion, gemelo.reloj) : null
   const valores = vivo ? valoresEn(gemelo.repeticion, gemelo.reloj) : {}
+  // en vivo, cada vez que la pinza real cierra es un trabajo para la garra del gemelo
+  plc.garra.porTrabajos = vivo && hayDatosDeGarra(valores)
+  if (plc.garra.porTrabajos)
+    vigilarGarra(gemelo.vigiaGarra, valores, plc.garra.trabajos)
   const empujador = {
     ext: valores[NODOS_EMPUJADOR.ext.nodo],
     ret: valores[NODOS_EMPUJADOR.ret.nodo],
@@ -193,9 +199,13 @@ export function avanzarGemelo(gemelo: Gemelo, segundos: number) {
         empujador,
       )
     const enAlmacen = contarAlmacen(planta)
-    const garraReal = vivo && hayDatosDeGarra(valores)
-    avanzarPlc(plc, senales, planta.carriles, PASO_FIJO, !vivo, !garraReal)
-    if (garraReal) seguirGarra(gemelo.garraReal, valores, senales, planta)
+    if (vivo && plc.garra.porTrabajos) {
+      limpiarDeposito(planta)
+      const [siguiente] = plc.garra.trabajos
+      if (plc.garra.estado === 'REPOSO' && siguiente)
+        prepararDeposito(planta, siguiente.material)
+    }
+    avanzarPlc(plc, senales, planta.carriles, PASO_FIJO, !vivo)
     avanzarPlanta(planta, senales, PASO_FIJO)
     // salió una pieza del almacén: si ya se había contado, se lleva ese material
     if (vivo && contarAlmacen(planta) < enAlmacen && gemelo.porEntrar.length) {

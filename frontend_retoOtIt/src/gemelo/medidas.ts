@@ -54,11 +54,29 @@ export const RAMPA = { z0: -0.125, y0: 0.21, z1: 0.15, pendiente: 0.09 / 0.275 }
 export const alturaCarril = (z: number) =>
   RAMPA.y0 - (z - RAMPA.z0) * RAMPA.pendiente
 
-// cajas de empaque: la 0 es de aluminio (bajo los carriles 1-2) y la 1 de plastico.
-// Cada caja recibe de una vez las piezas de un carril lleno.
-export const CAJA_X = [0.6025, 0.7725]
-export const CAJA_Y = 0.034
-export const CAJA_Z = 0.235
+// Banda de salida: cuando un carril junta sus 4 piezas las suelta aquí, una por una, y la
+// banda las lleva a la estación de empaque al final de la mesa.
+export const BANDA = {
+  x0: 0.47,
+  x1: 0.84,
+  z: 0.235,
+  y: 0.045, // superficie
+  ancho: 0.085,
+  velocidad: 0.16, // m/s
+}
+export const Y_PIEZA_BANDA = BANDA.y + 0.025
+// cada cuánto suelta un carril la siguiente pieza (s)
+export const SOLTAR_CADA = 0.5
+
+// Cajas de empaque a los lados del final de la banda: la 0 de aluminio, la 1 de plástico.
+// El desviador manda cada pieza a la de su material.
+export const CAJAS = [
+  { x: 0.92, z: 0.1 },
+  { x: 0.92, z: 0.37 },
+] as const
+export const CAJA_Y = 0.005
+// altura a la que el desviador pasa la pieza por encima de la pared de la caja
+export const Y_PASO_CAJA = 0.115
 export const PIEZAS_POR_CAJA = 4
 export const CAJAS_POR_TARIMA = 12
 

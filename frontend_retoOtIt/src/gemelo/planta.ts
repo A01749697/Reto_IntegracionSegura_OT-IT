@@ -5,19 +5,19 @@
 import {
   ACELERACION_GUIA,
   alturaCarril,
-  CAJA_X,
+  BANDA,
   CAJA_Y,
-  CAJA_Z,
+  CAJAS,
   CAJAS_POR_TARIMA,
   CARRERA,
   CARRILES,
-  CARRILES_DE,
   GUIA_X0,
   GUIA_X1,
   PARADAS_CARRO,
   PASO_EN_CARRIL,
   PIEZAS_POR_CAJA,
   PIEZAS_POR_CARRIL,
+  SOLTAR_CADA,
   RAMPA,
   TOTAL_PIEZAS,
   VELOCIDAD_MAXIMA_GUIA,
@@ -28,6 +28,8 @@ import {
   X_TOPE,
   Y_PIEZA,
   Y_PIEZA_TOMA,
+  Y_PASO_CAJA,
+  Y_PIEZA_BANDA,
   Y_PINZA_ARRIBA,
   yPiezaEn,
   Z_LINEA,
@@ -39,7 +41,7 @@ export type Tipo = 'al' | 'pl'
 
 export type Pieza = {
   tipo: Tipo
-  estado: 'almacen' | 'linea' | 'pinza' | 'carril' | 'cae' | 'caja'
+  estado: 'almacen' | 'linea' | 'pinza' | 'carril' | 'banda' | 'cae' | 'caja'
   fila: number // lugar en el almacen; 0 es la de abajo
   x: number
   y: number
@@ -67,10 +69,12 @@ export type Caja = {
 }
 
 // Un carril de la rampa: las piezas se forman una tras otra contra la compuerta de abajo.
-// Cuando hay PIEZAS_POR_CARRIL, la compuerta abre y bajan todas juntas a la caja.
+// Cuando hay PIEZAS_POR_CARRIL, la compuerta las suelta a la banda de una en una.
 export type Carril = {
   piezas: number
   lleno: number // segundos que lleva lleno y formado
+  soltando: boolean
+  t: number // segundos desde que soltó la última
 }
 
 export type Planta = {
@@ -86,6 +90,7 @@ export type Planta = {
   // en vivo el material de una pieza no se sabe hasta que lo cuenta el S7-1516
   enVivo: boolean
   ultimaSacada: Pieza | null // la pieza que está en proceso en los pistones
+  desvio: Tipo | null // a qué caja mandó el desviador la última pieza
   azar: () => number
 }
 
@@ -148,7 +153,13 @@ export function crearPlanta(azar: () => number = Math.random): Planta {
     extension: { A: 0, B: 0, C: 0, Z: 0, T: 1 },
     carro: { x: X_TOMA, pinza: 0, lleva: null },
     piezas,
-    carriles: CARRILES.map(() => ({ piezas: 0, lleno: 0 })),
+    carriles: CARRILES.map(() => ({
+      piezas: 0,
+      lleno: 0,
+      soltando: false,
+      t: 0,
+    })),
+    desvio: null,
     cajas: [cajaVacia('al'), cajaVacia('pl')],
     tarima: [],
     caida: 0,
@@ -176,14 +187,24 @@ function reciclar(planta: Planta, pieza: Pieza) {
 
 // En vivo: las piezas de abajo del almacén toman, en orden, los materiales que el S7-1516
 // ya contó; las demás quedan grises porque todavía no se sabe qué son.
-// En vivo la garra real puede tomar piezas que el gemelo no vio llegar: se pone una en el
-// depósito, tomada de lo alto del almacén (la parte que no se ve de la pila).
-export function ponerEnDeposito(planta: Planta, tipo: Tipo) {
-  const ocupado = planta.piezas.some(
-    (p) => p.estado === 'linea' && p.x > X_TOMA - 0.03,
+const enDeposito = (planta: Planta) =>
+  planta.piezas.filter(
+    (p) =>
+      p.estado === 'linea' && p.x > X_TOMA - 0.03 && p.y <= Y_PIEZA_TOMA + 0.01,
   )
+
+// En vivo, la garra real puede tomar piezas que el gemelo no vio llegar (las ponen a mano
+// o los pistones van desfasados). Antes de que la garra del gemelo baje, en el depósito
+// queda una pieza del material que tomó la real: la que ya estaba o una de lo alto del
+// almacén (la parte de la pila que no se ve).
+export function prepararDeposito(planta: Planta, tipo: Tipo) {
+  const [ya] = enDeposito(planta)
+  if (ya) {
+    Object.assign(ya, { tipo, conocida: true })
+    return
+  }
   const pila = enAlmacen(planta)
-  if (ocupado || pila.length === 0) return
+  if (pila.length === 0) return
   const pieza = pila.reduce((a, b) => (b.fila > a.fila ? b : a))
   Object.assign(pieza, {
     estado: 'linea',
@@ -198,6 +219,13 @@ export function ponerEnDeposito(planta: Planta, tipo: Tipo) {
     vy: 0,
     giro: 0,
   })
+}
+
+// En vivo los pistones suelen ir más rápido que la garra: en el depósito se deja a lo más
+// una pieza esperando, para que no se encimen.
+export function limpiarDeposito(planta: Planta) {
+  const piezas = enDeposito(planta)
+  for (const p of piezas.slice(1)) reciclar(planta, p)
 }
 
 export function pintarAlmacen(planta: Planta, tipos: readonly Tipo[]) {
@@ -282,39 +310,78 @@ function moverPinza(planta: Planta) {
   }
 }
 
-// La caja de cada material queda bajo sus dos carriles.
-const cajaDelCarril = (carril: number) =>
-  (CARRILES_DE.al as readonly number[]).includes(carril) ? 0 : 1
-
-// Un carril lleno espera un momento formado y, si su caja está vacía y lista, abre la
-// compuerta: sus piezas bajan juntas a la caja, dos al frente y dos atrás.
+// Un carril lleno espera un momento formado y suelta sus piezas a la banda de una en una,
+// cuando abajo no viene otra pieza.
 function moverCarriles(planta: Planta, dt: number) {
   planta.carriles.forEach((carril, indice) => {
-    const suyas = planta.piezas.filter(
-      (p) => p.estado === 'carril' && p.carril === indice,
-    )
-    const formado =
-      carril.piezas >= PIEZAS_POR_CARRIL &&
-      suyas.length >= PIEZAS_POR_CARRIL &&
-      suyas.every((p) => p.v === 0)
-    carril.lleno = formado ? carril.lleno + dt : 0
-    const caja = planta.cajas[cajaDelCarril(indice)]
-    if (carril.lleno < 1.2 || caja.estado !== 'llenando' || caja.piezas > 0)
+    const suyas = planta.piezas
+      .filter((p) => p.estado === 'carril' && p.carril === indice)
+      .sort((a, b) => a.lugar - b.lugar)
+    if (!carril.soltando) {
+      const formado =
+        carril.piezas >= PIEZAS_POR_CARRIL &&
+        suyas.length >= PIEZAS_POR_CARRIL &&
+        suyas.every((p) => p.v === 0)
+      carril.lleno = formado ? carril.lleno + dt : 0
+      if (carril.lleno >= 1) {
+        carril.soltando = true
+        carril.t = SOLTAR_CADA
+      }
       return
-    for (const p of suyas) {
-      p.caja = cajaDelCarril(indice)
-      p.vy = -0.25
-      p.estado = 'cae'
-      p.destino = [
-        p.lugar % 2 ? 0.04 : -0.04,
-        0.029,
-        p.lugar < 2 ? 0.04 : -0.04,
-      ]
     }
-    caja.piezas += suyas.length
-    carril.piezas = 0
-    carril.lleno = 0
+    carril.t += dt
+    const abajo = suyas[0]
+    if (!abajo) {
+      Object.assign(carril, { soltando: false, lleno: 0 })
+      return
+    }
+    const libre = !planta.piezas.some(
+      (p) => p.estado === 'banda' && Math.abs(p.x - CARRILES[indice]) < 0.065,
+    )
+    if (carril.t < SOLTAR_CADA || abajo.v !== 0 || !libre) return
+    abajo.estado = 'banda'
+    abajo.vy = 0
+    for (const p of suyas.slice(1)) p.lugar--
+    carril.piezas--
+    carril.t = 0
   })
+}
+
+// La banda lleva las piezas hasta el final; ahí el desviador manda cada una a la caja de su
+// material. Si la caja no está lista, la pieza espera y las de atrás se juntan.
+function moverEnBanda(planta: Planta, dt: number) {
+  const enBanda = planta.piezas
+    .filter((p) => p.estado === 'banda')
+    .sort((a, b) => b.x - a.x)
+  let delante = Infinity
+  for (const p of enBanda) {
+    if (p.z < RAMPA.z1) {
+      // termina de salir del carril
+      p.z = Math.min(RAMPA.z1, p.z + 0.3 * dt)
+      p.y = alturaCarril(p.z) + 0.027
+    } else {
+      p.z = hacia(p.z, BANDA.z, dt * 0.4)
+      p.vy -= 5 * dt
+      p.y = Math.max(Y_PIEZA_BANDA, p.y + p.vy * dt)
+    }
+    p.giro = hacia(p.giro, 0, dt * 4)
+    const sobre = p.y <= Y_PIEZA_BANDA + 0.001 && Math.abs(p.z - BANDA.z) < 0.01
+    if (sobre) {
+      p.vy = 0
+      p.x = Math.min(p.x + BANDA.velocidad * dt, delante - 0.058, BANDA.x1)
+    }
+    delante = Math.min(delante, p.x)
+    if (!sobre || p.x < BANDA.x1 - 0.0005) continue
+    const indice = p.tipo === 'al' ? 0 : 1
+    const caja = planta.cajas[indice]
+    if (caja.estado !== 'llenando' || caja.piezas >= PIEZAS_POR_CAJA) continue
+    const lugar = caja.piezas++
+    p.caja = indice
+    p.estado = 'cae'
+    p.vy = 0
+    p.destino = [lugar % 2 ? 0.04 : -0.04, 0.029, lugar < 2 ? -0.04 : 0.04]
+    planta.desvio = p.tipo
+  }
 }
 
 // cajas: llenar, cerrar las solapas, salir por los rodillos y pasar a la tarima
@@ -337,8 +404,9 @@ function moverCajas(planta: Planta, s: Senales, dt: number) {
         caja.t = 0
       }
     } else if (caja.estado === 'saliendo') {
-      caja.avance = Math.min(0.155, caja.avance + 0.2 * dt)
-      if (caja.avance >= 0.155 && caja.t > 1.1) {
+      // el empacador la jala a la orilla de la mesa y se la lleva a la tarima
+      caja.avance = Math.min(0.05, caja.avance + 0.1 * dt)
+      if (caja.avance >= 0.05 && caja.t > 0.8) {
         caja.estado = 'retiro'
         caja.t = 0
       }
@@ -464,20 +532,25 @@ export function avanzarPlanta(planta: Planta, s: Senales, dt: number) {
         p.v = 0
       }
     } else if (p.estado === 'cae') {
+      // el desviador la pasa por encima de la pared y la deja en su lugar dentro de la caja
       const caja = planta.cajas[p.caja]
-      const ox = CAJA_X[p.caja] + p.destino[0]
+      const ox = CAJAS[p.caja].x + caja.avance + p.destino[0]
       const oy = CAJA_Y + p.destino[1]
-      const oz = CAJA_Z + caja.avance + p.destino[2]
-      p.vy -= 5 * dt
-      p.y = Math.max(oy, p.y + p.vy * dt)
-      p.x = hacia(p.x, ox, dt * 0.3)
-      p.z = hacia(p.z, oz, dt * 0.8)
+      const oz = CAJAS[p.caja].z + p.destino[2]
+      const encima = Math.hypot(p.x - ox, p.z - oz) < 0.004
+      if (encima) {
+        p.vy -= 5 * dt
+        p.y = Math.max(oy, p.y + p.vy * dt)
+      } else p.y = hacia(p.y, Y_PASO_CAJA, dt * 0.5)
+      p.x = hacia(p.x, ox, dt * 0.45)
+      p.z = hacia(p.z, oz, dt * 0.45)
       p.giro = hacia(p.giro, 0, dt * 6)
-      if (p.y <= oy && Math.abs(p.z - oz) < 0.002) p.estado = 'caja'
+      if (encima && p.y <= oy) p.estado = 'caja'
     }
   }
 
   moverCarriles(planta, dt)
+  moverEnBanda(planta, dt)
   moverCajas(planta, s, dt)
 
   // lo que ven los sensores
@@ -506,11 +579,11 @@ export function despejarLinea(planta: Planta) {
   planta.carro.lleva = null
   planta.ultimaSacada = null
   for (const p of planta.piezas) {
-    if (p.estado === 'linea' || p.estado === 'pinza' || p.estado === 'carril')
+    if (['linea', 'pinza', 'carril', 'banda'].includes(p.estado))
       reciclar(planta, p)
   }
   for (const carril of planta.carriles)
-    Object.assign(carril, { piezas: 0, lleno: 0 })
+    Object.assign(carril, { piezas: 0, lleno: 0, soltando: false, t: 0 })
   planta.caida = 0
   planta.extension.T = 1
 }

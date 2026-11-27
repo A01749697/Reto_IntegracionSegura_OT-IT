@@ -5,6 +5,7 @@
 //   - Garra (S7-300): no depende de la torreta; atiende el depósito cuando LS-4 ve una pieza.
 import { ESTADOS_TORRETA } from './nodos'
 import { CARRILES_DE, PIEZAS_POR_CARRIL } from './medidas'
+import type { Trabajo } from './garraReal'
 import type { Carril } from './planta'
 import type { Senales } from './senales'
 
@@ -43,6 +44,10 @@ export type Plc = {
     // cuál de sus dos carriles está llenando cada material (0 o 1) y cuántas lleva en él
     carril: { al: number; pl: number }
     puestas: { al: number; pl: number }
+    // en vivo: lo que hizo la garra real; la del gemelo los hace en orden
+    porTrabajos: boolean
+    trabajos: Trabajo[]
+    trabajo: Trabajo | null
   }
   reloj: number
   ciclos: number // piezas que han empezado en los pistones
@@ -84,6 +89,9 @@ export function crearPlc(): Plc {
       inicioCiclo: 0,
       carril: { al: 0, pl: 0 },
       puestas: { al: 0, pl: 0 },
+      porTrabajos: false,
+      trabajos: [],
+      trabajo: null,
     },
     reloj: 0,
     ciclos: 0,
@@ -105,6 +113,9 @@ export function reiniciarPlc(plc: Plc) {
   irA(plc.garra, 'REPOSO')
   plc.garra.carril = { al: 0, pl: 0 }
   plc.garra.puestas = { al: 0, pl: 0 }
+  plc.garra.porTrabajos = false
+  plc.garra.trabajos = []
+  plc.garra.trabajo = null
 }
 
 function empezarPistones(plc: Plc) {
@@ -183,9 +194,17 @@ function avanzarGarra(plc: Plc, s: Senales, carriles: readonly Carril[]) {
       s.posX = 0
       s.materialGarra = ''
       // LS-4: hay pieza; SI-2: el carro esta en el deposito; Z0: el eje Z arriba
-      if (s.ls4 && s.si2 && s.z0 && g.t > ASENTAR_SEGUNDOS) {
+      // en vivo solo trabaja cuando la garra real hizo algo
+      if (
+        s.ls4 &&
+        s.si2 &&
+        s.z0 &&
+        g.t > ASENTAR_SEGUNDOS &&
+        (!g.porTrabajos || g.trabajos.length > 0)
+      ) {
         g.inicioCiclo = plc.reloj
-        s.materialGarra = s.si3 ? 'al' : 'pl'
+        g.trabajo = g.porTrabajos ? (g.trabajos.shift() ?? null) : null
+        s.materialGarra = g.trabajo ? g.trabajo.material : s.si3 ? 'al' : 'pl'
         irA(g, 'Z_BAJA')
       }
       if (!s.ls4) g.t = 0
@@ -202,8 +221,10 @@ function avanzarGarra(plc: Plc, s: Senales, carriles: readonly Carril[]) {
       s.yZ = false
       if (s.z0) {
         // pone 4 en un carril de su material y luego 4 en el otro: 4, 4, 4, 4
+        // el carril que usó la garra real; si no se sabe, 4 en uno y 4 en el otro
         const material = s.materialGarra === 'al' ? 'al' : 'pl'
-        s.posX = CARRILES_DE[material][g.carril[material]] + 1
+        s.posX =
+          g.trabajo?.canal || CARRILES_DE[material][g.carril[material]] + 1
         irA(g, 'X_IR')
       }
       break
