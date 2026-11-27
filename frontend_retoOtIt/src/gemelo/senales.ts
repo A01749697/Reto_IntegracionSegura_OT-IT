@@ -1,19 +1,17 @@
-// Las señales del modelo: lo que mueve la planta y lo que ven sus sensores.
-// La planta y la escena solo leen de aquí.
+// Las señales de la celda, con los nombres que tienen en el PLC.
+// La planta y la escena solo leen de aquí; los PLC simulados son quienes las escriben.
 //
 // Son dos procesos que no se hablan entre sí:
-//   - Pistones (tablero neumático, S7-1516): sus salidas salen de los nodos TAB_* (del
-//     historian en vivo, del S7-1516 virtual en simulación). Ver actuadores.ts.
-//   - Garra (estación Amatrol, S7-300): simulada. Trabaja sola cada vez que LS-4 ve una
-//     pieza en el depósito y con SI-3 decide a qué carril va.
-import type { EstadoCelda } from './estado'
+//   - Pistones (tablero neumático, S7-1516): alimentar, identificar, sujetar, marcar y soltar
+//     la pieza al depósito. Arranca con la torreta en verde y se detiene en rojo (S7-1200).
+//   - Garra (estación Amatrol, S7-300): no tiene torreta. Trabaja sola cada vez que su
+//     sensor ve una pieza en el depósito (LS-4) y con su propio sensor de metal (SI-3)
+//     decide a qué carril va. El depósito es lo único que une a los dos.
 
 export type Material = '' | 'al' | 'pl'
 
 export type Senales = {
-  marcha: boolean // TAB_MARCHA
-  estado: EstadoCelda // lo que dice el letrero
-  codFalla: number // TAB_COD_FALLA
+  marcha: boolean // torreta en verde: el proceso de pistones puede trabajar
   // salidas
   yA: boolean // V1: alimentador
   yB: boolean // V2: sujecion
@@ -22,11 +20,10 @@ export type Senales = {
   yZ: boolean // garra: bajar el eje Z
   yG: boolean // garra: cerrar la pinza
   posX: number // 0 = deposito, 1-2 = carriles de aluminio, 3-4 = carriles de plastico
+  torreta: number | null // valor de TAB_TORRETA (ver ESTADOS_TORRETA); null = sin dato
   torreVerde: boolean
   torreAmarilla: boolean
   torreRoja: boolean
-  torreGris: boolean // sin comunicación: la torreta se ve apagada y gris
-  vigilaLatido: boolean // LATIDO ya cambió: se vigila la comunicación con él
   // entradas
   ls1: boolean
   ls2: boolean
@@ -60,8 +57,6 @@ export type Senales = {
 export function senalesIniciales(): Senales {
   return {
     marcha: false,
-    estado: 'sinDato',
-    codFalla: 0,
     yA: false,
     yB: false,
     yC: false,
@@ -69,11 +64,10 @@ export function senalesIniciales(): Senales {
     yZ: false,
     yG: false,
     posX: 0,
+    torreta: null,
     torreVerde: false,
     torreAmarilla: false,
     torreRoja: false,
-    torreGris: false,
-    vigilaLatido: false,
     ls1: true,
     ls2: false,
     ls3: false,
@@ -112,14 +106,43 @@ export type Tono = 'ok' | 'acento' | 'aviso' | 'alerta'
 
 export type FilaSenal = { clave: SenalDigital; tono: Tono }
 
-// Señales de la garra que se muestran en el panel (es la única parte simulada en vivo).
-export const SENALES_GARRA = [
+export const SALIDAS: FilaSenal[] = [
+  { clave: 'yA', tono: 'acento' },
+  { clave: 'yB', tono: 'acento' },
+  { clave: 'yC', tono: 'acento' },
+  { clave: 'yT', tono: 'acento' },
   { clave: 'yZ', tono: 'acento' },
   { clave: 'yG', tono: 'acento' },
+  { clave: 'torreVerde', tono: 'ok' },
+  { clave: 'torreAmarilla', tono: 'aviso' },
+  { clave: 'torreRoja', tono: 'alerta' },
+]
+
+export const ENTRADAS: FilaSenal[] = [
+  { clave: 'ls1', tono: 'ok' },
+  { clave: 'ls2', tono: 'ok' },
+  { clave: 'sc1', tono: 'ok' },
+  { clave: 'si1', tono: 'ok' },
+  { clave: 'sc2', tono: 'ok' },
+  { clave: 'b0', tono: 'ok' },
+  { clave: 'ls3', tono: 'ok' },
+  { clave: 'c1', tono: 'ok' },
   { clave: 'ls4', tono: 'ok' },
   { clave: 'si3', tono: 'ok' },
   { clave: 'si2', tono: 'ok' },
   { clave: 'z0', tono: 'ok' },
   { clave: 'z1', tono: 'ok' },
   { clave: 'xOk', tono: 'ok' },
-] as const satisfies readonly FilaSenal[]
+]
+
+// Los nombres de los pasos están en los diccionarios de idioma (gemelo.pasos).
+// Del 1 al 4 son de los pistones, 5 y 6 de la garra y 7 es el empaque.
+export const CLAVES_PASOS = [
+  'alimentar',
+  'identificar',
+  'sujetarMarcar',
+  'soltarDeposito',
+  'tomar',
+  'clasificar',
+  'empacar',
+] as const

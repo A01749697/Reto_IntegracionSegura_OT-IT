@@ -4,7 +4,17 @@ import type {
   ResultadoHistorial,
   ResultadoLecturas,
 } from '../gemelo/apiLecturas'
-import { NODO } from '../gemelo/nodos'
+
+const NODO = {
+  torreta: 'TAB_TORRETA',
+  falla: 'TAB_FALLA',
+  codFalla: 'TAB_COD_FALLA',
+  paso: 'TAB_PASO',
+  aluminio: 'TAB_ALUMINIO',
+  otras: 'TAB_OTRAS',
+  tCiclo: 'TAB_T_CICLO_S',
+  tCarreraPd1: 'TAB_T_CARRERA_PD1_S',
+}
 import PaginaTablero, { SEGUNDOS_ENTRE_CONSULTAS } from './PaginaTablero'
 
 // La última lectura de la celda; la ventana termina aquí.
