@@ -13,7 +13,6 @@ const PESTANAS = [
   { clave: 'bitacora', soloAdmin: true },
   { clave: 'datos', soloAdmin: true },
   { clave: 'estado', soloAdmin: false },
-  { clave: 'indicadores', soloAdmin: false },
   { clave: 'tablero', soloAdmin: false },
   { clave: 'gemelo', soloAdmin: false },
   { clave: 'cuenta', soloAdmin: false },

@@ -18,8 +18,9 @@ const TRAMOS: Record<string, Destino> = {
   bitacora: { donde: 'panel', seccion: 'bitacora' },
   datos: { donde: 'panel', seccion: 'datos' },
   estado: { donde: 'panel', seccion: 'estado' },
-  indicadores: { donde: 'panel', seccion: 'indicadores' },
   tablero: { donde: 'panel', seccion: 'tablero' },
+  // la dirección vieja de Indicadores lleva al tablero (que ahora los incluye)
+  indicadores: { donde: 'panel', seccion: 'tablero' },
   gemelo: { donde: 'panel', seccion: 'gemelo' },
   'mi-cuenta': { donde: 'panel', seccion: 'cuenta' },
   ayuda: { donde: 'panel', seccion: 'ayuda' },

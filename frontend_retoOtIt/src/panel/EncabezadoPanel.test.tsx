@@ -32,7 +32,7 @@ describe('EncabezadoPanel', () => {
     montar(ADMIN)
     const nav = screen.getByRole('navigation', { name: 'Secciones' })
     expect(nav.textContent).toBe(
-      'InicioCuentasBitácoraDatosEstadoIndicadoresTableroGemeloMi cuenta',
+      'InicioCuentasBitácoraDatosEstadoTableroGemeloMi cuenta',
     )
   })
 

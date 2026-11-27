@@ -24,7 +24,6 @@ describe('rutas', () => {
     ['#/bitacora', { donde: 'panel', seccion: 'bitacora' }],
     ['#/datos', { donde: 'panel', seccion: 'datos' }],
     ['#/estado', { donde: 'panel', seccion: 'estado' }],
-    ['#/indicadores', { donde: 'panel', seccion: 'indicadores' }],
     ['#/tablero', { donde: 'panel', seccion: 'tablero' }],
     ['#/gemelo', { donde: 'panel', seccion: 'gemelo' }],
     ['#/mi-cuenta', { donde: 'panel', seccion: 'cuenta' }],
@@ -36,6 +35,13 @@ describe('rutas', () => {
       expect(direccionDe(destino as Destino)).toBe(`/${hash}`)
     },
   )
+
+  it('la dirección vieja de Indicadores lleva al tablero', () => {
+    expect(en('#/indicadores')).toEqual({ donde: 'panel', seccion: 'tablero' })
+    expect(direccionDe({ donde: 'panel', seccion: 'tablero' })).toBe(
+      '/#/tablero',
+    )
+  })
 
   it('acepta una diagonal al final', () => {
     expect(en('#/estado/')).toEqual({ donde: 'panel', seccion: 'estado' })

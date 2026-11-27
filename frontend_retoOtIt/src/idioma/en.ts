@@ -179,7 +179,6 @@ export const en: Diccionario<typeof es> = {
       bitacora: 'Log',
       datos: 'Data',
       estado: 'Status',
-      indicadores: 'Indicators',
       tablero: 'Dashboard',
       gemelo: 'Digital twin',
       cuenta: 'My account',
@@ -461,7 +460,7 @@ export const en: Diccionario<typeof es> = {
     },
   },
   tablero: {
-    titulo: 'Operations dashboard',
+    titulo: 'Cell dashboard',
     rango: 'Period',
     rangos: { '1h': 'Last hour', '8h': '8 hours', '24h': '24 hours' },
     actualizar: 'Refresh',
@@ -470,6 +469,7 @@ export const en: Diccionario<typeof es> = {
     sinLecturas: 'No S7-1516 readings.',
     celdaQuieta: 'No new readings for {{hace}}.',
     ahora: 'Current status',
+    operacion: { titulo: 'Recent operation' },
     estadoCelda: {
       marcha: 'RUNNING',
       mantenimiento: 'MAINTENANCE',
@@ -494,6 +494,9 @@ export const en: Diccionario<typeof es> = {
       rango: 'Min {{minimo}} · max {{maximo}}',
       sinCiclos: 'No complete cycles',
       carrera: 'PD-1 stroke',
+      cicloCelda: 'S7-1516 cycle',
+      garraPiezas: 'Sorted by the gripper',
+      cicloGarra: 'Gripper cycle',
       sinDato: 'No data',
       fallas: 'Faults',
       ultimaFalla: 'Last: code {{codigo}}, {{hora}}',
@@ -519,6 +522,8 @@ export const en: Diccionario<typeof es> = {
       carrera: 'PD-1 stroke trend',
       carreraNota:
         'TAB_T_CARRERA_PD1_S. If it rises, check pressure and cylinder.',
+      garra: 'Gripper cycle trend',
+      garraNota: 'TIEMPO_CICLO_S from the S7-300',
     },
     pasos: { titulo: 'Time in each step', nota: 'TAB_PASO' },
     fallas: {
@@ -927,10 +932,8 @@ export const en: Diccionario<typeof es> = {
       datos: 'The accounts and log tables, read only. Every query is noted.',
       estado:
         'Whether the API, the databases and the data arrival are up to date.',
-      indicadores:
-        'Output, availability, cycle time and faults per day, against the previous period.',
       tablero:
-        'Cell status, parts, cycle times and faults over the last hours.',
+        'Cell status, output and availability against the previous period, cycle times and faults.',
       gemelo:
         'The cell in 3D: live from its data or simulated with operator controls.',
       cuenta: 'Your details and changing your password.',

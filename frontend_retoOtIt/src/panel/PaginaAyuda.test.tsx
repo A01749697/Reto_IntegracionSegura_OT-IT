@@ -29,7 +29,6 @@ describe('PaginaAyuda', () => {
       'Bitácora',
       'Datos',
       'Estado',
-      'Indicadores',
       'Tablero',
       'Gemelo',
       'Mi cuenta',
