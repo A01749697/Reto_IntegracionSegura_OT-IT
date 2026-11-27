@@ -48,6 +48,7 @@ vi.mock('./panel/apiSistema', () => ({
 vi.mock('./gemelo/apiLecturas', () => ({
   obtenerUltimasLecturas: vi.fn(),
   obtenerHistorialNodo: vi.fn().mockResolvedValue({ ok: true, puntos: [] }),
+  obtenerCambios: vi.fn(),
 }))
 
 // jsdom no tiene WebGL
@@ -69,6 +70,11 @@ beforeEach(() => {
   vi.mocked(lecturas.obtenerHistorialNodo).mockResolvedValue({
     ok: true,
     puntos: [],
+  })
+  vi.mocked(lecturas.obtenerCambios).mockResolvedValue({
+    ok: true,
+    cambios: [],
+    truncado: false,
   })
   vi.mocked(api.obtenerSesion).mockResolvedValue(null)
   // el inicio pide estas tres cosas al abrirse
