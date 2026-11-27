@@ -12,9 +12,7 @@ import type {
   ResultadoHistorial,
   ResultadoLecturas,
 } from '../gemelo/apiLecturas'
-import { resumirLecturas, SEGUNDOS_ATRASO } from '../gemelo/enVivo'
-import { estadoCelda, type EstadoCelda, type Valores } from '../gemelo/estado'
-import { NODO, NODOS, PASOS, type NodoConocido } from '../gemelo/nodos'
+import { SEGUNDOS_ATRASO } from '../gemelo/enVivo'
 import { BarrasApiladas, Leyenda, Linea } from '../indicadores/Graficas'
 import MarcoPanel from '../panel/MarcoPanel'
 import { fechaHora, hace, region } from '../panel/tiempo'
@@ -45,6 +43,41 @@ type Props = {
   sesionCaducada: () => void
 }
 
+// Nodos del S7-1516 (tablero neumático) que usa esta pantalla.
+const PLC = 'S7-1500'
+const NODO = {
+  torreta: 'TAB_TORRETA', // 1 marcha · 2 mantenimiento · 3 paro o falla · 4 reset
+  falla: 'TAB_FALLA',
+  codFalla: 'TAB_COD_FALLA',
+  paso: 'TAB_PASO',
+  aluminio: 'TAB_ALUMINIO',
+  otras: 'TAB_OTRAS',
+  tCiclo: 'TAB_T_CICLO_S',
+  tCarrera: 'TAB_T_CARRERA_PD1_S',
+} as const
+const PASOS = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]
+
+type Valores = Record<string, number>
+
+type EstadoTablero =
+  'marcha' | 'mantenimiento' | 'reset' | 'paro' | 'falla' | 'sinDato'
+
+// El estado de la celda según TAB_TORRETA (y TAB_FALLA cuando está en paro).
+function estadoActual(v: Valores): EstadoTablero {
+  switch (v[NODO.torreta]) {
+    case 1:
+      return 'marcha'
+    case 2:
+      return 'mantenimiento'
+    case 4:
+      return 'reset'
+    case 3:
+      return v[NODO.falla] === 1 ? 'falla' : 'paro'
+    default:
+      return 'sinDato'
+  }
+}
+
 export type Rango = '1h' | '8h' | '24h'
 const RANGOS: Rango[] = ['1h', '8h', '24h']
 const SEGUNDOS_RANGO: Record<Rango, number> = {
@@ -59,15 +92,15 @@ const PUNTOS_TENDENCIA = 40
 export const SEGUNDOS_ENTRE_CONSULTAS = 30
 
 const SERIES = {
-  aluminio: NODOS.piezasAluminio,
-  otras: NODOS.piezasOtras,
-  pasos: NODOS.paso,
-  torreta: NODOS.torreta,
-  falla: NODOS.falla,
-  codFalla: NODOS.codFalla,
-  tCiclo: NODOS.tCiclo,
-  tCarrera: NODOS.tCarreraPd1,
-} satisfies Record<string, NodoConocido>
+  aluminio: NODO.aluminio,
+  otras: NODO.otras,
+  pasos: NODO.paso,
+  torreta: NODO.torreta,
+  falla: NODO.falla,
+  codFalla: NODO.codFalla,
+  tCiclo: NODO.tCiclo,
+  tCarrera: NODO.tCarrera,
+} as const
 type Serie = keyof typeof SERIES
 
 type Datos = {
@@ -90,7 +123,7 @@ const hora = (instante: number) =>
   })
 
 const nombrePaso = (paso: number, t: TFunction) =>
-  `${paso} · ${t(`gemelo.pasos.${paso}`, { defaultValue: '—' })}`
+  `${paso} · ${t(`gemelo.pasosReales.${paso}`, { defaultValue: '—' })}`
 
 export default function PaginaTablero({
   obtenerLecturas,
@@ -107,8 +140,16 @@ export default function PaginaTablero({
       const resultado = await obtenerLecturas()
       if (!resultado.ok)
         return resultado.motivo === 'sesion' ? 'sesion' : { estado: 'error' }
-      const lecturas = resumirLecturas(resultado.lecturas)
-      const hasta = lecturas.ultimaTablero ?? Date.now()
+      // el último valor de cada nodo del S7-1516 y la lectura más reciente
+      const ahora: Valores = {}
+      let ultimaCelda: number | null = null
+      for (const l of resultado.lecturas) {
+        const ms = Date.parse(l.ts)
+        if (l.plc !== PLC || Number.isNaN(ms)) continue
+        ahora[l.variable] = l.valor
+        if (ultimaCelda === null || ms > ultimaCelda) ultimaCelda = ms
+      }
+      const hasta = ultimaCelda ?? Date.now()
       const largo = SEGUNDOS_RANGO[rango] * 1000
       const ventana = { desde: hasta - largo, hasta }
       // se pide desde una ventana antes, para saber cómo estaba todo al empezar
@@ -116,8 +157,8 @@ export default function PaginaTablero({
       const historiales = await Promise.all(
         claves.map((clave) =>
           obtenerHistorial(
-            SERIES[clave].plc,
-            SERIES[clave].nodo,
+            PLC,
+            SERIES[clave],
             new Date(ventana.desde - largo),
             new Date(hasta + 1000),
           ),
@@ -136,10 +177,10 @@ export default function PaginaTablero({
         estado: 'listo',
         datos: {
           ventana,
-          ahora: lecturas.tablero,
-          ultimaCelda: lecturas.ultimaTablero,
+          ahora,
+          ultimaCelda,
           atraso:
-            lecturas.ultimaTablero === null
+            ultimaCelda === null
               ? null
               : Math.max(0, Math.round((Date.now() - hasta) / 1000)),
           series,
@@ -288,21 +329,20 @@ const ESTADOS: {
 ]
 const estiloEstado = (valor: number) => ESTADOS.find((e) => e.valor === valor)
 
-const LETRERO: Record<EstadoCelda, string> = {
+const LETRERO: Record<EstadoTablero, string> = {
   marcha: 'border-ok bg-ok/10 text-ok',
   mantenimiento: 'border-aviso bg-aviso/10 text-aviso',
   reset: 'border-aviso bg-aviso/10 text-aviso',
   paro: 'border-alerta bg-alerta/10 text-alerta',
   falla: 'border-alerta bg-alerta/15 text-alerta',
   sinDato: 'border-linea text-suave',
-  sinComunicacion: 'border-linea text-suave',
 }
 
 function Ahora({ datos }: { datos: Datos }) {
   const { t } = useTranslation()
   const { ahora, atraso } = datos
   const quieta = atraso !== null && atraso > SEGUNDOS_ATRASO
-  const estado = estadoCelda(ahora, false)
+  const estado = estadoActual(ahora)
   const paso = ahora[NODO.paso]
   return (
     <section
@@ -312,14 +352,14 @@ function Ahora({ datos }: { datos: Datos }) {
       <span
         className={`rounded-md border-2 px-3 py-1 text-[15px] font-bold tracking-wider ${LETRERO[estado]}`}
       >
-        {t(`gemelo.estado.${estado}`)}
+        {t(`tablero.estadoCelda.${estado}`)}
         {estado === 'falla' &&
-          ` · ${t('gemelo.codigoFalla', { codigo: ahora[NODO.codFalla] ?? 0 })}`}
+          ` · ${t('tablero.codigoFalla', { codigo: ahora[NODO.codFalla] ?? 0 })}`}
       </span>
       <span className="text-[13px] text-suave">
         {t('tablero.paso')}{' '}
         <span className="font-bold text-texto">
-          {paso === undefined ? t('gemelo.sinDato') : nombrePaso(paso, t)}
+          {paso === undefined ? t('tablero.kpi.sinDato') : nombrePaso(paso, t)}
         </span>
       </span>
       {datos.ultimaCelda === null ? (
@@ -493,7 +533,7 @@ function LineaEstados({
               return (
                 <span
                   key={tramo.inicio}
-                  title={`${t(`gemelo.estado.${estilo?.estado ?? 'sinDato'}`)} · ${hora(tramo.inicio)}–${hora(tramo.fin)}`}
+                  title={`${t(`tablero.estadoCelda.${estilo?.estado ?? 'sinDato'}`)} · ${hora(tramo.inicio)}–${hora(tramo.fin)}`}
                   className={`absolute inset-y-0 border-r-2 border-panel ${estilo?.clase ?? 'bg-suave'}`}
                   style={{
                     left: `${((tramo.inicio - ventana.desde) / largo) * 100}%`,

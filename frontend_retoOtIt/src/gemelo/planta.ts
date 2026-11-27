@@ -86,7 +86,6 @@ export type Planta = {
   // en vivo el material de una pieza no se sabe hasta que lo cuenta el S7-1516
   enVivo: boolean
   ultimaSacada: Pieza | null // la pieza que está en proceso en los pistones
-  atasco: boolean // simulación: PD-1 trabado a media carrera (no llega a su final)
   azar: () => number
 }
 
@@ -156,7 +155,6 @@ export function crearPlanta(azar: () => number = Math.random): Planta {
     alimentaba: false,
     enVivo: false,
     ultimaSacada: null,
-    atasco: false,
     azar,
   }
 }
@@ -386,11 +384,7 @@ function moverEnLinea(
 
 export function avanzarPlanta(planta: Planta, s: Senales, dt: number) {
   const { extension, carro } = planta
-  extension.A = hacia(
-    extension.A,
-    s.yA ? (planta.atasco ? 0.55 : 1) : 0,
-    dt / 0.45,
-  )
+  extension.A = hacia(extension.A, s.yA ? 1 : 0, dt / 0.45)
   extension.B = hacia(extension.B, s.yB ? 1 : 0, dt / 0.22)
   extension.C = hacia(extension.C, s.yC ? 1 : 0, dt / (s.yC ? 0.2 : 0.3))
   extension.Z = hacia(extension.Z, s.yZ ? 1 : 0, dt / 0.38)
@@ -499,10 +493,3 @@ export function despejarLinea(planta: Planta) {
 
 export const estaEmpacando = (planta: Planta) =>
   planta.cajas.some((c) => c.estado !== 'llenando')
-
-// La pieza detenida en el sello ya tiene su marca: lista para bajar al depósito.
-export const piezaSelladaEnTope = (planta: Planta) =>
-  planta.piezas.some(
-    (p) =>
-      p.estado === 'linea' && p.marcada && Math.abs(p.x - X_MARCADO) < 0.03,
-  )

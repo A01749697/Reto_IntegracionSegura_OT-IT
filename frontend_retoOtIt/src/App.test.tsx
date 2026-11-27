@@ -48,7 +48,6 @@ vi.mock('./panel/apiSistema', () => ({
 vi.mock('./gemelo/apiLecturas', () => ({
   obtenerUltimasLecturas: vi.fn(),
   obtenerHistorialNodo: vi.fn().mockResolvedValue({ ok: true, puntos: [] }),
-  obtenerCambios: vi.fn(),
 }))
 
 // jsdom no tiene WebGL
@@ -70,11 +69,6 @@ beforeEach(() => {
   vi.mocked(lecturas.obtenerHistorialNodo).mockResolvedValue({
     ok: true,
     puntos: [],
-  })
-  vi.mocked(lecturas.obtenerCambios).mockResolvedValue({
-    ok: true,
-    cambios: [],
-    truncado: false,
   })
   vi.mocked(api.obtenerSesion).mockResolvedValue(null)
   // el inicio pide estas tres cosas al abrirse
@@ -464,7 +458,7 @@ describe('App con sesión', () => {
     expect(
       await screen.findByRole('heading', { name: 'Gemelo digital' }),
     ).toBeInTheDocument()
-    expect(await screen.findByText('Sin lecturas')).toBeInTheDocument()
+    expect(await screen.findByText('Sin lecturas todavía')).toBeInTheDocument()
   })
 
   it('manda al login si la sesión caduca en el gemelo', async () => {

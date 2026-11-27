@@ -58,6 +58,7 @@ describe('diccionarios', () => {
       'datos.no',
       'estado.servidor.cpu.valor',
       'gemelo.lecturas.no',
+      'gemelo.lecturas.pasoValor',
       // iguales en los dos idiomas: nombres de nodo, Reset, Metal, Material, No
       'gemelo.mandos.reset',
       'gemelo.sensores.sensorI',
