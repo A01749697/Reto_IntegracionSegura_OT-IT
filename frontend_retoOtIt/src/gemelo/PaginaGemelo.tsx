@@ -20,6 +20,7 @@ import {
   crearGemelo,
   meterPiezas,
   ponerPasoInicial,
+  recibirNodoReal,
   recibirPasosReales,
   ponerModo,
   ponerTorreta,
@@ -28,7 +29,7 @@ import {
   type Instantanea,
   type Modo,
 } from './gemelo'
-import { ESTACIONES, ESTADOS_TORRETA, NODOS } from './nodos'
+import { ESTACIONES, ESTADOS_TORRETA, NODOS, NODOS_EMPUJADOR } from './nodos'
 import {
   CLAVES_PASOS,
   ENTRADAS,
@@ -36,6 +37,7 @@ import {
   type FilaSenal,
   type Tono,
 } from './senales'
+import { NODOS_GARRA } from './garraReal'
 import { NOMBRES_VISTAS, type Vista } from './vistas'
 
 // three.js solo se descarga al abrir esta pantalla
@@ -411,6 +413,23 @@ export default function PaginaGemelo({
         },
       )
     }
+    // las salidas del empujador y las señales de la garra, cada una desde su último cambio
+    const ultimos: Record<string, string> = {}
+    const consultarEmpujador = () => {
+      const hasta = new Date(Date.now() + DIAS_ADELANTO * 24 * 3600 * 1000)
+      for (const { plc, nodo } of [
+        ...Object.values(NODOS_EMPUJADOR),
+        ...Object.values(NODOS_GARRA),
+      ]) {
+        const desde = ultimos[nodo] ? new Date(ultimos[nodo]) : INICIO_HISTORIAL
+        obtenerHistorial(plc, nodo, desde, hasta).then((resultado) => {
+          if (!vigente || !resultado.ok) return
+          const { puntos } = resultado
+          if (puntos.length) ultimos[nodo] = puntos[puntos.length - 1].ts
+          recibirNodoReal(gemelo, nodo, puntos)
+        })
+      }
+    }
     const consultar = () =>
       obtenerLecturas().then((resultado) => {
         if (!vigente) return
@@ -436,6 +455,7 @@ export default function PaginaGemelo({
     const ambas = () => {
       consultar()
       consultarPasos()
+      consultarEmpujador()
     }
     ambas()
     const reloj = setInterval(ambas, SEGUNDOS_ENTRE_CONSULTAS * 1000)

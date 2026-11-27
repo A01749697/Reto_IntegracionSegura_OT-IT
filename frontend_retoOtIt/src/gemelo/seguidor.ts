@@ -13,7 +13,13 @@ export type Seguidor = {
   t: number // segundos en ese paso
   tope: boolean // el tope está abajo dejando pasar la pieza al depósito
   tTope: number
+  // PD-1 afuera. Doble efecto: lo mueven TAB_EMPUJA_EXT / TAB_EMPUJA_RET (o el paso 2 / 3
+  // si la salida no quedó en el historian) y se queda donde está sin ninguna de las dos.
+  pd1: boolean
 }
+
+// Valores de TAB_EMPUJA_EXT y TAB_EMPUJA_RET (1 / 0), si llegan.
+export type Empujador = { ext?: number; ret?: number }
 
 // Lo menos que dura un paso en el gemelo cuando va alcanzando al real.
 export const DURACION_MINIMA = 0.4
@@ -37,7 +43,7 @@ const PASO_GEMELO: Record<number, number> = {
 export const esPasoConocido = (paso: number) => paso in PASO_GEMELO
 
 export function crearSeguidor(): Seguidor {
-  return { paso: null, t: 0, tope: false, tTope: 0 }
+  return { paso: null, t: 0, tope: false, tTope: 0, pd1: false }
 }
 
 // El paso que sigue en la secuencia, camino al objetivo.
@@ -71,8 +77,10 @@ export function avanzarSeguidor(
   s: Senales,
   material: Tipo | null,
   dt: number,
+  empujador: Empujador = {},
 ) {
   seg.t += dt
+  const antes = seg.paso
   if (objetivo !== null && esPasoConocido(objetivo) && seg.paso !== objetivo) {
     if (seg.paso === null) {
       seg.paso = objetivo
@@ -84,7 +92,14 @@ export function avanzarSeguidor(
   }
 
   const paso = seg.paso
-  s.yA = paso === 2
+  // PD-1: lo que cambió al último (la salida o el paso) manda
+  if (paso !== antes && paso === 2) seg.pd1 = true
+  if (paso !== antes && paso === 3) seg.pd1 = false
+  const { ext, ret } = empujador
+  if (ext === 1 && ret !== 1) seg.pd1 = true
+  else if (ret === 1 && ext !== 1) seg.pd1 = false
+  // sin datos de las salidas, como siempre: el paso 2 es empujar
+  s.yA = ext === undefined && ret === undefined ? paso === 2 : seg.pd1
   s.yB =
     paso === 5 ||
     paso === 6 ||
