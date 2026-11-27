@@ -1,6 +1,7 @@
 // La máquina: bancada, guía, depósito, cilindros, almacén, sensores, pórtico, rampa, empaque y piezas.
 // Recorrido de una pieza: alimentador, guía inclinada (baja sola), identificación, tope del marcado,
 // caída al depósito, garra del pórtico, carril y caja.
+import { construirBanda } from './banda'
 import * as THREE from 'three'
 import { RoundedBoxGeometry } from 'three/addons/geometries/RoundedBoxGeometry.js'
 import {
@@ -19,7 +20,6 @@ import {
 } from './materiales'
 import {
   alturaCarril,
-  CAJA_X,
   CAJAS_POR_TARIMA,
   CARRERA,
   GUIA_X0,
@@ -855,16 +855,10 @@ function rampa(E: Grupo, m: Materiales) {
 
 const NOMBRE_TIPO: Record<Tipo, string> = { al: 'ALUMINIO', pl: 'PLASTICO' }
 const COLOR_TIPO: Record<Tipo, string> = { al: '#5c6b78', pl: '#1d2126' }
-const TIPO_CAJA: Tipo[] = ['al', 'pl'] // en el mismo orden que CAJA_X
+const TIPO_CAJA: Tipo[] = ['al', 'pl'] // en el mismo orden que CAJAS
 
-// Camas de rodillos con una caja de carton por material.
+// Una caja de cartón por material, en la mesa de empaque al final de la banda.
 function cajasEmpaque(E: Grupo, m: Materiales) {
-  for (const cx of CAJA_X) {
-    for (const s of [-1, 1])
-      caja(0.008, 0.032, 0.34, m.aluOsc, cx + s * 0.082, 0.018, 0.305, E)
-    for (let i = 0; i < 11; i++)
-      cil(0.011, 0.156, m.acero, cx, 0.022, 0.155 + i * 0.03, 'x', E, 14)
-  }
   return TIPO_CAJA.map((tipo) => {
     const g = new THREE.Group()
     E.add(g)
@@ -1009,6 +1003,7 @@ export function construirCelda(escena: THREE.Scene, E: Grupo, m: Materiales) {
     banderas,
     acomodarCadena,
     cajas: cajasEmpaque(E, m),
+    banda: construirBanda(E, m),
     tarima: tarima(escena, m),
     piezas: piezas(E),
   }

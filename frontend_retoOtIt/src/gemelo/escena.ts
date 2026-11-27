@@ -8,9 +8,9 @@ import { avanzarGemelo, type Gemelo } from './gemelo'
 import { crearMateriales, prender } from './materiales'
 import {
   ALTURA_MESA,
-  CAJA_X,
+  BANDA,
   CAJA_Y,
-  CAJA_Z,
+  CAJAS,
   PARADAS_CARRO,
   PIEZAS_VISIBLES_ALMACEN,
   X_ALMACEN,
@@ -20,6 +20,7 @@ import {
 import { construirNave } from './nave'
 import type { SenalDigital } from './senales'
 import { construirTablero } from './tablero'
+import { crearTrabajadores } from './trabajadores'
 import { VISTAS, type Vista } from './vistas'
 
 type Opciones = {
@@ -141,6 +142,8 @@ export function crearEscena({
     roughness: 0.7,
   })
   const nave = construirNave(escena, m)
+  const trabajadores = crearTrabajadores(escena)
+  let reloj = 0
   const mesa = new THREE.Group()
   mesa.position.y = ALTURA_MESA
   escena.add(mesa)
@@ -171,7 +174,7 @@ export function crearEscena({
 
     planta.cajas.forEach((caja, i) => {
       const { grupo, solapas } = celda.cajas[i]
-      grupo.position.set(CAJA_X[i], CAJA_Y, CAJA_Z + caja.avance)
+      grupo.position.set(CAJAS[i].x + caja.avance, CAJA_Y, CAJAS[i].z)
       grupo.scale.setScalar(Math.max(0.001, caja.escala))
       for (const { pivote, lado } of solapas) {
         pivote.rotation.z =
@@ -209,9 +212,9 @@ export function crearEscena({
         const [dx, dy, dz] = pieza.destino
         malla.scale.setScalar(Math.max(0.001, caja.escala))
         malla.position.set(
-          CAJA_X[pieza.caja] + dx * caja.escala,
+          CAJAS[pieza.caja].x + caja.avance + dx * caja.escala,
           CAJA_Y + dy * caja.escala,
-          CAJA_Z + caja.avance + dz * caja.escala,
+          CAJAS[pieza.caja].z + dz * caja.escala,
         )
       } else {
         malla.position.set(pieza.x, pieza.y, pieza.z)
@@ -304,6 +307,19 @@ export function crearEscena({
     ajustarTamano()
     avanzarGemelo(gemelo, segundos)
     pintar()
+    reloj += segundos
+    // la banda avanza siempre; el desviador apunta a la caja de la última pieza
+    const { banda } = celda
+    banda.costillas.offset.x -=
+      (BANDA.velocidad * segundos * banda.costillas.repeat.x) / banda.largo
+    const giro = { al: 0.55, pl: -0.55 }[gemelo.planta.desvio ?? 'al'] ?? 0
+    banda.desviador.rotation.y += (giro - banda.desviador.rotation.y) * 0.12
+    trabajadores.animar(
+      reloj,
+      gemelo.planta.cajas.some(
+        (c) => c.estado === 'saliendo' || c.estado === 'retiro',
+      ),
+    )
 
     if (vuelo) {
       vuelo.t = Math.min(1, vuelo.t + segundos / SEGUNDOS_VUELO)

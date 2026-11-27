@@ -31,6 +31,7 @@ export type ClaveEtiqueta =
   | 'tope'
   | 'portico'
   | 'carriles'
+  | 'banda'
   | 'cajas'
   | 'tarima'
   | 'plc'
@@ -108,7 +109,8 @@ function definiciones(planta: Planta): Definicion[] {
     },
     { clave: 'portico', punto: [0.93, 0.66, Z_PORTICO] },
     { clave: 'carriles', punto: [0.86, 0.2, -0.05] },
-    { clave: 'cajas', punto: [0.86, 0.12, 0.3] },
+    { clave: 'banda', punto: [0.6, 0.08, 0.3] },
+    { clave: 'cajas', punto: [0.96, 0.13, 0.43] },
     { clave: 'tarima', punto: [1.57, -0.62, 0.35] },
     { clave: 'plc', punto: [-0.66, 0.34, -0.33] },
     { clave: 'electrovalvulas', punto: [-0.18, 0.21, -0.4] },
